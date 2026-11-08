@@ -48,6 +48,13 @@ export default function Error({
         <div className="mt-6 flex items-center justify-center gap-2 border-t border-border/70 pt-4 text-[11px] font-medium text-muted-foreground">
           <ShieldCheck size={14} aria-hidden="true" /> Your account safety remains a priority
         </div>
+              <p className="mt-6 text-xs text-muted-foreground">
+          <a href="/support" className="font-semibold text-primary underline-offset-2 hover:underline">Help & support</a>
+          {" · "}
+          <a href="/privacy" className="underline-offset-2 hover:underline">Privacy</a>
+          {" · "}
+          <a href="/" className="underline-offset-2 hover:underline">Home</a>
+        </p>
       </section>
     </main>
   )

@@ -72,6 +72,14 @@ export type GhcTransactionDetailProps = {
 export function GhcTransactionDetail({ tx, open, onClose }: GhcTransactionDetailProps) {
   const [copied, setCopied] = useState(false)
   const [receiptFeedback, setReceiptFeedback] = useState<string | null>(null)
+  const correlationReferences = [
+    ["Order", metaString(tx?.metadata, "orderId")],
+    ["Reward", metaString(tx?.metadata, "rewardId")],
+    ["Request", metaString(tx?.metadata, "requestId")],
+    ["Payment intent", metaString(tx?.metadata, "paymentIntentId")],
+    ["Correlation", metaString(tx?.metadata, "correlationId")],
+    ["Provider payment", metaString(tx?.metadata, "providerPaymentId")],
+  ].filter((item): item is [string, string] => Boolean(item[1] && item[1].length <= 200 && !/[\u0000-\u001f\u007f]/.test(item[1])))
   const receipt = useMemo(() => {
     if (!tx) return ""
     const amount = Number.isFinite(tx.amount)
@@ -87,6 +95,7 @@ export function GhcTransactionDetail({ tx, open, onClose }: GhcTransactionDetail
       `Posted: ${tx.postedAt ? formatWhen(tx.postedAt) : "Not recorded"}`,
       `Transaction ID: ${tx.id}`,
       `Reference ID: ${tx.referenceId || "Not provided"}`,
+      ...correlationReferences.map(([label, value]) => `${label} reference: ${value}`),
       `Source event: ${tx.sourceEvent || "Not provided"}`,
       "This is a copy of the GHC ledger record, not an external bank or Pi settlement receipt.",
       "GHC is an in-app utility/reward credit; this record does not authorize or initiate balance changes.",
@@ -274,6 +283,19 @@ export function GhcTransactionDetail({ tx, open, onClose }: GhcTransactionDetail
                 </button>
               ) : null}
             </div>
+            {correlationReferences.length > 0 && (
+              <div className="border-b border-border/60 pb-2">
+                <dt className="text-muted-foreground">Linked references</dt>
+                <dd className="mt-1 space-y-1">
+                  {correlationReferences.map(([label, value]) => (
+                    <div key={`${label}:${value}`} className="flex flex-col gap-0.5 sm:flex-row sm:justify-between sm:gap-3">
+                      <span className="text-[11px] text-muted-foreground">{label}</span>
+                      <span className="break-all text-right font-mono text-[10px]">{value}</span>
+                    </div>
+                  ))}
+                </dd>
+              </div>
+            )}
             <div className="border-b border-border/60 pb-2">
               <dt className="text-muted-foreground">Reference</dt>
               <dd className="mt-0.5 break-all font-mono text-[11px]">

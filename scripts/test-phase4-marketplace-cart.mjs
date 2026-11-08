@@ -44,8 +44,19 @@ updateMarketplaceCartQuantity("b", 50)
 cart = getMarketplaceCart()
 assert.equal(cart.find((line) => line.listingId === "b")?.quantity, 2, "quantity updates remain stock bounded")
 
+// Same listing can now hold separate SKU lines without merging quantities.
+addMarketplaceCartItem(item("sku-listing", { variantId: "sku-small", variantSku: "TEE-S", variantLabel: "Small", availability: 4 }))
+addMarketplaceCartItem(item("sku-listing", { variantId: "sku-large", variantSku: "TEE-L", variantLabel: "Large", availability: 6 }))
+addMarketplaceCartItem(item("sku-listing", { variantId: "sku-small", variantSku: "TEE-S", variantLabel: "Small", quantity: 2, availability: 4 }))
+cart = getMarketplaceCart()
+assert.equal(cart.filter((line) => line.listingId === "sku-listing").length, 2, "different SKU variants remain separate cart lines")
+assert.equal(cart.find((line) => line.variantId === "sku-small")?.quantity, 3, "same SKU variant quantities consolidate")
+updateMarketplaceCartQuantity("sku-listing", 5, "sku-large")
+cart = getMarketplaceCart()
+assert.equal(cart.find((line) => line.variantId === "sku-large")?.quantity, 5, "quantity edits target only the selected SKU")
+assert.equal(cart.find((line) => line.variantId === "sku-small")?.quantity, 3, "other SKU quantity is unchanged")
 addMarketplaceCartItem(item("c"))
-removeMarketplaceCartItemsByIds(["a", "c"])
+removeMarketplaceCartItemsByIds(["a", "c", "sku-listing"])
 cart = getMarketplaceCart()
 assert.deepEqual(cart.map((line) => line.listingId), ["b"], "checkout cleanup removes only reserved ids")
 
@@ -53,4 +64,4 @@ store.set("gh_marketplace_cart_v1", JSON.stringify(Array.from({ length: 140 }, (
 cart = getMarketplaceCart()
 assert.equal(cart.length, 100, "cart storage is bounded to 100 unique lines")
 
-console.log("Phase 4 marketplace cart runtime: 8/8 assertions PASS")
+console.log("Phase 4 marketplace cart runtime: 12/12 assertions PASS")

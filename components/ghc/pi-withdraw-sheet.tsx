@@ -9,6 +9,7 @@
  * Never invents paid results; A2U execution remains Testnet-flag and worker dependent.
  */
 
+import { PinRecoveryPanel } from "./pin-recovery-panel"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Loader2, ShieldCheck, X, Wallet } from "lucide-react"
 import { apiRequest } from "@/lib/client/api-request"
@@ -387,6 +388,22 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
       setMsg("Enter your 6-digit withdrawal PIN.")
       return
     }
+    if (amountPi <= 0 || floorToAtomic(amountPi) <= 0) {
+      setMsg("Enter a valid amount.")
+      return
+    }
+    // The idempotency key is created BEFORE PIN verification: the server binds the PIN proof to it.
+    const preAtomic = floorToAtomic(amountPi)
+    let pinIntent = intentRef.current
+    if (!pinIntent || pinIntent.amountAtomic !== preAtomic) {
+      const nonce =
+        typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `${Date.now()}_${Math.random().toString(36).slice(2, 12)}`
+      pinIntent = { amountAtomic: preAtomic, key: `sheet-payout:${nonce}` }
+      intentRef.current = pinIntent
+    }
+    let pinProof = ""
     setPinBusy(true)
     try {
       if (pinConfigured === false) {
@@ -404,32 +421,38 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
         const setBody = (await setRes.json().catch(() => null)) as { ok?: boolean; error?: string } | null
         if (!setRes.ok || !setBody?.ok) {
           setMsg(setBody?.error === "PIN_TABLE_PENDING" || setBody?.error === "PIN_PERSIST_FAILED"
-            ? "PIN storage is not ready on the database yet. Operator must apply the withdrawal PIN migration."
+            ? "We couldn't save your PIN right now. Please try again shortly or contact support."
+            : setBody?.error === "PIN_TOO_WEAK"
+              ? "Choose a less guessable PIN (no repeated digits or simple sequences like 123456)."
             : setBody?.error === "PIN_ALREADY_CONFIGURED"
               ? "A withdrawal PIN is already configured. Verify your existing PIN; setup cannot overwrite it."
               : "Could not save withdrawal PIN.")
           return
         }
         setPinConfigured(true)
-      } else {
+      }
+      {
         const vRes = await fetch("/api/identity/withdrawal-pin", {
           method: "POST",
           credentials: "include",
           headers: { Accept: "application/json", "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "verify", pin: pinInput }),
+          body: JSON.stringify({ action: "verify", pin: pinInput, bindKey: pinIntent.key }),
           cache: "no-store",
         })
-        const vBody = (await vRes.json().catch(() => null)) as { ok?: boolean; error?: string } | null
+        const vBody = (await vRes.json().catch(() => null)) as { ok?: boolean; error?: string; pinProof?: string } | null
         if (!vRes.ok || !vBody?.ok) {
           setMsg(
             vBody?.error === "PIN_LOCKED"
               ? "PIN locked after too many attempts. Try again later."
+              : vBody?.error === "PIN_COOLDOWN"
+                ? "Withdrawals are paused for 24 hours after a PIN reset, for your protection."
               : vBody?.error === "PIN_INVALID"
                 ? "Incorrect withdrawal PIN."
                 : "PIN verification failed.",
           )
           return
         }
+        pinProof = String(vBody?.pinProof || "")
       }
     } finally {
       setPinBusy(false)
@@ -463,7 +486,7 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
         status?: string
       }>("/api/economy/earnings/withdrawals", {
         method: "POST",
-        body: { amountAtomic, idempotencyKey: intent.key },
+        body: { amountAtomic, idempotencyKey: intent.key, pinProof },
         timeoutMs: 25_000,
       })
       const body = res.data
@@ -473,6 +496,8 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
           setConsentDone(false)
           await loadAuth()
           setMsg("Your wallet authorization is no longer active. Please authorize again.")
+        } else if (code === "PIN_PROOF_REQUIRED") {
+          setMsg("Please re-enter your withdrawal PIN to confirm this request.")
         } else if (code === "PI_EARNINGS_PAYOUT_REQUESTS_DISABLED") {
           setMsg("Withdrawal requests are not enabled on this deployment yet. No transfer started.")
         } else {
@@ -744,6 +769,9 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
                   aria-label="Enter withdrawal PIN"
                 />
               )}
+              {pinConfigured === true ? (
+                <PinRecoveryPanel onPinReset={() => { setPinInput(""); setMsg("PIN reset. Enter your new PIN to continue.") }} />
+              ) : null}
             </div>
           )}
 

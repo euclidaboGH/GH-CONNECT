@@ -4,8 +4,8 @@ import assert from 'node:assert/strict'
 const screen = fs.readFileSync('features/wallet/wallet-screen.tsx', 'utf8')
 const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'))
 const checks = [
-  ['GHC search includes transaction IDs and correlation references', /const hay = `\$\{tx\.id\} \$\{tx\.referenceId \|\| ""\}/.test(screen)],
-  ['transaction search remains limited to descriptive/reference fields', /\$\{tx\.reason\} \$\{tx\.sourceEvent\} \$\{tx\.kind\} \$\{tx\.status\}/.test(screen)],
+  ['GHC search includes transaction IDs and correlation references', /matchesFilterQuery\(q, tx\.id, tx\.referenceId/.test(screen)],
+  ['transaction search remains limited to descriptive/reference fields', /matchesFilterQuery\(q, tx\.id, tx\.referenceId, tx\.reason, tx\.sourceEvent, tx\.kind, tx\.status/.test(screen)],
   ['date range controls expose selected state', /aria-pressed=\{txDateRange === r\.id\}/.test(screen)],
   ['transaction type filters expose selected state', /aria-pressed=\{txFilter === f\.id\}/.test(screen)],
   ['date range labels are understandable on mobile', /label: "7 days"/.test(screen) && /label: "30 days"/.test(screen) && /label: "All time"/.test(screen)],

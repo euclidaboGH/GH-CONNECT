@@ -6,6 +6,7 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { rpcWalletSnapshot } from "@/lib/server/economy/db"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import {
   createWithdrawalRequest,
   fetchLockedGhc,
@@ -22,8 +23,10 @@ export const dynamic = "force-dynamic"
 export async function GET(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) {
-    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: { "Cache-Control": "no-store" } })
   }
+  const rateLimit = await checkDurableRateLimit(`ghc-withdrawal-read:${auth.userId}`, 30, 60_000, { onUnavailable: "deny" })
+  if (!rateLimit.ok) return NextResponse.json({ ok: false, error: durableRateLimitCode(rateLimit) }, { status: durableRateLimitStatus(rateLimit), headers: { "Cache-Control": "no-store" } })
   if (!areGhcPiWithdrawalsEnabled()) {
     return NextResponse.json(
       {
@@ -64,8 +67,10 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) {
-    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: { "Cache-Control": "no-store" } })
   }
+  const rateLimit = await checkDurableRateLimit(`ghc-withdrawal-create:${auth.userId}`, 5, 10 * 60_000, { onUnavailable: "deny" })
+  if (!rateLimit.ok) return NextResponse.json({ ok: false, error: durableRateLimitCode(rateLimit) }, { status: durableRateLimitStatus(rateLimit), headers: { "Cache-Control": "no-store" } })
   if (!areGhcPiWithdrawalsEnabled()) {
     return NextResponse.json(
       {

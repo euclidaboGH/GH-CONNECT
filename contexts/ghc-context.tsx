@@ -195,7 +195,7 @@ interface GHCContextType {
   stories: StoryItem[]
   publishStory: (story: StoryItem) => Promise<{ ok: boolean; durable?: boolean; error?: string }>
   /** Canonical durable feed refresh (server when online; preserves local feed on failure) */
-  refreshFeed: (opts?: { before?: number; beforeId?: string; append?: boolean; limit?: number }) => Promise<{ ok: boolean; durable?: boolean; error?: string; appended?: number }>
+  refreshFeed: (opts?: { before?: number; beforeId?: string; append?: boolean; limit?: number }) => Promise<{ ok: boolean; durable?: boolean; error?: string; appended?: number; nextCursor?: { before: number; beforeId: string } | null }>
   /** Opens/creates private chat with story owner via Messaging domain */
   replyToStory: (storyId: string) => Promise<string | null>
   tab: Tab
@@ -441,8 +441,11 @@ const GHCMessagingContext = createContext<{
   loadConversationMessages: GHCContextType["loadConversationMessages"]
   markConversationRead: GHCContextType["markConversationRead"]
   pinConversation: GHCContextType["pinConversation"]
+  unpinConversation: GHCContextType["unpinConversation"]
   archiveConversation: GHCContextType["archiveConversation"]
+  unarchiveConversation: GHCContextType["unarchiveConversation"]
   muteConversation: GHCContextType["muteConversation"]
+  unmuteConversation: GHCContextType["unmuteConversation"]
   createGroup: GHCContextType["createGroup"]
   joinCommunity: GHCContextType["joinCommunity"]
   leaveCommunity: GHCContextType["leaveCommunity"]
@@ -488,7 +491,7 @@ const GHCFeedContext = createContext<{
   reportPost: GHCContextType["reportPost"]
   reportContent: GHCContextType["reportContent"]
   publishStory: GHCContextType["publishStory"]
-  refreshFeed: (opts?: { before?: number; beforeId?: string; append?: boolean; limit?: number }) => Promise<{ ok: boolean; durable?: boolean; error?: string; appended?: number }>
+  refreshFeed: (opts?: { before?: number; beforeId?: string; append?: boolean; limit?: number }) => Promise<{ ok: boolean; durable?: boolean; error?: string; appended?: number; nextCursor?: { before: number; beforeId: string } | null }>
   followUser: GHCContextType["followUser"]
   unfollowFromPost: GHCContextType["unfollowFromPost"]
   muteUser: GHCContextType["muteUser"]
@@ -618,6 +621,9 @@ export function GHCProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<ExtendedGHCState>(() => createDefaultExtendedState())
   const postsSnapshotRef = useRef(state.posts)
   const feedRequestRef = useRef<{ generation: number; controller: AbortController | null }>({ generation: 0, controller: null })
+  // The server-issued cursor is the only pagination authority. Never derive it
+  // from locally merged posts, which may include optimistic/offline records.
+  const feedCursorRef = useRef<{ before: number; beforeId: string } | null>(null)
   useEffect(() => () => {
     feedRequestRef.current.controller?.abort()
     feedRequestRef.current = { generation: feedRequestRef.current.generation + 1, controller: null }
@@ -1904,6 +1910,10 @@ export function GHCProvider({ children }: { children: ReactNode }) {
               lastMessage: preview || existing?.lastMessage || "",
               lastMessageTime: lastAt,
               ...(typeof r.unreadCount === "number" && Number.isFinite(r.unreadCount) ? { unreadCount: Math.max(0, r.unreadCount), unread: r.unreadCount > 0 } : {}),
+              ...(typeof r.isPinned === "boolean" ? { isPinned: r.isPinned } : {}),
+              ...(typeof r.isArchived === "boolean" ? { isArchived: r.isArchived } : {}),
+              ...(typeof r.isMuted === "boolean" ? { isMuted: r.isMuted } : {}),
+              ...(typeof r.muteUntil === "number" && Number.isFinite(r.muteUntil) ? { muteUntil: r.muteUntil } : {}),
             })
           }
           return {
@@ -2031,6 +2041,10 @@ export function GHCProvider({ children }: { children: ReactNode }) {
               lastMessageTime: lastMessageAt,
               updatedAt,
               ...(typeof remote.unreadCount === "number" && Number.isFinite(remote.unreadCount) ? { unreadCount: Math.max(0, remote.unreadCount), unread: remote.unreadCount > 0 } : {}),
+              ...(typeof remote.isPinned === "boolean" ? { isPinned: remote.isPinned } : {}),
+              ...(typeof remote.isArchived === "boolean" ? { isArchived: remote.isArchived } : {}),
+              ...(typeof remote.isMuted === "boolean" ? { isMuted: remote.isMuted } : {}),
+              ...(typeof remote.muteUntil === "number" && Number.isFinite(remote.muteUntil) ? { muteUntil: remote.muteUntil } : {}),
             })
           }
           return { ...current, conversations: Array.from(byId.values()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)) }
@@ -6105,57 +6119,68 @@ const dismissMatchCelebration = useCallback(() => {
   )
 
   const pinConversation = useCallback(async (conversationId: string) => {
-    // Local-only — no durable conversation pin API.
-    setState((s) => ({
-      ...s,
-      conversations: s.conversations.map((c) => (c.id === conversationId ? toggleConversationPin(c) : c)),
-    }))
-    addToast("Conversation pinned on this device only", "info")
+    try {
+      const { apiSetConversationPrefs } = await import("@/lib/messaging/server-messaging-sync")
+      const result = await apiSetConversationPrefs(conversationId, { isPinned: true })
+      if (!result.httpOk || result.ok !== true) {
+        addToast("Could not pin this conversation. Try again when the connection is available.", "error")
+        return
+      }
+      setState((s) => ({ ...s, conversations: s.conversations.map((c) => c.id === conversationId ? { ...c, isPinned: true } : c) }))
+      addToast(result.durable === true ? "Conversation pinned" : "Conversation pinned on this device only", result.durable === true ? "success" : "info")
+    } catch { addToast("Could not pin this conversation.", "error") }
   }, [addToast])
 
   const unpinConversation = useCallback(async (conversationId: string) => {
-    setState((s) => ({
-      ...s,
-      conversations: s.conversations.map((c) => (c.id === conversationId ? toggleConversationPin(c) : c)),
-    }))
-    addToast("Conversation unpinned on this device only", "info")
+    try {
+      const { apiSetConversationPrefs } = await import("@/lib/messaging/server-messaging-sync")
+      const result = await apiSetConversationPrefs(conversationId, { isPinned: false })
+      if (!result.httpOk || result.ok !== true) { addToast("Could not unpin this conversation.", "error"); return }
+      setState((s) => ({ ...s, conversations: s.conversations.map((c) => c.id === conversationId ? { ...c, isPinned: false } : c) }))
+      addToast(result.durable === true ? "Conversation unpinned" : "Conversation unpinned on this device only", result.durable === true ? "success" : "info")
+    } catch { addToast("Could not unpin this conversation.", "error") }
   }, [addToast])
 
   const archiveConversation = useCallback(async (conversationId: string) => {
-    // Local-only — no durable conversation archive API.
-    setState((s) => ({
-      ...s,
-      conversations: s.conversations.map((c) => (c.id === conversationId ? toggleConversationArchive(c) : c)),
-    }))
-    addToast("Conversation archived on this device only", "info")
+    try {
+      const { apiSetConversationPrefs } = await import("@/lib/messaging/server-messaging-sync")
+      const result = await apiSetConversationPrefs(conversationId, { isArchived: true })
+      if (!result.httpOk || result.ok !== true) { addToast("Could not archive this conversation.", "error"); return }
+      setState((s) => ({ ...s, conversations: s.conversations.map((c) => c.id === conversationId ? { ...c, isArchived: true } : c) }))
+      addToast(result.durable === true ? "Conversation archived" : "Conversation archived on this device only", result.durable === true ? "success" : "info")
+    } catch { addToast("Could not archive this conversation.", "error") }
   }, [addToast])
 
   const unarchiveConversation = useCallback(async (conversationId: string) => {
-    setState((s) => ({
-      ...s,
-      conversations: s.conversations.map((c) => (c.id === conversationId ? toggleConversationArchive(c) : c)),
-    }))
-    addToast("Conversation unarchived on this device only", "info")
+    try {
+      const { apiSetConversationPrefs } = await import("@/lib/messaging/server-messaging-sync")
+      const result = await apiSetConversationPrefs(conversationId, { isArchived: false })
+      if (!result.httpOk || result.ok !== true) { addToast("Could not restore this conversation.", "error"); return }
+      setState((s) => ({ ...s, conversations: s.conversations.map((c) => c.id === conversationId ? { ...c, isArchived: false } : c) }))
+      addToast(result.durable === true ? "Conversation restored" : "Conversation restored on this device only", result.durable === true ? "success" : "info")
+    } catch { addToast("Could not restore this conversation.", "error") }
   }, [addToast])
 
   const muteConversation = useCallback(async (conversationId: string, muteHours: number = 1) => {
-    // Local-only conversation mute (graph muteUser is separate durable path).
-    setState((s) => ({
-      ...s,
-      conversations: s.conversations.map((c) => (c.id === conversationId ? toggleConversationMute(c, muteHours) : c)),
-    }))
-    addToast(
-      `Notifications muted for ${muteHours} hour${muteHours > 1 ? "s" : ""} on this device only`,
-      "success"
-    )
+    const safeHours = Number.isFinite(muteHours) ? Math.min(24 * 30, Math.max(1, Math.floor(muteHours))) : 1
+    const mutedUntil = Date.now() + safeHours * 60 * 60 * 1000
+    try {
+      const { apiSetConversationPrefs } = await import("@/lib/messaging/server-messaging-sync")
+      const result = await apiSetConversationPrefs(conversationId, { mutedUntil })
+      if (!result.httpOk || result.ok !== true) { addToast("Could not mute this conversation.", "error"); return }
+      setState((s) => ({ ...s, conversations: s.conversations.map((c) => c.id === conversationId ? { ...c, isMuted: true, muteUntil: mutedUntil } : c) }))
+      addToast(result.durable === true ? `Notifications muted for ${safeHours} hour${safeHours > 1 ? "s" : ""}` : "Notifications muted on this device only", result.durable === true ? "success" : "info")
+    } catch { addToast("Could not mute this conversation.", "error") }
   }, [addToast])
 
   const unmuteConversation = useCallback(async (conversationId: string) => {
-    setState((s) => ({
-      ...s,
-      conversations: s.conversations.map((c) => (c.id === conversationId ? toggleConversationMute(c, 0) : c)),
-    }))
-    addToast("Notifications unmuted on this device only", "info")
+    try {
+      const { apiSetConversationPrefs } = await import("@/lib/messaging/server-messaging-sync")
+      const result = await apiSetConversationPrefs(conversationId, { mutedUntil: null })
+      if (!result.httpOk || result.ok !== true) { addToast("Could not unmute this conversation.", "error"); return }
+      setState((s) => ({ ...s, conversations: s.conversations.map((c) => c.id === conversationId ? { ...c, isMuted: false, muteUntil: null } : c) }))
+      addToast(result.durable === true ? "Conversation unmuted" : "Conversation unmuted on this device only", result.durable === true ? "success" : "info")
+    } catch { addToast("Could not unmute this conversation.", "error") }
   }, [addToast])
 
   const setTypingIndicator = useCallback(async (conversationId: string, isTyping: boolean) => {
@@ -7759,7 +7784,7 @@ const dismissMatchCelebration = useCallback(() => {
     beforeId?: string
     append?: boolean
     limit?: number
-  }): Promise<{ ok: boolean; durable?: boolean; error?: string; appended?: number }> => {
+  }): Promise<{ ok: boolean; durable?: boolean; error?: string; appended?: number; nextCursor?: { before: number; beforeId: string } | null }> => {
     try {
       const { socialFetchFeed } = await import("@/lib/social/client")
       // Feed requests are latest-wins. A newer refresh/page supersedes the previous
@@ -7768,10 +7793,21 @@ const dismissMatchCelebration = useCallback(() => {
       feedRequestRef.current.controller?.abort()
       const controller = new AbortController()
       feedRequestRef.current = { generation, controller }
+      if (!opts?.append) {
+        // A replacement refresh starts a new pagination window (and may follow
+        // an account switch). Do not let a prior viewer's cursor leak forward.
+        feedCursorRef.current = null
+      }
+      const requestedCursor = opts?.before && opts?.beforeId
+        ? { before: opts.before, beforeId: opts.beforeId }
+        : opts?.append ? feedCursorRef.current : null
+      if (opts?.append && !requestedCursor) {
+        return { ok: false, durable: false, error: "FEED_CURSOR_UNAVAILABLE" }
+      }
       const feed = await socialFetchFeed({
         limit: opts?.limit ?? 40,
-        before: opts?.before,
-        beforeId: opts?.beforeId,
+        before: requestedCursor?.before,
+        beforeId: requestedCursor?.beforeId,
         signal: controller.signal,
       })
       if (generation !== feedRequestRef.current.generation) {
@@ -7780,6 +7816,20 @@ const dismissMatchCelebration = useCallback(() => {
       if (!feed.ok) {
         return { ok: false, durable: false, error: feed.error || "Could not refresh feed" }
       }
+      // Only a cursor returned by the canonical API may advance pagination.
+      // A missing cursor means the server has no further page to offer.
+      const candidateCursor = feed.nextCursor && Number.isSafeInteger(feed.nextCursor.before)
+        && feed.nextCursor.before > 0 && typeof feed.nextCursor.beforeId === "string"
+        && feed.nextCursor.beforeId.trim().length > 0
+        ? { before: feed.nextCursor.before, beforeId: feed.nextCursor.beforeId }
+        : null
+      if (opts?.append && requestedCursor && candidateCursor
+        && candidateCursor.before === requestedCursor.before
+        && candidateCursor.beforeId === requestedCursor.beforeId) {
+        return { ok: false, durable: false, error: "FEED_CURSOR_DID_NOT_ADVANCE" }
+      }
+      const nextCursor = candidateCursor
+      feedCursorRef.current = nextCursor
       // Phase 2: merge whenever API returns posts (durable preferred, not required)
       if (feed.ok && Array.isArray(feed.posts) && feed.posts.length > 0) {
         const remotePosts = mapRemoteFeedPosts(feed.posts)
@@ -7807,10 +7857,10 @@ const dismissMatchCelebration = useCallback(() => {
             : s.likedPostIds
           return { ...s, posts: nextPosts, likedPostIds: nextLiked }
         })
-        return { ok: true, durable: Boolean(feed.durable), appended: newlyFetchedCount }
+        return { ok: true, durable: Boolean(feed.durable), appended: newlyFetchedCount, nextCursor }
       }
       // Server reachable but empty / non-durable — preserve existing local feed
-      return { ok: true, durable: Boolean(feed.durable), appended: 0 }
+      return { ok: true, durable: Boolean(feed.durable), appended: 0, nextCursor }
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         return { ok: false, durable: false, error: "FEED_REQUEST_SUPERSEDED" }
@@ -8288,8 +8338,11 @@ const dismissMatchCelebration = useCallback(() => {
       loadConversationMessages,
       markConversationRead,
       pinConversation,
+      unpinConversation,
       archiveConversation,
+      unarchiveConversation,
       muteConversation,
+      unmuteConversation,
       createGroup,
       joinCommunity,
       acceptCommunityInvitation,
@@ -8320,8 +8373,11 @@ const dismissMatchCelebration = useCallback(() => {
       loadConversationMessages,
       markConversationRead,
       pinConversation,
+      unpinConversation,
       archiveConversation,
+      unarchiveConversation,
       muteConversation,
+      unmuteConversation,
       createGroup,
       joinCommunity,
       acceptCommunityInvitation,

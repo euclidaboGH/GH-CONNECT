@@ -16,7 +16,7 @@ const checks = [
   ["feed reconciliation rejects blank IDs and duplicate records", helper.includes('if (!id || post.deletedAt) continue') && helper.includes('if (!remoteById.has(id)) remoteById.set(id, post.id === id ? post : { ...post, id })')],
   ["replacement mode gives remote records precedence and preserves local continuity", helper.includes('if (mode === "append")') && helper.includes('for (const [id, post] of remoteById) merged.set(id, post)') && helper.includes('if (!remoteById.has(id)) merged.set(id, post)')],
   ["append mode adds only unseen remote records", helper.includes('if (!merged.has(id)) merged.set(id, post)')],
-  ["feed ordering is deterministic for equal timestamps", helper.includes('timeDelta || String(a.id).localeCompare(String(b.id))')],
+  ["feed ordering matches canonical SQL created_at DESC, id DESC for stable keyset cursors", helper.includes('timeDelta || String(b.id).localeCompare(String(a.id))') && read("supabase/migrations/20261022010097_gh_social_canonical_visibility.sql").includes("ORDER BY p.created_at DESC, p.id DESC")],
   ["GHC context delegates repeated feed merges to shared helper", context.includes('@/lib/social/reconcile-feed-posts') && (context.match(/reconcileFeedPosts\(/g) || []).length >= 6],
   ["GHC context no longer duplicates the previous remote/local merge pattern", !/const remoteIds = new Set\(remotePosts\.map\(\(p\) => p\.id\)\)\s*const localOnly = s\.posts\.filter/.test(context)],
   ["release truth and verified manifest match active version", truth.includes(`**Current source version:** \`${pkg.version}\``) && manifest.includes(`project_version=${pkg.version}`)],

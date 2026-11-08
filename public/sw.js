@@ -6,16 +6,21 @@
  * /api/ request remain network-only. Only immutable Next static chunks and a
  * short explicit list of public app assets may use Cache Storage.
  */
-const CACHE_NAME = "gh-connect-v3-public-static"
+const CACHE_NAME = "greenhaven-v4-public-static"
 const STATIC_ASSETS = [
   "/manifest.json",
-  "/icon.svg",
   "/icon-192.png",
   "/icon-512.png",
   "/icon-maskable-512.png",
   "/icon-dark-32x32.png",
   "/icon-light-32x32.png",
   "/apple-icon.png",
+  "/greenhaven-logo.png",
+  "/greenhaven-logo-dark.png",
+  "/greenhaven-lockup.png",
+  "/greenhaven-lockup-dark.png",
+  "/greenhaven-mark.png",
+  "/greenhaven-mark-dark.png",
   "/gh-connect-logo.png",
   "/ghc-coin-32.png",
   "/ghc-coin-64.png",
@@ -109,28 +114,44 @@ self.addEventListener("fetch", (event) => {
   })())
 })
 
+// Receiver only: authenticated subscription APIs exist, but no provider sender is
+// enabled yet. Push content is generic; private details are fetched after app open.
 self.addEventListener("push", (event) => {
   let data = {}
   try { data = event.data ? event.data.json() : {} } catch { data = {} }
-  const title = data.title || "GreenHaven"
+  // Remote payloads are intentionally generic: private message, wallet, payment,
+  // reward and membership details must be fetched only after authenticated app open.
+  const title = "GreenHaven"
   const options = {
-    body: data.body || "You have a new notification",
+    body: "You have a new notification",
     icon: "/icon-dark-32x32.png",
     badge: "/icon-light-32x32.png",
-    tag: data.tag || "notification",
-    requireInteraction: data.requireInteraction || false,
+    tag: typeof data.tag === "string" && /^ghn:[a-f0-9]{32}$/.test(data.tag) ? data.tag : "greenhaven-notification",
+    requireInteraction: data.requireInteraction === true,
+    data: { url: "/" },
   }
   event.waitUntil(self.registration.showNotification(title, options))
 })
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close()
+  let target = "/"
+  try {
+    const clickData = event.notification.data || {}
+    const candidate = new URL(clickData.url || clickData.deepLink || clickData.actionUrl || "/", self.location.origin)
+    if (candidate.origin === self.location.origin && candidate.protocol === self.location.protocol) {
+      target = `${candidate.pathname}${candidate.search}${candidate.hash}`
+    }
+  } catch { /* retain safe root destination */ }
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
-        if (new URL(client.url).origin === self.location.origin && "focus" in client) return client.focus()
+        if (new URL(client.url).origin === self.location.origin && "focus" in client) {
+          if ("navigate" in client) return client.navigate(target).then(() => client.focus())
+          return client.focus()
+        }
       }
-      if (clients.openWindow) return clients.openWindow("/")
+      if (clients.openWindow) return clients.openWindow(target)
     })
   )
 })

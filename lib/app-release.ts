@@ -1,3 +1,6 @@
-export const APP_RELEASE_VERSION = "0.330.15"
+/** Release identity; session integrity and release gates are versioned with this source. */
+export const APP_RELEASE_VERSION = "0.338.0"
+
+/** Concise, privacy-safe release note shown in the authenticated in-app update notice. */
 export const APP_RELEASE_SUMMARY =
-  "0.330.15: Phase 29 wallet and rewards remediation — prevent number-key navigation while typing or using Wallet, fail-closed withdrawal PIN status, insert-only PIN setup, and accurate pending-reward claim eligibility. Preserves membership session integrity. No financial policy or payout rail changes; Pi A2U remains Testnet-only and operator-gated."
+  "Phase 3 wallet, rewards and membership hardening: clearer Pi reservation recovery, safer concurrent reward claims and membership purchases, and verified Pi payment recovery."

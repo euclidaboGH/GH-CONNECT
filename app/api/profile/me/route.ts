@@ -86,6 +86,13 @@ export async function PATCH(request: Request) {
 
     // Ignore any client-supplied identity / financial fields (session auth is sole owner)
     const input = { ...(body as Record<string, unknown>) }
+    // Private notification controls have a dedicated authenticated endpoint;
+    // generic profile edits cannot overwrite their server-owned namespace.
+    if (input.profilePayload && typeof input.profilePayload === "object" && !Array.isArray(input.profilePayload)) {
+      const profilePayload = { ...(input.profilePayload as Record<string, unknown>) }
+      delete profilePayload.notificationPreferences
+      input.profilePayload = profilePayload
+    }
     delete input.id
     delete input.userId
     delete input.ghUserId

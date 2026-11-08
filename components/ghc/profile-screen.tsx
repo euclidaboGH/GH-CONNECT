@@ -658,13 +658,13 @@ export function ProfileScreen({
   )
 
   const shareProfile = async () => {
-    const text = `${name} · ${ghDisplay} on GreenHaven — connect on Pi Browser`
-    const origin =
-      getPublicSiteOrigin()
+    const text = `${name} · ${ghDisplay} on GreenHaven. Find my profile in GreenHaven using my GH ID.`
+    const origin = getPublicSiteOrigin()
+    const profileUrl = meId ? `${origin}/?profile=${encodeURIComponent(meId)}` : `${origin}/`
     const result = await shareText({
       title: "GreenHaven Profile",
       message: text,
-      url: `${origin}/`,
+      url: profileUrl,
     })
     if (result.ok) {
       if (result.method === "clipboard") {
@@ -843,10 +843,10 @@ export function ProfileScreen({
             {/* Stats — real counts only */}
             <div className="gh-premium-profile-stats mt-4 grid grid-cols-4 gap-1 rounded-[1.25rem] border border-border/50 bg-card p-1.5 shadow-[var(--gh-card-shadow)]">
               {[
-                { label: "Posts" as const, value: posts.length },
-                { label: "Friends" as const, value: Array.isArray(ghc.friends) ? ghc.friends.length : 0 },
-                { label: "Following" as const, value: authoritativeFollowCounts?.following ?? (Array.isArray(ghc.following) ? ghc.following.length : 0) },
-                { label: "Followers" as const, value: authoritativeFollowCounts?.followers ?? (Array.isArray((ghc as { followers?: unknown[] }).followers) ? (ghc as { followers?: unknown[] }).followers!.length : 0) },
+                { label: "Posts" as const, value: timelinePosts === null ? "—" : `${timelinePosts.length}${timelineHasMore ? "+" : ""}` },
+                { label: "Friends" as const, value: Array.isArray(ghc.friends) ? ghc.friends.length : "—" },
+                { label: "Following" as const, value: authoritativeFollowCounts?.following ?? "—" },
+                { label: "Followers" as const, value: authoritativeFollowCounts?.followers ?? "—" },
               ].map((s) => (
                 <button key={s.label} type="button" onClick={() => setSocialList(s.label)} className="flex min-w-0 flex-col items-center rounded-xl py-2.5 text-center transition hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label={`Open ${s.label.toLowerCase()} list`}>
                   <span className="text-[15px] font-bold tabular-nums text-foreground">{s.value}</span>
@@ -861,7 +861,8 @@ export function ProfileScreen({
               </div>
             ) : null}
 
-            {/* Professional identity, achievements and account tools live in Personal Dashboard. */}
+            {/* The compact identity snapshot supplies authoritative follow counts and durable reputation. */}
+            <ProfileIdentityOverview onCounts={setAuthoritativeFollowCounts} />
 
           </div>
         </div>
@@ -874,6 +875,13 @@ export function ProfileScreen({
             media: posts.filter((post) => (Array.isArray((post as any).images) && (post as any).images.length > 0) || Boolean((post as any).video) || Boolean((post as any).pdf)).length,
           }}
         />
+        <div
+          id={`gh-profile-panel-${profileSectionTab}`}
+          role="tabpanel"
+          aria-labelledby={`gh-profile-tab-${profileSectionTab}`}
+          tabIndex={0}
+          className="outline-none"
+        >
 
         {/* Compact tools — Dashboard only (wallet/rewards live here, not on public-looking chrome) */}
         <section id="gh-profile-tools" className="mt-2 w-full px-4" aria-label="Profile dashboard">
@@ -906,6 +914,15 @@ export function ProfileScreen({
               </dl>
               <button type="button" onClick={openEdit} className="mt-3 text-[12px] font-bold text-emerald-700 dark:text-emerald-300">Edit profile</button>
             </div>
+            <ProfileProfessionalShowcase
+              profile={p}
+              onEdit={openEdit}
+              onSave={async (patch) => {
+                if (!ghc.updateProfile) throw new Error("Profile updates are unavailable")
+                await ghc.updateProfile(patch)
+              }}
+            />
+            <ProfileAchievementShowcase />
           </section>
         ) : null}
 
@@ -1152,6 +1169,7 @@ export function ProfileScreen({
           </div>
         </section>
         ) : null}
+        </div>
       </div>
 
       {dashboardPageOpen ? (
@@ -1204,9 +1222,15 @@ export function ProfileScreen({
                 </div>
               </section>
             ) : null}
-            <ProfileIdentityOverview onCounts={setAuthoritativeFollowCounts} />
-            <ProfileProfessionalShowcase profile={p} onEdit={openEdit} onSave={async (patch) => { await ghc.updateProfile?.(patch) }} />
-            <ProfileAchievementShowcase />
+            <section className="mt-3 rounded-[1.25rem] border border-border/60 bg-card px-3 py-3" aria-label="Public profile presentation">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-bold text-foreground">Your public identity & portfolio</p>
+                  <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">Your professional or business presentation, selected work and earned achievements are available in the About section of your profile.</p>
+                </div>
+                <button type="button" onClick={() => { setDashboardPageOpen(false); setProfileSectionTab("about") }} className="min-h-10 shrink-0 rounded-full border border-border px-3 text-[10px] font-bold hover:bg-muted">View About</button>
+              </div>
+            </section>
             <div className="mt-2"><PioneerIdentityStrip hideGreenHavenId /></div>
             {profileCompletion.percentage < 100 && profileCompletion.missing.length > 0 ? (
               <button

@@ -32,12 +32,25 @@ export async function GET(request: Request) {
     })
   }
 
-  const limit = Math.min(
-    Math.max(Number(new URL(request.url).searchParams.get("limit") || 50), 1),
-    100
-  )
-  const result = await socialRpc("gh_community_list_public", { p_limit: limit })
-  const data = result.data as { communities?: unknown[] }
+  const url = new URL(request.url)
+  const rawLimit = url.searchParams.get("limit") || "50"
+  const rawOffset = url.searchParams.get("offset") || "0"
+  const query = (url.searchParams.get("q") || "").normalize("NFKC").trim().slice(0, 160)
+  const category = (url.searchParams.get("category") || "").trim().slice(0, 64)
+  if (!/^\d{1,3}$/.test(rawLimit) || !/^\d{1,6}$/.test(rawOffset) || Number(rawOffset) > 100000 || (category && !/^[\p{L}\p{N}][\p{L}\p{N} &+/_.-]{0,63}$/u.test(category))) {
+    return NextResponse.json({ ok: false, error: "INVALID_FILTER_QUERY" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+  }
+  const limit = Math.min(Math.max(Number(rawLimit), 1), 100)
+  const offset = Number(rawOffset)
+  const filtered = Boolean(query || category || offset)
+  const result = filtered
+    ? await socialRpc("gh_community_search_public", { p_query: query, p_category: category || null, p_limit: limit, p_offset: offset })
+    : await socialRpc("gh_community_list_public", { p_limit: limit })
+  if (!result.ok && filtered) {
+    return NextResponse.json({ ok: false, error: "FILTER_SEARCH_UNAVAILABLE", requiresMigration: "20261108120001_gh_community_server_filter_search.sql" }, { status: 503, headers: { "Cache-Control": "no-store" } })
+  }
+  if (!result.ok) return NextResponse.json({ ok: false, error: "COMMUNITY_DIRECTORY_UNAVAILABLE" }, { status: 503, headers: { "Cache-Control": "no-store" } })
+  const data = result.data as { communities?: unknown[]; pagination?: Record<string, unknown> }
   let communities: unknown[] = Array.isArray(data?.communities) ? data.communities : []
 
   // Phase 3: when authenticated, mark viewer membership so "My communities" is truthful.
@@ -101,6 +114,7 @@ export async function GET(request: Request) {
       ok: true,
       durable: result.ok,
       communities,
+      ...(data?.pagination ? { pagination: data.pagination } : filtered ? { pagination: { limit, offset, returned: communities.length, filtering: "server-side" } } : {}),
     },
     { headers: { "Cache-Control": "no-store" } }
   )

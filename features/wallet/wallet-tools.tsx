@@ -16,7 +16,7 @@ const TOOLS = [
   { id: "qr", label: "Receive / QR", icon: QrCode },
   { id: "methods", label: "Payment methods", icon: CreditCard },
   { id: "limits", label: "GHC limits", icon: Gauge },
-  { id: "security", label: "Security", icon: Shield },
+  { id: "security", label: "Security & PIN", icon: Shield },
   { id: "statements", label: "Statements", icon: FileText },
 ] as const
 

@@ -11,6 +11,7 @@ import type {
   WelcomeMessage,
 } from "@/lib/community-features-engine"
 import { formatEventDate, getUpcomingEvents, getActivePolls } from "@/lib/community-features-engine"
+import { safeCommunityResourceUrl } from "@/lib/domains/adapters/community-participation-hub"
 
 // Announcements Component
 export function AnnouncementCard({ announcement, onDismiss }: { announcement: Announcement; onDismiss?: () => void }) {
@@ -123,6 +124,7 @@ export function PollCard({
 // Events Component
 export function EventCard({ event, onAttend }: { event: ScheduledEvent; onAttend?: (attending: boolean) => void }) {
   const [isAttending, setIsAttending] = useState(false)
+  const safeVirtualLink = safeCommunityResourceUrl(event.virtualLink)
 
   const handleAttend = () => {
     setIsAttending(!isAttending)
@@ -157,11 +159,11 @@ export function EventCard({ event, onAttend }: { event: ScheduledEvent; onAttend
             <span>{event.location}</span>
           </div>
         )}
-        {event.virtualLink && (
+        {safeVirtualLink && (
           <div className="flex items-center gap-2">
             <Users size={14} />
             <a
-              href={event.virtualLink}
+              href={safeVirtualLink}
               target="_blank"
               rel="noopener noreferrer"
               className="text-blue-600 hover:underline"
@@ -194,6 +196,7 @@ export function EventCard({ event, onAttend }: { event: ScheduledEvent; onAttend
 
 // Pinned Resources Component
 export function PinnedResourceCard({ resource, onRemove }: { resource: PinnedResource; onRemove?: () => void }) {
+  const safeResourceUrl = safeCommunityResourceUrl(resource.url)
   const resourceIcons = {
     document: "📄",
     link: "🔗",
@@ -210,9 +213,9 @@ export function PinnedResourceCard({ resource, onRemove }: { resource: PinnedRes
       <div className="flex-1 min-w-0">
         <h3 className="font-semibold text-sm text-foreground">{resource.title}</h3>
         <p className="text-xs text-muted-foreground mt-1">{resource.description}</p>
-        {resource.url && (
+        {safeResourceUrl && (
           <a
-            href={resource.url}
+            href={safeResourceUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs text-blue-600 hover:underline mt-1 block"

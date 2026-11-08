@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { getMessagingPreference, isMessagingStoreDurable, setMessagingPreference, type MessagingAudience, type OnlineStatusAudience } from "@/lib/server/messaging/message-store"
 
@@ -14,8 +14,8 @@ export async function GET(request: Request) {
   try {
     const auth = await resolveAuthenticatedUser(request.headers)
     if (!auth) return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: noStore })
-    const rl = checkRateLimit(`messaging-preference-read:${auth.userId}`, 60, 60_000)
-    if (!rl.ok) return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { ...noStore, "Retry-After": String(rl.retryAfterSec) } })
+    const rl = await checkDurableRateLimit(`messaging-preference-read:${auth.userId}`, 60, 60_000, { onUnavailable: "deny" })
+    if (!rl.ok) return NextResponse.json({ ok: false, error: durableRateLimitCode(rl), retryAfterSec: rl.retryAfterSec }, { status: durableRateLimitStatus(rl), headers: { ...noStore, "Retry-After": String(rl.retryAfterSec) } })
     const preference = await getMessagingPreference(auth.userId)
     if (!preference) return NextResponse.json({ ok: false, error: "STORE_UNAVAILABLE" }, { status: 503, headers: noStore })
     return NextResponse.json({ ok: true, durable: isMessagingStoreDurable(), ...preference }, { headers: noStore })
@@ -29,8 +29,8 @@ export async function PATCH(request: Request) {
   try {
     const auth = await resolveAuthenticatedUser(request.headers)
     if (!auth) return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: noStore })
-    const rl = checkRateLimit(`messaging-preference-write:${auth.userId}`, 20, 60_000)
-    if (!rl.ok) return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { ...noStore, "Retry-After": String(rl.retryAfterSec) } })
+    const rl = await checkDurableRateLimit(`messaging-preference-write:${auth.userId}`, 20, 60_000, { onUnavailable: "deny" })
+    if (!rl.ok) return NextResponse.json({ ok: false, error: durableRateLimitCode(rl), retryAfterSec: rl.retryAfterSec }, { status: durableRateLimitStatus(rl), headers: { ...noStore, "Retry-After": String(rl.retryAfterSec) } })
     const parsed = await readBoundedJson(request, 4 * 1024)
     if (!parsed.ok) {
       const status = parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400

@@ -4,7 +4,7 @@
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import {
   setConversationPrefs,
@@ -23,10 +23,10 @@ export async function PATCH(request: Request, ctx: Ctx) {
     if (!auth) {
       return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: noStore })
     }
-    const rl = checkRateLimit(`messaging-conversation-prefs-write:${auth.userId}`, 30, 60_000)
+    const rl = await checkDurableRateLimit(`messaging-conversation-prefs-write:${auth.userId}`, 30, 60_000, { onUnavailable: "deny" })
     if (!rl.ok) {
-      return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, {
-        status: 429,
+      return NextResponse.json({ ok: false, error: durableRateLimitCode(rl), retryAfterSec: rl.retryAfterSec }, {
+        status: durableRateLimitStatus(rl),
         headers: { ...noStore, "Retry-After": String(rl.retryAfterSec) },
       })
     }

@@ -14,6 +14,10 @@ import { loadPersistedCommunities, isCommunityConversationRow } from "@/lib/doma
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useSectionRefresh } from "@/hooks/use-section-refresh"
+import { useAccountFilterState } from "@/hooks/use-account-filter-state"
+import { FilterSummary } from "./filtering/filter-summary"
+import { FilterResultState } from "./filtering/filter-result-state"
+import { matchesFilterQuery } from "@/lib/filtering/filter-utils"
 import {
   Plus,
   Search,
@@ -36,10 +40,14 @@ import { CreateGroupModal, type CreateGroupFormData } from "./create-group-modal
 import { privacyJoinHint, formatCommunityRole } from "@/lib/community/role-labels"
 import {
   matchesPrivacyFilter,
+  normalizeCommunityPrivacy,
   privacyFilterLabel,
   sortCommunityRows,
+  communityMemberCount,
+  communityUnreadCount,
   type CommunityPrivacyFilter,
 } from "@/lib/community/discovery"
+import { resolveJoinCta } from "@/lib/community/join-status"
 import { PremiumCommunityHub } from "./premium-community-hub"
 import { CollapsingAppHeader } from "./collapsing-app-header"
 import { PremiumSurfaceActions } from "./premium-surface-actions"
@@ -59,6 +67,19 @@ import {
 import type { CommunityJoinReasonId } from "@/lib/domains/contracts/communities"
 
 type DirectoryTab = "my" | "discover"
+type CommunityAttentionFilter = "all" | "board" | "chat" | "requests"
+type CommunityFilterPrefs = { searchQuery: string; sortBy: "recent" | "active" | "unread" | "name"; privacyFilter: "all" | "public" | "request" | "invite"; categoryFilter: string; communityAttentionFilter: CommunityAttentionFilter }
+const DEFAULT_COMMUNITY_FILTERS: CommunityFilterPrefs = { searchQuery: "", sortBy: "recent", privacyFilter: "all", categoryFilter: "all", communityAttentionFilter: "all" }
+function validateCommunityFilters(value: unknown): CommunityFilterPrefs {
+  const raw = value && typeof value === "object" ? value as Record<string, unknown> : {}
+  return {
+    searchQuery: typeof raw.searchQuery === "string" ? raw.searchQuery.slice(0, 120) : "",
+    sortBy: ["recent", "active", "unread", "name"].includes(String(raw.sortBy)) ? raw.sortBy as CommunityFilterPrefs["sortBy"] : "recent",
+    privacyFilter: ["all", "public", "request", "invite"].includes(String(raw.privacyFilter)) ? raw.privacyFilter as CommunityFilterPrefs["privacyFilter"] : "all",
+    categoryFilter: typeof raw.categoryFilter === "string" ? raw.categoryFilter.slice(0, 64) : "all",
+    communityAttentionFilter: ["all", "board", "chat", "requests"].includes(String(raw.communityAttentionFilter)) ? raw.communityAttentionFilter as CommunityAttentionFilter : "all",
+  }
+}
 
 type CommunityRow = {
   id: string
@@ -290,6 +311,8 @@ export function CommunitiesScreen() {
     createGroup,
     joinCommunity,
     leaveCommunity,
+    acceptCommunityInvitation,
+    declineCommunityInvitation,
     createBoardPost,
     replyToBoardPost,
     reactToBoardPost,
@@ -316,10 +339,15 @@ export function CommunitiesScreen() {
     [conversationsRaw],
   )
   const [directory, setDirectory] = useState<DirectoryTab>("my")
-  const [searchQuery, setSearchQuery] = useState("")
-  const [sortBy, setSortBy] = useState<"recent" | "active" | "unread" | "name">("recent")
-  const [privacyFilter, setPrivacyFilter] = useState<"all" | "public" | "request" | "invite">("all")
-  const [categoryFilter, setCategoryFilter] = useState<string>("all")
+  const [directoryOffset, setDirectoryOffset] = useState(0)
+  const changeDirectory = useCallback((value: DirectoryTab) => { setDirectoryOffset(0); setDirectory(value) }, [])
+  const filterPrefs = useAccountFilterState("communities", IdentityService.getCurrentUserId() || "anonymous", DEFAULT_COMMUNITY_FILTERS, validateCommunityFilters)
+  const { searchQuery, sortBy, privacyFilter, categoryFilter, communityAttentionFilter } = filterPrefs.value
+  const setSearchQuery = useCallback((value: string) => { setDirectoryOffset(0); filterPrefs.update("searchQuery", value) }, [filterPrefs.update])
+  const setSortBy = useCallback((value: CommunityFilterPrefs["sortBy"]) => filterPrefs.update("sortBy", value), [filterPrefs.update])
+  const setPrivacyFilter = useCallback((value: CommunityFilterPrefs["privacyFilter"]) => filterPrefs.update("privacyFilter", value), [filterPrefs.update])
+  const setCategoryFilter = useCallback((value: string) => { setDirectoryOffset(0); filterPrefs.update("categoryFilter", value) }, [filterPrefs.update])
+  const setCommunityAttentionFilter = useCallback((value: CommunityAttentionFilter) => filterPrefs.update("communityAttentionFilter", value), [filterPrefs.update])
   const [showCreate, setShowCreate] = useState(false)
   const [createSubmitError, setCreateSubmitError] = useState<string | null>(null)
   const openCreateCommunity = useCallback(() => setShowCreate(true), [])
@@ -372,9 +400,13 @@ export function CommunitiesScreen() {
   const [directoryLoading, setDirectoryLoading] = useState(true)
   const [directoryDurable, setDirectoryDurable] = useState<boolean | null>(null)
   const [directoryError, setDirectoryError] = useState<string | null>(null)
+  const [directoryServerFilterAvailable, setDirectoryServerFilterAvailable] = useState(true)
   const [isOffline, setIsOffline] = useState(false)
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
   const [directoryTick, setDirectoryTick] = useState(0)
+  const [directoryOffset, setDirectoryOffset] = useState(0)
+  const [directoryHasMore, setDirectoryHasMore] = useState(false)
+  const [directoryLoadingMore, setDirectoryLoadingMore] = useState(false)
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -398,21 +430,30 @@ export function CommunitiesScreen() {
 
   useEffect(() => {
     let cancelled = false
-    setDirectoryLoading(true)
+    if (directoryOffset === 0) { setDirectoryLoading(true); setDirectoryLoadingMore(false); setDirectoryHasMore(false) }
+    else setDirectoryLoadingMore(true)
     setDirectoryError(null)
-    const hardTimeout =
-      typeof window !== "undefined"
-        ? window.setTimeout(() => {
-            if (!cancelled) {
-              setDirectoryLoading(false)
-              setDirectoryError((prev) => prev || "Directory is taking longer than expected. Pull to retry.")
-            }
-          }, 15_000)
-        : null
-    void import("@/lib/social/client")
-      .then(({ socialListCommunities }) => socialListCommunities(50))
+    const hardTimeout = typeof window !== "undefined" ? window.setTimeout(() => {
+      if (!cancelled) {
+        if (directoryOffset === 0) setDirectoryLoading(false)
+        else setDirectoryLoadingMore(false)
+        setDirectoryError((prev) => prev || "Directory is taking longer than expected. Pull to retry.")
+      }
+    }, 15_000) : null
+    const filterActive = Boolean(searchQuery.trim() || (directory === "discover" && categoryFilter !== "all") || directoryOffset > 0)
+    const debounce = window.setTimeout(() => {
+      void import("@/lib/social/client")
+      .then(async ({ socialListCommunities }) => {
+        const filtered = await socialListCommunities({ limit: 100, offset: directoryOffset, q: searchQuery.trim() || undefined, category: directory === "discover" && categoryFilter !== "all" ? categoryFilter : undefined })
+        if (!filterActive || filtered.ok) return { ...filtered, serverFiltered: true }
+        // Older deployments without the Phase 10.2 RPC retain a bounded fallback; the UI discloses this.
+        const fallback = await socialListCommunities(100)
+        return { ...fallback, serverFiltered: false }
+      })
       .then((res) => {
         if (cancelled) return
+        if (!res.ok) throw new Error("Community directory unavailable")
+        setDirectoryServerFilterAvailable(res.serverFiltered)
         const rows: CommunityRow[] = []
         for (const raw of res.communities || []) {
           if (!raw || typeof raw !== "object") continue
@@ -471,9 +512,16 @@ export function CommunitiesScreen() {
             communityId: id,
           })
         }
-        setRemoteDirectory(rows)
+        setDirectoryHasMore(res.serverFiltered && Boolean(res.pagination?.hasMore))
+        setRemoteDirectory((current) => {
+          if (directoryOffset === 0) return rows
+          const byId = new Map(current.map((community) => [community.id, community]))
+          for (const community of rows) byId.set(community.id, community)
+          return Array.from(byId.values())
+        })
         setDirectoryDurable(Boolean(res.durable))
         setDirectoryLoading(false)
+        setDirectoryLoadingMore(false)
         if (hardTimeout != null) window.clearTimeout(hardTimeout)
         // Seed session membership markers so My (n) matches the list.
         try {
@@ -497,17 +545,21 @@ export function CommunitiesScreen() {
       })
       .catch(() => {
         if (!cancelled) {
-          setRemoteDirectory([])
+          if (directoryOffset === 0) setRemoteDirectory([])
           setDirectoryDurable(false)
-          setDirectoryError("Could not load the community directory")
+          setDirectoryError(directoryOffset > 0 ? "Could not load more communities. Try again." : "Could not load the community directory")
           setDirectoryLoading(false)
+          setDirectoryLoadingMore(false)
+          setDirectoryHasMore(false)
         }
       })
+    }, 250)
     return () => {
       cancelled = true
+      window.clearTimeout(debounce)
       if (hardTimeout != null) window.clearTimeout(hardTimeout)
     }
-  }, [directoryTick])
+  }, [directoryTick, directory, searchQuery, categoryFilter, directoryOffset])
 
   useEffect(() => {
     try {
@@ -666,30 +718,37 @@ export function CommunitiesScreen() {
         if (directory === "discover") {
           if (categoryFilter !== "all" && (c.category || "") !== categoryFilter) return false
           if (!matchesPrivacyFilter(c.privacy, privacyFilter)) return false
+        } else if (communityAttentionFilter !== "all") {
+          if (communityAttentionFilter === "board" && Number(c.boardUnread || 0) <= 0) return false
+          if (communityAttentionFilter === "chat" && Number(c.chatUnread || c.unreadCount || 0) <= 0) return false
+          if (communityAttentionFilter === "requests") {
+            const matchedRole = Object.entries(c.groupRoles || {}).find(([memberId]) => isSameIdentity(memberId))?.[1]
+            const role = matchedRole || (c.createdBy && isSameIdentity(c.createdBy) ? "owner" : "member")
+            if (!(["owner", "admin", "moderator"].includes(role)) || !(c.pendingJoinRequests?.length)) return false
+          }
         }
         if (!q) return true
-        const hay = `${c.groupName} ${c.participantName} ${c.description || ""} ${c.region || ""} ${(c.tags || []).join(" ")} ${c.category || ""} ${c.privacy || ""}`.toLowerCase()
-        return hay.includes(q)
+        return matchesFilterQuery(q, c.groupName, c.participantName, c.description, c.region, ...(c.tags || []), c.category, c.privacy)
       })
       .sort((a, b) => {
         if (sortBy === "name")
           return (a.groupName || a.participantName).localeCompare(b.groupName || b.participantName)
-        if (sortBy === "active") return (b.members?.length || 0) - (a.members?.length || 0)
+        if (sortBy === "active") return communityMemberCount(b) - communityMemberCount(a) || (b.lastMessageTime || 0) - (a.lastMessageTime || 0)
         if (sortBy === "unread") {
-          const aUnread = Number(a.boardUnread || 0) + Number(a.chatUnread || 0) + Number(a.unreadCount || 0)
-          const bUnread = Number(b.boardUnread || 0) + Number(b.chatUnread || 0) + Number(b.unreadCount || 0)
+          const aUnread = communityUnreadCount(a)
+          const bUnread = communityUnreadCount(b)
           return bUnread - aUnread || (b.lastMessageTime || 0) - (a.lastMessageTime || 0)
         }
         return (b.lastMessageTime || 0) - (a.lastMessageTime || 0)
       })
-  }, [directory, myCommunities, discoverCommunities, searchQuery, categoryFilter, privacyFilter, sortBy])
+  }, [directory, myCommunities, discoverCommunities, searchQuery, categoryFilter, privacyFilter, sortBy, communityAttentionFilter])
 
   const communityPulse = useMemo(() => {
-    const boardUnread = myCommunities.reduce((sum, c) => sum + Number(c.boardUnread || 0), 0)
-    const chatUnread = myCommunities.reduce((sum, c) => sum + Number(c.chatUnread || c.unreadCount || 0), 0)
-    const me = IdentityService.getCurrentUserId() || "current-user"
+    const boardUnread = myCommunities.reduce((sum, c) => sum + communityUnreadCount({ boardUnread: c.boardUnread }), 0)
+    const chatUnread = myCommunities.reduce((sum, c) => sum + communityUnreadCount({ chatUnread: c.chatUnread, unreadCount: c.unreadCount }), 0)
     const requestsToReview = myCommunities.reduce((sum, c) => {
-      const role = c.groupRoles?.[me] || (c.createdBy === me ? "owner" : "member")
+      const matchedRole = Object.entries(c.groupRoles || {}).find(([memberId]) => isSameIdentity(memberId))?.[1]
+      const role = matchedRole || (c.createdBy && isSameIdentity(c.createdBy) ? "owner" : "member")
       return role === "owner" || role === "admin" || role === "moderator"
         ? sum + Number(c.pendingJoinRequests?.length || 0)
         : sum
@@ -812,6 +871,24 @@ export function CommunitiesScreen() {
     } finally {
       setJoinBusy(false)
     }
+  }
+
+  const handleAcceptCommunityInvitation = async (id: string): Promise<boolean> => {
+    if (typeof acceptCommunityInvitation !== "function") return false
+    const ok = await acceptCommunityInvitation(id)
+    if (ok) {
+      setDirectory("my")
+      setSelectedCommunityId(id)
+      setHubKey((k) => k + 1)
+    }
+    return ok
+  }
+
+  const handleDeclineCommunityInvitation = async (id: string): Promise<boolean> => {
+    if (typeof declineCommunityInvitation !== "function") return false
+    const ok = await declineCommunityInvitation(id)
+    if (ok) setDirectoryTick((n) => n + 1)
+    return ok
   }
 
   const handleLeave = async (id: string, name: string) => {
@@ -940,11 +1017,9 @@ export function CommunitiesScreen() {
             id: selected.id,
             name: selected.groupName || selected.participantName,
             description: selected.description,
-            memberCount: selected.memberCount || selected.members?.length || 1,
-            privacy:
-              selected.privacy === "private" || selected.privacy === "invite-only"
-                ? "private"
-                : "public",
+            memberCount: communityMemberCount(selected),
+            membershipState: resolveMembershipState(selected, me),
+            privacy: normalizeCommunityPrivacy(selected.privacy),
             isJoined: joined,
             photo: selected.groupPhoto || selected.participantPhoto || selected.photo,
             cover: selected.groupPhoto || selected.photo,
@@ -979,6 +1054,8 @@ export function CommunitiesScreen() {
           onJoin={() => {
             beginJoin(selected)
           }}
+          onAcceptInvitation={() => handleAcceptCommunityInvitation(selected.id)}
+          onDeclineInvitation={() => handleDeclineCommunityInvitation(selected.id)}
           pendingJoinRequests={selected.pendingJoinRequests || []}
           inviteCandidates={(Array.isArray(candidates) ? candidates : [])
             .filter(
@@ -1227,6 +1304,12 @@ export function CommunitiesScreen() {
                 </button>
               ) : null}
             </div>
+            <FilterSummary className="mt-2" items={[
+              ...(searchQuery ? [{ id: "search", label: `Search: ${searchQuery}`, onRemove: () => setSearchQuery("") }] : []),
+              ...(directory === "discover" && categoryFilter !== "all" ? [{ id: "category", label: `Topic: ${categoryFilter}`, onRemove: () => setCategoryFilter("all") }] : []),
+              ...(directory === "discover" && privacyFilter !== "all" ? [{ id: "privacy", label: `Access: ${privacyFilterLabel(privacyFilter)}`, onRemove: () => setPrivacyFilter("all") }] : []),
+              ...(directory === "my" && communityAttentionFilter !== "all" ? [{ id: "attention", label: `Attention: ${communityAttentionFilter}`, onRemove: () => setCommunityAttentionFilter("all") }] : []),
+            ]} onClearAll={() => { setSearchQuery(""); setCategoryFilter("all"); setPrivacyFilter("all"); setCommunityAttentionFilter("all") }} />
 
             <div
               className="mt-1 flex gap-1 rounded-xl border border-border/50 bg-muted/50 p-0.5"
@@ -1237,7 +1320,7 @@ export function CommunitiesScreen() {
                 type="button"
                 role="tab"
                 aria-selected={directory === "my"}
-                onClick={() => setDirectory("my")}
+                onClick={() => changeDirectory("my")}
                 className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-1.5 text-[11px] font-bold transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                   directory === "my"
                     ? "bg-card text-foreground shadow-sm"
@@ -1251,7 +1334,7 @@ export function CommunitiesScreen() {
                 type="button"
                 role="tab"
                 aria-selected={directory === "discover"}
-                onClick={() => setDirectory("discover")}
+                onClick={() => changeDirectory("discover")}
                 className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-1.5 text-[11px] font-bold transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                   directory === "discover"
                     ? "bg-card text-foreground shadow-sm"
@@ -1270,6 +1353,7 @@ export function CommunitiesScreen() {
                     <button
                       key={cat}
                       type="button"
+                      aria-pressed={categoryFilter === cat}
                       onClick={() => setCategoryFilter(cat)}
                       className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
                         categoryFilter === cat
@@ -1299,6 +1383,7 @@ export function CommunitiesScreen() {
                     <button
                       key={id}
                       type="button"
+                      aria-pressed={privacyFilter === id}
                       onClick={() => setPrivacyFilter(id)}
                       className={`shrink-0 rounded-full px-3 py-1 text-[10px] font-semibold transition ${
                         privacyFilter === id
@@ -1340,6 +1425,9 @@ export function CommunitiesScreen() {
           Directory loaded without a durability signal — join/leave still call the live membership API.
         </div>
       ) : null}
+      {!directoryLoading && (searchQuery.trim() || (directory === "discover" && categoryFilter !== "all") || directoryOffset > 0) && !directoryServerFilterAvailable ? (
+        <div className="mx-3 mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100" role="status">Server-side community search is awaiting the Phase 10.2 database migration. Showing a bounded directory fallback, so results may not cover every community.</div>
+      ) : null}
       {isOffline ? (
         <div className="mx-3 mt-2 rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2.5 text-[12px] text-amber-950 shadow-sm dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100" role="status">
           <p className="font-semibold">You&apos;re offline</p>
@@ -1347,40 +1435,8 @@ export function CommunitiesScreen() {
         </div>
       ) : null}
       {directoryError && !directoryLoading ? (
-        <div className="mx-3 mt-2 rounded-[1.25rem] border border-destructive/25 bg-destructive/5 px-3.5 py-2.5 text-[12px]" role="alert">
-          <p className="font-semibold text-destructive">{directoryError}</p>
-          <button type="button" className="mt-1 text-[11px] font-bold text-destructive underline" onClick={() => {
-            setDirectoryLoading(true)
-            setDirectoryError(null)
-            void import("@/lib/social/client").then(({ socialListCommunities }) => socialListCommunities(50)).then((res) => {
-              const rows: CommunityRow[] = []
-              for (const raw of res.communities || []) {
-                if (!raw || typeof raw !== "object") continue
-                const r = raw as Record<string, unknown>
-                const id = String(r.id || "").trim()
-                const name = String(r.name || "").trim()
-                if (!id || !name) continue
-                rows.push({
-                  id,
-                  conversationType: "group",
-                  groupName: name,
-                  participantName: name,
-                  participantId: String(r.createdBy || r.created_by || "").trim(),
-                  lastMessage: String(r.purpose || r.description || "").slice(0, 120),
-                  lastMessageTime: 0,
-                  members: [],
-                  createdBy: String(r.createdBy || r.created_by || "").trim(),
-                  kind: "community",
-                  communityId: id,
-                } as CommunityRow)
-              }
-              setRemoteDirectory(rows)
-              setDirectoryLoading(false)
-            }).catch(() => {
-              setDirectoryError("Could not load the community directory")
-              setDirectoryLoading(false)
-            })
-          }}>Try again</button>
+        <div className="mx-3 mt-2 rounded-[1.25rem] border border-border/60 bg-card px-3.5 py-2.5">
+          <FilterResultState state="error" title="Community directory unavailable" description={directoryError} onRetry={reloadDirectory} />
         </div>
       ) : null}
       <div
@@ -1395,22 +1451,27 @@ export function CommunitiesScreen() {
                   <p className="text-[13px] font-bold text-foreground">Your community pulse</p>
                   <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">See what needs your attention across every community without opening them one by one.</p>
                 </div>
-                {communityPulse.total > 0 ? (
-                  <span className="shrink-0 rounded-full bg-emerald-600 px-2.5 py-1 text-[10px] font-bold text-white">{communityPulse.total} to review</span>
-                ) : (
-                  <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-[10px] font-bold text-muted-foreground">Caught up</span>
-                )}
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  {communityPulse.total > 0 ? (
+                    <span className="rounded-full bg-emerald-600 px-2.5 py-1 text-[10px] font-bold text-white">{communityPulse.total} to review</span>
+                  ) : (
+                    <span className="rounded-full bg-muted px-2.5 py-1 text-[10px] font-bold text-muted-foreground">Caught up</span>
+                  )}
+                  {communityAttentionFilter !== "all" ? (
+                    <button type="button" onClick={() => setCommunityAttentionFilter("all")} className="min-h-7 text-[10px] font-semibold text-primary underline-offset-2 hover:underline">Clear focus</button>
+                  ) : null}
+                </div>
               </div>
               <div className="mt-3 grid grid-cols-3 gap-2">
-                <button type="button" onClick={() => { setDirectory("my"); setSortBy("unread") }} className="rounded-xl border border-border/60 bg-muted/35 px-2 py-2.5 text-left transition hover:bg-muted">
+                <button type="button" aria-pressed={communityAttentionFilter === "board"} onClick={() => { setDirectory("my"); setCommunityAttentionFilter((value) => value === "board" ? "all" : "board") }} className={`rounded-xl border px-2 py-2.5 text-left transition hover:bg-muted ${communityAttentionFilter === "board" ? "border-primary/50 bg-primary/10" : "border-border/60 bg-muted/35"}`}>
                   <span className="block text-sm font-extrabold text-foreground">{communityPulse.boardUnread}</span>
                   <span className="text-[10px] font-semibold text-muted-foreground">Board updates</span>
                 </button>
-                <button type="button" onClick={() => { setDirectory("my"); setSortBy("unread") }} className="rounded-xl border border-border/60 bg-muted/35 px-2 py-2.5 text-left transition hover:bg-muted">
+                <button type="button" aria-pressed={communityAttentionFilter === "chat"} onClick={() => { setDirectory("my"); setCommunityAttentionFilter((value) => value === "chat" ? "all" : "chat") }} className={`rounded-xl border px-2 py-2.5 text-left transition hover:bg-muted ${communityAttentionFilter === "chat" ? "border-primary/50 bg-primary/10" : "border-border/60 bg-muted/35"}`}>
                   <span className="block text-sm font-extrabold text-foreground">{communityPulse.chatUnread}</span>
                   <span className="text-[10px] font-semibold text-muted-foreground">Chat unread</span>
                 </button>
-                <button type="button" onClick={() => { setDirectory("my"); setSortBy("unread") }} className="rounded-xl border border-border/60 bg-muted/35 px-2 py-2.5 text-left transition hover:bg-muted">
+                <button type="button" aria-pressed={communityAttentionFilter === "requests"} onClick={() => { setDirectory("my"); setCommunityAttentionFilter((value) => value === "requests" ? "all" : "requests") }} className={`rounded-xl border px-2 py-2.5 text-left transition hover:bg-muted ${communityAttentionFilter === "requests" ? "border-primary/50 bg-primary/10" : "border-border/60 bg-muted/35"}`}>
                   <span className="block text-sm font-extrabold text-foreground">{communityPulse.requestsToReview}</span>
                   <span className="text-[10px] font-semibold text-muted-foreground">Requests</span>
                 </button>
@@ -1453,7 +1514,7 @@ export function CommunitiesScreen() {
               <div className="mt-3 flex flex-wrap justify-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setDirectory("discover")}
+                  onClick={() => changeDirectory("discover")}
                   className="min-h-10 rounded-full bg-[var(--gh-green)] px-4 text-[12px] font-bold text-white"
                 >
                   Discover communities
@@ -1528,7 +1589,7 @@ export function CommunitiesScreen() {
                 {directory === "my" ? (
                   <button
                     type="button"
-                    onClick={() => setDirectory("discover")}
+                    onClick={() => changeDirectory("discover")}
                     className="rounded-full bg-[var(--gh-green)] px-4 py-2 text-[12px] font-bold text-white"
                   >
                     Discover communities
@@ -1536,7 +1597,7 @@ export function CommunitiesScreen() {
                 ) : myCommunities.length > 0 ? (
                   <button
                     type="button"
-                    onClick={() => setDirectory("my")}
+                    onClick={() => changeDirectory("my")}
                     className="rounded-full bg-[var(--gh-green)] px-4 py-2 text-[12px] font-bold text-white"
                   >
                     Open My communities ({myCommunities.length})
@@ -1563,6 +1624,9 @@ export function CommunitiesScreen() {
             {visibleGroups.map((community) => {
               const joined = isJoined(community)
               const isSample = String(community.id).startsWith("demo-community-")
+              const viewerId = IdentityService.getCurrentUserId() || ""
+              const membershipState = resolveMembershipState(community, viewerId)
+              const membershipStatus = membershipState === "pending" || membershipState === "invited" ? membershipState : undefined
               const role =
                 community.createdBy === "current-user"
                   ? "owner"
@@ -1581,12 +1645,15 @@ export function CommunitiesScreen() {
                     "Open for posts, events and member chat"
                   }
                   lastMessageTime={community.lastMessageTime || Date.now()}
-                  memberCount={community.memberCount || community.members?.length || 0}
+                  memberCount={communityMemberCount(community)}
                   onlineCount={0}
                   unreadCount={community.unreadCount || 0}
                   boardUnread={community.boardUnread || 0}
                   chatUnread={community.chatUnread || 0}
                   isJoined={joined}
+                  membershipStatus={membershipStatus}
+                  onAcceptInvite={membershipStatus === "invited" ? () => handleAcceptCommunityInvitation(community.id) : undefined}
+                  onDeclineInvite={membershipStatus === "invited" ? () => handleDeclineCommunityInvitation(community.id) : undefined}
                   category={community.category || "community"}
                   region={community.region}
                   role={role}
@@ -1595,16 +1662,18 @@ export function CommunitiesScreen() {
                   groupAvatar={community.participantPhoto || community.groupPhoto}
                   onClick={() => setSelectedCommunityId(community.id)}
                   joinLabel={
-                    ["invite-only", "invite", "private", "approval", "request"].includes(
-                      String(community.privacy || "").toLowerCase(),
-                    )
-                      ? "Request to join"
-                      : "Join"
+                    resolveJoinCta({
+                      privacy: community.privacy,
+                      viewerIsMember: joined,
+                      pendingRequest: membershipStatus === "pending" || membershipStatus === "requested",
+                      isOwner: role === "owner",
+                    }).label
                   }
-                  onJoin={!joined ? () => setJoinGate(community) : undefined}
+                  onJoin={!joined && !membershipStatus ? () => setJoinGate(community) : undefined}
                 />
               )
             })}
+            {directoryHasMore && directoryOffset < 100000 ? <button type="button" disabled={directoryLoadingMore} onClick={() => setDirectoryOffset((value) => value + 100)} className="min-h-11 w-full rounded-xl border border-border bg-card px-3 text-xs font-bold text-foreground disabled:opacity-60" aria-live="polite">{directoryLoadingMore ? "Loading more communities…" : "Load more communities"}</button> : null}
             </>
           ) : directory === "discover" ? (
             <EmptyState

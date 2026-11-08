@@ -3,9 +3,9 @@
 
 # Phase 12 — Final integration and release readiness
 
-Release: `0.330.2` (2026-11-06)
+Release: `0.330.48` (2026-11-08)
 
-The 0.312.0 source baseline includes Phase 20 payout controls, Phase 21 private-surface durable abuse controls, Phase 22 atomic marketplace order transitions, Phase 23 migration/lock-scope hardening, Phase 24 migration-classification/operator-guide synchronization, and Phase 26 wallet ledger resilience/premium wallet presentation. The canonical inventory contains 189 migrations: 117 REQUIRED candidates, 69 REVIEW_REQUIRED, 1 REQUIRES_APPROVAL, and 2 PROPOSAL. All classifications remain source-review states; no migration is claimed applied. Runtime/build and operator acceptance remain pending.
+The current 0.330.48 maintenance baseline preserves the 0.330.46 functional source and adds a 15-section / 150-essential project-wide maintenance register plus a corrected Wallet source-contract expectation. The current 0.330.46 functional source baseline preserves Priority 8, advances Priority 9 with true SKU variants and atomic inventory source paths (Phase 9.3), plus seller fulfilment for shipping, pickup and digital delivery, HTTPS tracking metadata, explicit dispatch-before-delivery, buyer receipt confirmation and a participant-only database-enforced append-only order event timeline (Phase 9.4). The new marketplace migrations are REVIEW_REQUIRED and unapplied. Priority 10.2 adds account-scoped filter state, database-side Marketplace filters, authenticated wallet date filtering and a held Community search migration. Priority 11 adds explainable notification ranking, account-scoped local cache/preferences, browser-alert preference wiring, read-state failure reconciliation, keyboard dialog focus management and standard notification actions. Phase 11.2.2 separates the authenticated server-backed inbox, local browser alerts and remote Web Push. Phase 11.2.4 establishes Web Push/VAPID subscription and outbox architecture; Phase 11.2.5 encrypts subscription secrets with AES-256-GCM, verifies VAPID keypair correspondence, returns ciphertext-only claim data and uses generic privacy-safe payloads. The proposal remains unapplied. The vetted sender package could not be installed because the npm registry is unavailable; no deployment VAPID keys, scheduled worker or real provider receipts exist, so remote delivery remains disabled. The source regression chain passes when run with the Node runtime gate excluded only for isolated source-contract diagnosis; the normal prebuild correctly stops under Node 22.16.0 because Node 24.15.0 is required. The 150-essential maintenance-register contract passes 22/22. These source checks do not prove PostgreSQL execution, row-lock concurrency, carrier tracking authenticity, Pi/GHC Testnet settlement, Node 24.15.x dependency-backed build, browser/device or operator acceptance. No migration is claimed applied and production remains NOT APPROVED.
 
 ## Delivered in v0.157.12
 
@@ -215,7 +215,7 @@ Completed-payment membership activation, fulfillment, recovery and payment-histo
 
 ## 0.329.0 Phase 10 privacy-safe caching and media efficiency
 
-Service-worker caching now uses an explicit public-static allowlist. Navigation documents, authenticated pages, Next.js RSC payloads, all API routes and private media are network-only; install-time precache also validates response cache headers. Feed and Story media prefetch follows reduced-data/Data Saver and constrained-network signals, rechecks at execution time and is strictly bounded. Focused Phase 10 checks pass 14/14 settings/performance, 17/17 resilience and 11/11 executable service-worker policy assertions. This is source-level verification only. Supported Node 24.15.0 typecheck/lint/build, browser/device testing, disposable PostgreSQL, Pi Testnet and explicit operator acceptance remain required. Production remains NOT APPROVED.
+Service-worker caching now uses an explicit public-static allowlist. Navigation documents, authenticated pages, Next.js RSC payloads, all API routes and private media are network-only; install-time precache also validates response cache headers. Feed and Story media prefetch follows reduced-data/Data Saver and constrained-network signals, rechecks at execution time and is strictly bounded. Focused Phase 10 checks pass 17/17 settings/performance, 17/17 resilience and 11/11 executable service-worker policy assertions. This is source-level verification only. Supported Node 24.15.0 typecheck/lint/build, browser/device testing, disposable PostgreSQL, Pi Testnet and explicit operator acceptance remain required. Production remains NOT APPROVED.
 
 ## Current source baseline — 0.330.1 (2026-11-06)
 
@@ -237,3 +237,52 @@ The Phase 10 patch release corrects stale source regression assertions and keeps
 ## Current source baseline — 0.330.15 (2026-11-06)
 
 0.330.15 is a build-fix and dependency-hygiene release. It re-synchronizes the release-readiness record with package, lockfile, in-app release, README and project truth so the Phase 24 release-review gate passes in the `prebuild` chain, and it records npm install warnings for follow-up. No migration, Pi payment, GHC ledger, payout, entitlement or production authority changed. Supported-runtime (Node.js 24.15.x) install/typecheck/lint/build, disposable PostgreSQL, Pi Testnet, browser/device and operator acceptance remain required. Production remains NOT APPROVED.
+
+
+## Current source baseline — 0.330.16 (2026-11-07)
+
+Notification refreshes now abort and fence stale responses across account switches; prior-account notification rows and unread counts are cleared. Feed, inbox, community and marketplace filters expose accessible selected states. No financial, membership, marketplace payment or database migration authority changed. This source-only increment does not approve production. Node 24.15.0 install/typecheck/lint/build, browser/device, disposable PostgreSQL, Pi Testnet and explicit operator acceptance remain required.
+
+
+## Current source baseline — 0.330.17 (2026-11-07)
+
+The owner-approved transparent GreenHaven logo artwork now replaces the previous product logo in canonical hero, lockup, symbol, favicon and PWA asset paths. The service-worker public-static cache is versioned to avoid stale brand assets. This is a source-level presentation/branding increment; GHC coin and all financial/payment/entitlement authorities remain unchanged. Node.js 24.15.0 typecheck, lint and production build plus browser/device and operator acceptance remain required. Production remains NOT APPROVED.
+
+
+## 0.330.20 Phase 2 Wallet source increment
+
+The GHC statement now distinguishes settled incoming/outgoing totals from pending and explicitly discloses its bounded loaded-history window. GHC escrow-locked is separately labelled, Pi and GHC remain independent, and manual refresh awaits the authoritative Wallet Read provider. The Phase 2 Wallet source check is part of `prebuild` and `verify:static`. This source increment does not claim a Node 24 build, live Supabase, Pi Testnet or device acceptance. Production remains NOT APPROVED.
+
+
+## 0.330.21 Phase 2 Wallet completion source increment
+
+GHC receipts expose additional bounded allowlisted correlation references from existing transaction metadata; Wallet history uses a shared search query across independently rendered GHC and Pi rails; and GHC month-to-date insights distinguish posted settled movement from pending activity while excluding request-only and terminal records. No financial execution authority or migration changed. Focused Wallet contracts pass, and the complete `npm run verify:static` suite passes with 1,649 PASS assertions and 0 FAIL assertions. The environment runs Node 22.16.0 rather than the required Node 24.15.0, dependencies are not installed, and physical low-end Android/WebView/Pi Browser acceptance has not been performed. Production remains NOT APPROVED pending full supported-runtime, device, database, provider and operator acceptance.
+
+
+**Release status remains NOT APPROVED for production.** Node 24.15.x dependency-backed typecheck/lint/build, browser/device/screen-reader, live database/provider and operator acceptance remain outstanding.
+
+
+## Historical source baseline — 0.330.35 (2026-11-07)
+
+Priority 9 Marketplace source increment: server-order currency controls checkout rail selection; inventory hydration fails closed; seller stock can be edited without silently resetting stock; listing delivery information is persisted in the existing JSON metadata column; and single-item purchase intents use stable per-attempt idempotency. No migration or financial authority changed. Production remains NOT APPROVED until Node 24.15.x dependency-backed build, browser/device, disposable PostgreSQL concurrency, live Supabase/Pi and operator acceptance pass.
+
+
+## Historical source baseline — 0.330.36 (2026-11-07)
+
+Historical Phase 9.2 closeout: Seller Centre and product option foundations are source-implemented; their original static contracts and parser assertions passed 9/9. A stale worklog/release-metadata issue found in an earlier consolidated run was reconciled in 0.330.39; the current full `verify:static` suite now passes. Node 24.15.0 dependencies are unavailable in this environment, so dependency-backed typecheck, lint, production build and live acceptance remain pending. No migration was added or applied. Production remains NOT APPROVED.
+
+Priority 10 Filters now has a coordinated first increment: shared removable filter summaries across Feed, Discovery, Wallet, Messages, Marketplace and Notifications; bounded common token search across Feed, Discovery, Wallet and Messages; and removal of the random-distance placeholder. Focused utility tests pass 14/14 and source contracts pass 17/17. Account-scoped persistence, server-side query parity, Communities/Rewards coverage, browser/device/screen-reader acceptance and full Node 24.15.x build remain open.
+
+
+### Phase 11.2.2 delivery truth (0.330.43)
+
+The authenticated unified inbox is server-backed; browser alerts are local-only. The service worker contains a push receiver, but no subscription registration/persistence, provider sender, VAPID configuration or durable remote outbox exists. Remote Web Push is NOT CONFIGURED. Do not claim offline delivery or remote provider success.
+
+
+### Phase 11.2.3 account/device preference boundaries (0.330.44)
+
+Account-level in-app preferences are synchronized through authenticated `/api/notifications/preferences` and the existing profile payload store when durable profile persistence is configured. Browser alert choices are stored separately per account + browser device. Settings exposes independent In-app and This device controls and refreshes browser permission after focus/visibility changes. Legacy preference records remain readable. The profile payload path uses read/merge/upsert rather than an atomic dedicated preference table; concurrent profile payload writes can be last-write-wins. No migration or provider integration was added. Remote Web Push remains NOT CONFIGURED. Source contracts pass 17/17 and runtime preference tests pass 12/12. Actual multi-device, shared-browser account-switch, mobile/browser permission, screen-reader, Node 24.15.x build and live Testnet/Mainnet acceptance remain open. Production remains NOT APPROVED.
+
+### Phase 11.2.5 push secret and privacy hardening (0.330.46)
+
+Standards-based Web Push/VAPID is selected as the protocol, with no vendor-specific provider selected. Source adds authenticated/rate-limited subscription list/register/revoke APIs, strict known-browser-push-host validation, endpoint hashing and an explicit client helper that remains disabled until the sender is integrated. `supabase/proposals/20261108_notification_remote_push_proposal.sql` is a proposal outside the migration directory: it defines service-role-only per-device subscription storage, an idempotent per-notification/device outbox, attempt audit, lease/`SKIP LOCKED` claims, bounded exponential backoff with provider Retry-After support, stale-lease failure closure and endpoint expiration/revocation. It has not been applied or run against PostgreSQL. Subscription secrets are encrypted at source and VAPID keypair matching is validated, but no deployment VAPID/encryption keys, vetted `web-push` sender, dispatch worker, provider receipts or offline delivery are configured. Focused contracts pass 22/22 and runtime validation 19/19; the full `npm run verify:static` command passed (exit code 0). Node 22.16.0 is available while Node 24.15.0 is required; dependencies are absent, so dependency-backed typecheck/lint/production build are not certified. Real offline-device, multi-account, browser/mobile, screen-reader, provider and live Testnet/Mainnet acceptance remain open. Production remains NOT APPROVED.

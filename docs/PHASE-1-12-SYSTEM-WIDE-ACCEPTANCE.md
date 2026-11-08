@@ -5,14 +5,16 @@
 
 ## Release snapshot
 
-- Current source baseline for this consolidated report: `0.330.2` (2026-11-06). Historical implementation notes below retain their original release labels; they are not the current project version.
+- Current source baseline for this consolidated report: `0.330.48` (2026-11-08). Historical implementation notes below retain their original release labels; they are not the current project version.
 - Scope: consolidation and source-level acceptance across Phases 1–12, plus the later source checks already present in this repository.
 - The canonical project root is the repository root. The stale nested `greenhaven-upgrade-next/` copy was removed because it was pinned to `0.150.1` and duplicated the project tree; its only nested-only path was an empty directory.
 
-## Current audit status (v0.330.2)
+## Current audit status (v0.330.48)
 
-- Phase 7 Wallet source implementation is closed in 0.320.0; dedicated Wallet entry contract: 14/14. External Node 24.15.x build, browser/device and live Pi Testnet acceptance remain production release blockers. This remains a read-only snapshot; consent, quote, withdrawal execution, GHC ledger and provider authorities are unchanged.
-- Phase 8 Rewards source implementation is closed in 0.323.0. It includes bounded account-scoped snapshots, authenticated GHC ledger history/search/filtering, server-authoritative daily claims and seven durable server-verified idempotent non-financial mission achievement unlocks. Dedicated Phase 8 contracts pass 18/18, 20/20, 15/15 and 24/24. Mission GHC issuance remains disabled; the new additive migration is REVIEW_REQUIRED and unapplied. Node 24, Testnet, browser/device and operator acceptance remain production blockers.
+- Current product roadmap: Priorities 1–9 have reached their current source transformation milestones; Marketplace (Priority 9) source work is at 0.330.38, and Filters (Priority 10) has its first coordinated source increment in 0.330.39. The current Marketplace increments harden server-authoritative checkout currency, inventory honesty and seller stock editing, durable delivery metadata and per-attempt checkout idempotency, plus durable SKU variants with independent pricing/stock, variant-bound buyer cart/order identity and database reservation/release/commit paths. Browser/device, Node 24.15.x build, disposable PostgreSQL concurrency, database and Testnet/operator acceptance remain open.
+
+- Phase 7 Wallet source implementation is closed in 0.320.0; dedicated Wallet entry contract: 17/17. External Node 24.15.x build, browser/device and live Pi Testnet acceptance remain production release blockers. This remains a read-only snapshot; consent, quote, withdrawal execution, GHC ledger and provider authorities are unchanged.
+- Phase 8 Rewards source implementation is closed in 0.323.0. It includes bounded account-scoped snapshots, authenticated GHC ledger history/search/filtering, server-authoritative daily claims and seven durable server-verified idempotent non-financial mission achievement unlocks. Dedicated Phase 8 contracts pass 18/18, 20/20, 17/17 and 24/24. Mission GHC issuance remains disabled; the new additive migration is REVIEW_REQUIRED and unapplied. Node 24, Testnet, browser/device and operator acceptance remain production blockers.
 
 - Phase 7 creator/business identity increment (0.319.0) adds safe public portfolio presentation, account-scoped server achievement hydration and professional-interest discovery relevance. Dedicated Phase 7 identity showcase contract passes 10/10. The consolidated static suite must pass before source-only audit closure.
 
@@ -24,8 +26,12 @@
 - The v0.157.13 cross-phase hardening increment applied streaming byte limits to seven previously unbounded JSON write routes across account lifecycle, social, notifications, communities, and marketplace features.
 - The v0.157.14 follow-up adds streaming byte limits to twelve further high-impact financial, identity, and social write routes, tightens payout amount type validation, and makes social follow target identifiers string-only. The v0.157.16 follow-up extends this to connection requests, reports, matching signals, creator tips, and bank-beneficiary mutations, with runtime tests for the bounded JSON parser. These are source-level safeguards and isolated helper tests, not full application or live-system acceptance.
 - The available audit container runs Node.js 22.16.0, while the project requires Node.js 24.15.0; `node_modules` is absent. TypeScript, lint, production build and browser E2E have therefore not been run here. Phase 16 post-interaction and Phase 17 cohesive social-engagement source checks are registered in the current release.
-- The repository migration inventory is generated from the canonical migration directory; see `docs/MIGRATION_CHECKLIST.md` for current counts and classifications. The current 189-file inventory is 117 REQUIRED, 69 REVIEW_REQUIRED, 1 REQUIRES_APPROVAL and 2 PROPOSAL. This is a source inventory only; each target's remote migration history must be reconciled independently.
+- The repository migration inventory is generated from the canonical migration directory; see `docs/MIGRATION_CHECKLIST.md` for current counts and classifications. The current 194-file inventory is 118 REQUIRED, 73 REVIEW_REQUIRED, 1 REQUIRES_APPROVAL and 2 PROPOSAL. This is a source inventory only; each target's remote migration history must be reconciled independently.
 - No live Supabase/Pi/Vercel operation, database migration, restore drill, or financial mutation was performed.
+
+## Current source increment — Priority 8 Messages (0.330.33)
+
+The active product roadmap is now Priority 8 Messages. This source increment adds an Archived inbox lane, server-backed per-member pin/archive/mute preferences, preserves conversation-scoped drafts across navigation/reconnect, improves touch and keyboard access to conversation/message actions, and exposes the 8,000-character composer limit. Dedicated source contracts pass 41/41, and the existing inbox, media hydration, bounded JSON, durable private-surface, accessibility-navigation and repository-consistency checks pass. Full dependency-backed build and live acceptance remain blocked by the available Node 22.16.0 runtime; the repository requires Node 24.15.0. No migration or production mutation occurred.
 
 ## Improvements made
 
@@ -222,7 +228,7 @@ The current source release begins Product Phase 9 with strict membership entitle
 
 ## 0.326.0 current-increment note
 
-The current source baseline adds Phase 9 Membership lifecycle/access controls. Its own static/runtime contracts are 20/20 and 15/15; existing membership session/foundation/parser contracts remain passing. This note does not supersede historical system-wide acceptance results or claim a full production build. Node 24.15.x dependency-backed typecheck/lint/build, disposable PostgreSQL/Testnet, browser/device and operator verification remain required.
+The current source baseline adds Phase 9 Membership lifecycle/access controls. Its own static/runtime contracts are 20/20 and 17/17; existing membership session/foundation/parser contracts remain passing. This note does not supersede historical system-wide acceptance results or claim a full production build. Node 24.15.x dependency-backed typecheck/lint/build, disposable PostgreSQL/Testnet, browser/device and operator verification remain required.
 
 
 ## 0.327.0 current-increment note
@@ -232,7 +238,7 @@ Phase 9 Membership now requires exact durable Pi provider, PI currency, membersh
 
 ## 0.329.0 current-increment note
 
-Phase 10 tightens the service worker to cache only explicitly allowlisted public static assets. Navigations, authenticated documents, Next.js RSC responses, all API routes and private media remain network-only. Feed and Story speculative media prefetch now respects Data Saver, constrained connections and the local reduced-data preference, rechecks before work and applies strict caps. The reconnect banner cleans up its timer. Phase 10 focused checks pass 14/14 settings/performance, 17/17 resilience and 11/11 service-worker policy tests. This remains source-only; Node 24.15.0 typecheck/lint/build, browser/device and operational acceptance remain outstanding.
+Phase 10 tightens the service worker to cache only explicitly allowlisted public static assets. Navigations, authenticated documents, Next.js RSC responses, all API routes and private media remain network-only. Feed and Story speculative media prefetch now respects Data Saver, constrained connections and the local reduced-data preference, rechecks before work and applies strict caps. The reconnect banner cleans up its timer. Phase 10 focused checks pass 17/17 settings/performance, 17/17 resilience and 11/11 service-worker policy tests. This remains source-only; Node 24.15.0 typecheck/lint/build, browser/device and operational acceptance remain outstanding.
 
 
 ## 0.330.0 current-increment note
@@ -248,3 +254,52 @@ The 0.330.1 patch corrects stale CI regression contracts so the PI Withdraw acti
 ## 0.330.2 cache-safe CI increment
 
 The 0.330.2 source increment directs TypeScript build metadata to `.cache/`, verifies that generated build-info files are ignored and untracked, and rejects the legacy root cache path. This corrects the Phase 26 CI false failure when a legitimate incremental cache is present. It does not represent runtime, financial, database or production acceptance. Node 24.15.x typecheck, lint, production build, disposable database, Pi Testnet, browser/device and operator acceptance remain required; production remains NOT APPROVED.
+
+
+## 0.330.17 cross-surface reliability
+
+Notification refresh is now session-identity scoped, abortable and generation-fenced so late responses cannot reintroduce a previous account's notifications. Feed, Messages, Communities and Marketplace filter controls expose selected-state semantics for assistive technology. Existing wallet/rewards/membership/profile/settings/community/messaging/marketplace authority boundaries remain unchanged. This is source-only evidence; Node 24.15.0 typecheck, lint, production build, browser/device and external operator acceptance remain outstanding. Production remains NOT APPROVED.
+
+
+## 0.330.19 Feed Phase 1 product transformation completion
+
+The current release starts the owner-prioritized Feed product redesign. Saved filter preference now restores/persists, filter changes reset pagination and scroll position, the composer prompt clarifies creation and audience selection, and Explore conversations derives topics only from currently ranked feed posts. Existing canonical composer, post cards, server visibility/moderation and durable write paths remain unchanged. Source-only verification is not runtime or production acceptance; Node.js 24.15.0 typecheck/lint/build and browser/device acceptance remain outstanding.
+
+
+## 0.330.20 Phase 2 Wallet product transformation
+
+The current Wallet increment improves balance hierarchy, privacy and statement transparency without adding a new financial authority. GHC available, pending, locked and escrow-locked values are separately identified; Pi available, withdrawable, pending and reserved values remain on the independent Pi rail. Balance hiding is session-scoped. A pure GHC statement helper separates pending movement and excludes failed/reversed/cancelled/expired records from settled totals. The current 80-row local history limit is disclosed rather than represented as a complete lifetime statement. Manual refresh now awaits the latest authoritative Wallet Read provider result and advances the successful-sync timestamp only on confirmed success. No migration, ledger mutation, transfer, payout, reward issuance, conversion or settlement authority changed. The Phase 2 source contract is registered in prebuild and static verification. Node.js 24.15.0 typecheck/lint/build, browser/device, Supabase and Pi Testnet acceptance remain required; production remains NOT APPROVED.
+
+
+## 0.330.21 Phase 2 Wallet completion increment
+
+The Wallet source increment adds allowlisted correlation references to GHC receipts, shared search across separately rendered GHC and Pi history rails, and stricter month-to-date GHC movement summaries that distinguish posted settled activity from pending records and exclude request-only/terminal rows. Canonical Send, Request, Receive and Pi withdrawal flows remain unchanged. Focused new checks pass 12/12 and the existing Phase 2 product, history, withdrawal, security and ledger-resilience contracts pass. The full consolidated `npm run verify:static` now passes with 1,649 PASS assertions and 0 FAIL assertions after current-release and history-rail regression contracts were reconciled; see the 0.330.21 worklog. Node 24.15.0 dependency-backed typecheck/lint/build and physical Android/WebView/Pi Browser acceptance remain outstanding. Production remains NOT APPROVED.
+
+
+## 0.330.23 Feed relevance transparency increment
+
+The Feed relevance explanation control now opens an accessible dialog with the ranked-post reason and a clear distinction between feed ordering and visibility permissions. “See fewer like this” is connected to the existing Feed exclusion behavior and persisted as a bounded account-scoped device-local preference (maximum 200 unique post IDs). Targeted Feed checks pass 30/30, Feed transformation checks pass 12/12, engagement reliability passes 16/16, feed reconciliation passes 12/12, and composer/stories shell checks pass 12/12. These are source/static results. Node 24.15.x dependency-backed typecheck/lint/build and browser/device acceptance remain required; production remains NOT APPROVED.
+
+
+## Historical source increment — Priority 9 Marketplace (0.330.35)
+
+Marketplace source foundations were audited and extended without changing the existing order, inventory reservation, GHC/Pi payment, proceeds, refund or payout authorities. Checkout now selects its payment rail from the durable server-created order currency. Missing inventory is represented as zero, seller stock can be managed explicitly, stock edits preserve existing values when omitted, and delivery instructions persist through the listing metadata/API projection. Single-item checkout uses a unique idempotency key per intent. New Phase 9 source/runtime contracts are registered in the static and prebuild pipelines. No migration was added or applied. The current environment runs Node.js 22.16.0, while the project requires Node.js 24.15.0; dependency-backed TypeScript/lint/build and browser/device, PostgreSQL concurrency and Testnet acceptance remain outstanding.
+
+
+## Current source increment — Priority 9.2 Marketplace (0.330.36)
+
+Seller Centre now highlights low-stock listings, drafts and listings missing core merchandising content. Sellers can author up to four descriptive product option groups (twelve values each); options round-trip through existing listing metadata and are visible to buyers, who can ask sellers to confirm a choice. Options share the listing price and stock: no SKU-level price or inventory is implied. New source contracts pass 9/9 and parser assertions pass 9/9. Node 24.15.0 dependency-backed typecheck/lint/build and browser/device, live database/provider and operator acceptance remain outstanding. Production remains NOT APPROVED.
+
+
+## Current source increment — Priority 9.3 Marketplace (0.330.37)
+
+True SKU variants now have dedicated durable records and seller-scoped unique SKUs, independent price and stock, buyer selection, variant-aware cart lines, and immutable order SKU/label snapshots. Variant reservation locks listing and variant rows; cancellation releases the hold; verified payment commits it; seller replacement is bounded, validated before writes, and protects active reservations. Legacy order creation rejects listings with active variants. The additive migration `20261107180001_marketplace_sku_variants_atomic_inventory.sql` is REVIEW_REQUIRED and unapplied. Parser assertions pass 16/16 and Phase 9.3 static contracts pass 25/25. PostgreSQL execution/concurrency, migration history reconciliation, Node 24.15.x typecheck/lint/build, browser/device and GHC/Pi Testnet acceptance remain unverified. Production remains NOT APPROVED.
+
+
+## Current source increment — Priority 9.4 Marketplace (0.330.38)
+
+Seller fulfilment now explicitly supports shipping, pickup/meetup and digital products/services. Shipping requires carrier and tracking details and a separate dispatch action before delivery can be marked. Digital delivery is represented as `service_active`; buyer completion still requires verified payment and a persisted delivered/service-active state. A database-enforced append-only trigger journal captures order creation, payment, order-state and delivery-state milestones; fulfilment events carry authenticated buyer/seller identity. Legacy in-flight orders retain a compatibility completion path without inferring their original delivery method. Only buyer and seller can read the event timeline. Parser assertions pass 15/15 and Phase 9.4 source contracts pass 28/28. Migration `20261107190001_marketplace_fulfilment_tracking_timeline.sql` is REVIEW_REQUIRED and unapplied. PostgreSQL execution, multi-instance concurrency, live Supabase, shipping-provider verification, Node 24.15.x typecheck/lint/build, browser/device and GHC/Pi Testnet acceptance remain open. Production is NOT APPROVED.
+## Current source increment — Priority 10 Filters (0.330.39)
+
+The current source baseline includes a shared accessible active-filter summary across Feed, Discovery, Wallet, Messages, Marketplace and Notifications, plus common bounded Unicode/diacritic-insensitive token matching for Feed, Discovery, Wallet and Messages. The old random-distance placeholder was removed; text location matching is not geographic distance. Focused tests pass 14/14 and source contracts pass 17/17. Account-scoped persistence, server-side query parity, Communities/Rewards filter coverage and browser/device acceptance remain open. No migration or authorization change was made. Production remains NOT APPROVED.
+

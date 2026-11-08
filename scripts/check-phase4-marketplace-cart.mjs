@@ -6,7 +6,7 @@ const checks = [
   ["cart quantity is bounded", cart.includes("MAX_QUANTITY = 99")],
   ["stored cart lines are schema-normalized", cart.includes("normalizeCartItem") && cart.includes("normalizeCart(parsed)")],
   ["invalid price and quantity are rejected", cart.includes("price < 0") && cart.includes("!Number.isSafeInteger(quantity)")],
-  ["duplicate listing ids are consolidated", cart.includes("unique.get(item.listingId)")],
+  ["duplicate listing ids are consolidated", cart.includes("unique.get(lineKey)") && cart.includes("item.variantId || \"legacy\"")],
   ["reserved-line cleanup preserves unrelated cart lines", cart.includes("removeMarketplaceCartItemsByIds")],
   ["cart synchronizes across browser tabs", screen.includes('window.addEventListener("storage", handler)')],
   ["cart editing is disabled while checkout runs", screen.includes("disabled={busy || item.quantity <= 1}")],

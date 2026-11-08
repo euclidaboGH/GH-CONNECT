@@ -31,7 +31,7 @@ const checks = [
   ["Wallet and Pi financial authorities remain separate from Rewards UI", centre.includes("PiCashbackSummary") && centre.includes("Open Wallet") && !/\/api\/wallet\/(?:withdraw|transfer)|\/api\/pi\/(?:payout|withdraw)/i.test(centre)],
   ["Release metadata and lockfile are synchronized", Boolean(pkg.version) && lock.version === pkg.version && lock.packages?.[""]?.version === pkg.version && release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],
   ["Phase 8 gate is registered exactly once in prebuild and static verification", (pkg.scripts.prebuild.match(/check-phase8-rewards-entry\.mjs/g) || []).length === 1 && (pkg.scripts["verify:static"].match(/check-phase8-rewards-entry\.mjs/g) || []).length === 1],
-  ["Roadmap records Phase 7 and Phase 8 source closure and Phase 9 next", roadmap.includes("Source implementation closed") && roadmap.includes("| 8 | Rewards | Source implementation closed") && roadmap.includes("| 9 | Membership | Source implementation complete")],
+  ["Roadmap maps the existing Rewards source foundation to product Priority 3 and Membership to Priority 4", roadmap.includes("| 3 | **Rewards** |") && roadmap.includes("0.323.0") && roadmap.includes("| 4 | **Membership** |")],
 ]
 
 let failed = 0

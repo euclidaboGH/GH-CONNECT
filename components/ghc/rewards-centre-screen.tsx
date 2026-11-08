@@ -39,6 +39,11 @@ import { useGHC } from "@/contexts/ghc-context"
 import { useRegionalContext } from "@/contexts/regional-context"
 import { getProductMessage } from "@/lib/i18n/product"
 import { useSectionRefresh } from "@/hooks/use-section-refresh"
+import { useAccountFilterState } from "@/hooks/use-account-filter-state"
+import { FilterSummary } from "./filtering/filter-summary"
+import { FilterResultState } from "./filtering/filter-result-state"
+import { matchesFilterQuery } from "@/lib/filtering/filter-utils"
+import { matchesFilterDateRange } from "@/lib/filtering/filter-contract"
 import { RewardsJourneyHero } from "./rewards-journey-hero"
 import { PiCashbackSummary } from "./pi-cashback-summary"
 import { RegistrationBonusCard } from "./registration-bonus-card"
@@ -53,6 +58,16 @@ type Tab = "opportunities" | "challenges" | "history" | "achievements"
 
 /** Canonical unlocked achievement row from achievement domain */
 type UnlockedAchievementRow = AchievementDefinition & { unlockedAt: number }
+
+type RewardsHistoryFilters = { query: string; status: "all" | ServerRewardTransaction["status"]; from: string; to: string }
+const DEFAULT_REWARDS_HISTORY_FILTERS: RewardsHistoryFilters = { query: "", status: "all", from: "", to: "" }
+function validateRewardsHistoryFilters(value: unknown): RewardsHistoryFilters {
+  const raw = value && typeof value === "object" ? value as Record<string, unknown> : {}
+  const validDate = (v: unknown) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && Number.isFinite(Date.parse(`${v}T00:00:00.000Z`)) && new Date(`${v}T00:00:00.000Z`).toISOString().slice(0,10) === v ? v : ""
+  const status = ["all", "pending", "posted", "reversed", "expired", "failed"].includes(String(raw.status)) ? raw.status as RewardsHistoryFilters["status"] : "all"
+  const from = validDate(raw.from), to = validDate(raw.to)
+  return { query: typeof raw.query === "string" ? raw.query.slice(0, 120) : "", status, from: from && to && from > to ? "" : from, to: from && to && from > to ? "" : to }
+}
 
 type ServerRewardTransaction = {
   id: string
@@ -69,6 +84,10 @@ const MISSION_CODE_BY_CHALLENGE: Record<string, MissionCode> = {
   challenge_profile_complete: "complete_profile",
   challenge_join_community: "join_community",
   challenge_meaningful_contribution: "meaningful_contribution",
+  challenge_first_post: "first_post",
+  challenge_first_comment: "first_comment",
+  challenge_send_connection: "send_connection",
+  challenge_accept_connection: "accept_connection",
 }
 
 function missionCodeForChallenge(challengeId: string): MissionCode | null {
@@ -135,9 +154,9 @@ const STATUS_LABEL: Record<ChallengeStatus, string> = {
   available: "Available",
   in_progress: "In progress",
   pending_validation: "Ready to verify",
-  completed: "Progress complete",
+  completed: "Achievement unlocked",
   expired: "Expired",
-  locked: "Locked",
+  locked: "Not yet available",
 }
 
 function navigateTab(tab: string) {
@@ -162,6 +181,9 @@ function runCta(hint?: string) {
     case "find":
       navigateTab("discover")
       break
+    case "connections":
+      navigateTab("connections")
+      break
     case "marketplace":
       navigateTab("discover")
       break
@@ -184,10 +206,12 @@ export function RewardsCentreScreen({
   const [showLearnMore, setShowLearnMore] = useState(false)
   const [claimedFlash, setClaimedFlash] = useState<string | null>(null)
   const [claimingId, setClaimingId] = useState<string | null>(null)
-  const [historyQuery, setHistoryQuery] = useState("")
-  const [historyStatus, setHistoryStatus] = useState<"all" | ServerRewardTransaction["status"]>("all")
   const [serverRewardTransactions, setServerRewardTransactions] = useState<ServerRewardTransaction[] | null>(null)
-  const [serverHistoryStatus, setServerHistoryStatus] = useState<"loading" | "ready" | "unavailable">("loading")
+  const [serverHistoryStatus, setServerHistoryStatus] = useState<"loading" | "ready" | "loading_more" | "unavailable">("loading")
+  const [serverHistoryPageCursor, setServerHistoryPageCursor] = useState<string | null>(null)
+  const [serverHistoryNextCursor, setServerHistoryNextCursor] = useState<string | null>(null)
+  const [serverHistoryHasMore, setServerHistoryHasMore] = useState(false)
+  const serverHistoryOwnerRef = useRef<string | null>(null)
   const [isOffline, setIsOffline] = useState(false)
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
   const [achievementsHydrating, setAchievementsHydrating] = useState(true)
@@ -220,6 +244,12 @@ export function RewardsCentreScreen({
   }, [ghc])
 
   const userId = String(profile?.id || "").trim() || "current-user"
+  const historyFilters = useAccountFilterState("rewards-history", userId, DEFAULT_REWARDS_HISTORY_FILTERS, validateRewardsHistoryFilters)
+  const { query: historyQuery, status: historyStatus, from: historyFrom, to: historyTo } = historyFilters.value
+  const setHistoryQuery = useCallback((value: string) => { historyFilters.update("query", value); setServerHistoryPageCursor(null) }, [historyFilters.update])
+  const setHistoryStatus = useCallback((value: RewardsHistoryFilters["status"]) => { historyFilters.update("status", value); setServerHistoryPageCursor(null) }, [historyFilters.update])
+  const setHistoryFrom = useCallback((value: string) => { historyFilters.update("from", value); setServerHistoryPageCursor(null) }, [historyFilters.update])
+  const setHistoryTo = useCallback((value: string) => { historyFilters.update("to", value); setServerHistoryPageCursor(null) }, [historyFilters.update])
 
   const signals = useMemo(() => {
     // tick: recompute after claim/refresh (external challenge/progress stores)
@@ -250,10 +280,51 @@ export function RewardsCentreScreen({
       const pending = rewards.filter(
         (r) =>
           r.validationStatus === "pending_validation" ||
-          r.validationStatus === "eligible"
+          r.validationStatus === "eligible" ||
+          r.validationStatus === "approved"
       )
       const engine = createChallengeEngine(userId)
-      const challenges = engine.getChallengeCards(signals)
+      // Client-derived journey progress is guidance only. Supported missions
+      // become completed only when the same account has a durable server unlock.
+      const durableMissionIds = new Set(achievements.map((row) => row.id))
+      const challenges = engine.getChallengeCards(signals).map((card) => {
+        const missionCode = missionCodeForChallenge(card.challenge.id)
+        if (!missionCode) {
+          return {
+            ...card,
+            progress: { ...card.progress, status: "locked" as const, progress: 0 },
+            status: "locked" as const,
+            percent: 0,
+            nextStep: "This mission is not open yet because its durable server verification workflow is not available. It will unlock when the evidence checks are ready.",
+            recommended: false,
+          }
+        }
+        if (durableMissionIds.has(missionCode)) {
+          const progress = {
+            ...card.progress,
+            status: "completed" as const,
+            progress: card.progress.target,
+            completedAt: achievements.find((row) => row.id === missionCode)?.unlockedAt || card.progress.completedAt,
+          }
+          return {
+            ...card,
+            progress,
+            status: "completed" as const,
+            percent: 100,
+            nextStep: "Server-verified achievement saved to your account.",
+            recommended: false,
+          }
+        }
+        if (card.status === "completed") {
+          return {
+            ...card,
+            progress: { ...card.progress, status: "pending_validation" as const },
+            status: "pending_validation" as const,
+            nextStep: "Your journey progress meets this milestone. Verify it against GreenHaven records to save the achievement.",
+          }
+        }
+        return card
+      })
       const streak = engine.getQualityStreak()
       // Only durable server unlocks are presented as achievements. Browser-local
       // progress can guide a journey, but it is not proof of an unlocked milestone.
@@ -342,14 +413,40 @@ export function RewardsCentreScreen({
     let cancelled = false
     const controller = new AbortController()
     const timeout = window.setTimeout(() => controller.abort(), 8_000)
-    setServerRewardTransactions(null)
-    setServerHistoryStatus("loading")
+    if (serverHistoryOwnerRef.current !== userId) {
+      serverHistoryOwnerRef.current = userId
+      setServerHistoryPageCursor(null)
+      setServerHistoryNextCursor(null)
+      setServerRewardTransactions(null)
+      setServerHistoryHasMore(false)
+      setServerHistoryStatus("loading")
+      // Re-run this hydration after the owner fence is established, including
+      // when offset was already zero and React would otherwise not re-render.
+      setTick((value) => value + 1)
+      window.clearTimeout(timeout)
+      return () => controller.abort()
+    }
+    if (serverHistoryPageCursor === null) {
+      setServerRewardTransactions(null)
+      setServerHistoryStatus("loading")
+      setServerHistoryHasMore(false)
+      setServerHistoryNextCursor(null)
+    } else {
+      setServerHistoryStatus("loading_more")
+    }
     if (!userId || userId === "current-user" || userId === "anonymous") {
       setServerHistoryStatus("unavailable")
       window.clearTimeout(timeout)
       return () => controller.abort()
     }
-    void fetch(`/api/economy/wallet/${encodeURIComponent(userId)}?limit=200`, {
+    const params = new URLSearchParams({ limit: "50" })
+    if (serverHistoryPageCursor) params.set("cursor", serverHistoryPageCursor)
+    if (historyFrom) params.set("from", historyFrom)
+    if (historyTo) params.set("to", historyTo)
+    if (historyStatus !== "all") params.set("status", historyStatus)
+    if (historyQuery.trim()) params.set("q", historyQuery.trim())
+    params.set("kind", "earned")
+    void fetch(`/api/economy/wallet/${encodeURIComponent(userId)}?${params.toString()}`, {
       credentials: "include",
       cache: "no-store",
       signal: controller.signal,
@@ -358,7 +455,7 @@ export function RewardsCentreScreen({
         if (!response.ok) throw new Error(`Ledger history unavailable (${response.status})`)
         return response.json()
       })
-      .then((data: { ok?: boolean; transactions?: Array<Record<string, unknown>> } | null) => {
+      .then((data: { ok?: boolean; transactions?: Array<Record<string, unknown>>; pagination?: { nextCursor?: string | null; hasMore?: boolean } } | null) => {
         if (cancelled) return
         if (!data || data.ok !== true || !Array.isArray(data.transactions)) {
           setServerHistoryStatus("unavailable")
@@ -383,7 +480,13 @@ export function RewardsCentreScreen({
             createdAt,
           }].filter((row) => row.id.length > 0)
         })
-        setServerRewardTransactions(rows)
+        setServerRewardTransactions((previous) => {
+          if (serverHistoryPageCursor === null || !previous) return rows
+          const seen = new Set(previous.map((row) => row.id))
+          return [...previous, ...rows.filter((row) => !seen.has(row.id))]
+        })
+        setServerHistoryNextCursor(typeof data.pagination?.nextCursor === "string" ? data.pagination.nextCursor : null)
+        setServerHistoryHasMore(data.pagination?.hasMore === true && typeof data.pagination.nextCursor === "string")
         setServerHistoryStatus("ready")
       })
       .catch(() => {
@@ -395,7 +498,7 @@ export function RewardsCentreScreen({
       window.clearTimeout(timeout)
       controller.abort()
     }
-  }, [userId, tick])
+  }, [userId, tick, serverHistoryPageCursor, historyFrom, historyTo, historyStatus, historyQuery])
 
   // Hydrate durable achievements (does not mint; display only)
   useEffect(() => {
@@ -482,7 +585,7 @@ export function RewardsCentreScreen({
   }, [snapshot.pending])
 
   const filteredLocalRewardRecords = useMemo(() => {
-    const query = historyQuery.trim().toLocaleLowerCase()
+    const query = historyQuery.trim()
     return snapshot.rewards.filter((row) => {
       const status = String(row.validationStatus || "")
       const matchesStatus = historyStatus === "all" ||
@@ -491,21 +594,25 @@ export function RewardsCentreScreen({
         (historyStatus === "reversed" && status === "rejected") ||
         (historyStatus === "expired" && status === "expired") ||
         (historyStatus === "failed" && status === "blocked")
-      const searchable = `${row.reason || ""} ${row.sourceEvent || ""} ${row.ruleId || ""} ${row.referenceId || ""}`.toLocaleLowerCase()
-      return matchesStatus && (!query || searchable.includes(query))
+      const matchesDate = matchesFilterDateRange(row.createdAt, { from: historyFrom || null, to: historyTo || null })
+      const matchesSearch = matchesFilterQuery(query, row.reason, row.sourceEvent, row.ruleId, row.referenceId)
+      return matchesStatus && matchesDate && matchesSearch
     }).sort((a, b) => b.createdAt - a.createdAt)
-  }, [snapshot.rewards, historyQuery, historyStatus])
+  }, [snapshot.rewards, historyQuery, historyStatus, historyFrom, historyTo])
 
   const filteredServerRewardTransactions = useMemo(() => {
     const rows = serverRewardTransactions || []
-    const query = historyQuery.trim().toLocaleLowerCase()
+    const query = historyQuery.trim()
     return rows
       .filter((row) => historyStatus === "all" || row.status === historyStatus)
-      .filter((row) => !query || `${row.reason} ${row.sourceEvent} ${row.referenceId || ""}`.toLocaleLowerCase().includes(query))
+      .filter((row) => matchesFilterDateRange(row.createdAt, { from: historyFrom || null, to: historyTo || null }))
+      .filter((row) => matchesFilterQuery(query, row.reason, row.sourceEvent, row.referenceId))
       .sort((a, b) => b.createdAt - a.createdAt)
-  }, [serverRewardTransactions, historyQuery, historyStatus])
+  }, [serverRewardTransactions, historyQuery, historyStatus, historyFrom, historyTo])
 
   const refresh = useCallback(() => {
+    setServerHistoryPageCursor(null)
+    setServerHistoryNextCursor(null)
     setTick((n) => n + 1)
     setStatusMsg("Refreshing rewards…")
     window.setTimeout(() => setStatusMsg(null), 1200)
@@ -610,7 +717,7 @@ const claimPendingReward = useCallback(
         }
         if (claimed) {
           setClaimedFlash(rewardId)
-          ghc.addToast?.("Reward redemption confirmed by the server. Refreshing Wallet…", "success")
+          ghc.addToast?.("The server confirmed the claim. Refreshing the wallet ledger…", "success")
           try {
             window.dispatchEvent(new CustomEvent("ghc:wallet-refresh", { detail: { reason: "reward-claimed" } }))
             window.dispatchEvent(new CustomEvent("ghc:wallet-synced", { detail: { reason: "reward-claimed" } }))
@@ -723,8 +830,20 @@ const claimPendingReward = useCallback(
               <p className="mt-1 truncate text-[13px] font-black tabular-nums text-foreground">{serverEconomy.locked == null ? "—" : formatGhc(serverEconomy.locked)}</p>
             </div>
           </div>
+          <div className="mt-3 grid grid-cols-2 gap-2" aria-label="Reward claim stages">
+            <div className="rounded-xl border border-emerald-200/70 bg-emerald-50/60 px-2.5 py-2 dark:border-emerald-900/60 dark:bg-emerald-950/20">
+              <p className="text-[9px] font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">Locally marked claim-ready</p>
+              <p className="mt-0.5 text-sm font-black tabular-nums text-foreground">{snapshot.rewards.filter((row) => row.validationStatus === "eligible" || row.validationStatus === "approved").length}</p>
+              <p className="text-[9px] leading-relaxed text-muted-foreground">A server check must still accept the claim before any credit is confirmed.</p>
+            </div>
+            <div className="rounded-xl border border-amber-200/70 bg-amber-50/60 px-2.5 py-2 dark:border-amber-900/60 dark:bg-amber-950/20">
+              <p className="text-[9px] font-bold uppercase tracking-wide text-amber-800 dark:text-amber-300">Under review / maturity</p>
+              <p className="mt-0.5 text-sm font-black tabular-nums text-foreground">{snapshot.rewards.filter((row) => row.validationStatus === "pending_validation").length}</p>
+              <p className="text-[9px] leading-relaxed text-muted-foreground">Not claimable until the server approves it.</p>
+            </div>
+          </div>
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-2.5">
-            <p className="text-[10px] text-muted-foreground">{snapshot.pending.length} reward record{snapshot.pending.length === 1 ? "" : "s"} awaiting review or maturity</p>
+            <p className="text-[10px] text-muted-foreground">Claimable and review counts are local reward records; credited value is confirmed only by the server ledger.</p>
             <button type="button" onClick={() => setTab("history")} className="inline-flex min-h-9 items-center gap-1 rounded-full border border-border px-3 py-1.5 text-[11px] font-bold text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2">
               View reward history <ChevronRight size={13} aria-hidden="true" />
             </button>
@@ -733,9 +852,9 @@ const claimPendingReward = useCallback(
 
         <section className="mx-3 mt-3 rounded-[1.25rem] border border-emerald-200/70 bg-emerald-50/70 px-3.5 py-3 dark:border-emerald-900 dark:bg-emerald-950/25" aria-label="Recommended next action">
           <p className="text-[10px] font-black uppercase tracking-[0.12em] text-emerald-800 dark:text-emerald-300">Best next action</p>
-          <p className="mt-1 text-[13px] font-bold text-foreground">{recommended.length > 0 ? recommended[0].challenge.title : snapshot.pending.length > 0 ? "Review pending rewards" : "Keep building quality participation"}</p>
-          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{recommended.length > 0 ? "This mission is currently the strongest available next step based on your verified progress." : snapshot.pending.length > 0 ? "Some rewards are still pending validation or maturity. Review their status before planning around them." : "There is no reward action you need to force. Useful posts, helpful comments and community participation build your journey naturally."}</p>
-          <button type="button" onClick={() => recommended.length > 0 ? setTab("challenges") : snapshot.pending.length > 0 ? setTab("history") : setTab("opportunities")} className="mt-2.5 min-h-9 rounded-full bg-emerald-700 px-3.5 text-[11px] font-bold text-white">{recommended.length > 0 ? "View mission" : snapshot.pending.length > 0 ? "Review status" : "Explore opportunities"}</button>
+          <p className="mt-1 text-[13px] font-bold text-foreground">{recommended.length > 0 ? recommended[0].challenge.title : snapshot.pending.length > 0 ? "Review reward statuses" : "Keep building quality participation"}</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{recommended.length > 0 ? "This mission is the next suggested step based on the progress signals currently available. Server verification is still required for a durable achievement." : snapshot.pending.length > 0 ? "Some reward records are claim-ready or still under review. Check each server-confirmed status before planning around a credit." : "There is no reward action you need to force. Useful posts, helpful comments and community participation build your journey naturally."}</p>
+          <button type="button" onClick={() => recommended.length > 0 ? setTab("challenges") : snapshot.pending.length > 0 ? setTab("history") : setTab("opportunities")} className="mt-2.5 min-h-9 rounded-full bg-emerald-700 px-3.5 text-[11px] font-bold text-white">{recommended.length > 0 ? "View mission" : snapshot.pending.length > 0 ? "Review rewards" : "Explore opportunities"}</button>
         </section>
 
         <div className="mx-3 mt-3 rounded-2xl border border-border/60 bg-card/80 px-3.5 py-3 text-[11px] leading-relaxed text-muted-foreground">
@@ -830,7 +949,7 @@ const claimPendingReward = useCallback(
                 onClick={() => setTab("history")}
                 className="mt-2 inline-flex min-h-9 items-center gap-1 rounded-full border border-amber-300/90 bg-card px-3 py-1.5 text-[11px] font-bold text-amber-950 shadow-sm dark:text-amber-50"
               >
-                Review {snapshot.pending.length} claim{snapshot.pending.length === 1 ? "" : "s"}
+                Review {snapshot.pending.length} reward item{snapshot.pending.length === 1 ? "" : "s"}
                 <ChevronRight size={12} aria-hidden />
               </button>
             ) : null}
@@ -870,7 +989,7 @@ const claimPendingReward = useCallback(
         </p>
         {claimedFlash && onOpenWallet && (
           <div className="mx-4 mt-2 flex items-center justify-between gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 dark:border-emerald-900 dark:bg-emerald-950/40">
-            <p className="text-[12px] font-semibold text-emerald-900 dark:text-emerald-100">Claimed ✓ · added to available balance</p>
+            <p className="text-[12px] font-semibold text-emerald-900 dark:text-emerald-100">Claim accepted ✓ · wallet ledger refresh requested</p>
             <button type="button" onClick={onOpenWallet} className="shrink-0 rounded-full bg-[var(--gh-green)] px-3 py-1.5 text-[11px] font-bold text-white">
               View in Wallet
             </button>
@@ -964,7 +1083,7 @@ const claimPendingReward = useCallback(
               : `${snapshot.achievements.length} achievement${snapshot.achievements.length === 1 ? "" : "s"}`
             : null}
           {snapshot.pending.length > 0
-            ? ` · ${snapshot.pending.length} pending claim${snapshot.pending.length === 1 ? "" : "s"}`
+            ? ` · ${snapshot.pending.length} reward item${snapshot.pending.length === 1 ? "" : "s"} to review`
             : ""}
         </p>
 
@@ -972,6 +1091,10 @@ const claimPendingReward = useCallback(
           {tab === "opportunities" && (
           <>
 
+            <div className="mb-3 rounded-[1.25rem] border border-sky-200/70 bg-sky-50/60 px-3.5 py-3 dark:border-sky-900/60 dark:bg-sky-950/20" aria-label="Mission reward policy">
+              <p className="text-[11px] font-bold text-foreground">How mission rewards work</p>
+              <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">Missions track meaningful participation and can unlock durable achievements after server verification. Under the current economy policy, mission completion does not issue GHC or Pi. Daily GHC claims and Pi cashback follow their own separate, server-controlled journeys.</p>
+            </div>
             <div className="mb-3 rounded-[1.25rem] border border-border/60 bg-card px-3.5 py-3.5 shadow-[var(--gh-card-shadow)]" aria-label="Engagement paths">
               <h2 className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
                 Engagement paths
@@ -1048,7 +1171,7 @@ const claimPendingReward = useCallback(
           {tab === "challenges" && (
             <>
               <p className="px-1 text-[11px] font-semibold text-muted-foreground">
-                Progress, status and next step — GHC still validates on the ledger
+                Journey guidance, status and next step — server verification is required for durable achievement status
               </p>
               <div
                 className="rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2.5 text-[11px] leading-snug text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
@@ -1056,7 +1179,7 @@ const claimPendingReward = useCallback(
               >
                 Milestones are verified against durable GreenHaven activity and unlock account-level
                 achievements. Mission completion does not issue GHC under the current economy policy.
-                Daily Claim remains the active server-backed GHC reward path.
+                Progress bars are guidance from available profile/community signals and this device's journey state; they are not proof of durable completion. Daily Claim remains the active server-backed GHC reward path.
               </div>
               {snapshot.challenges.map((card) => (
                 <ChallengeCardView key={card.challenge.id} card={card} onVerifyMission={verifyMission} verifyingMissionId={verifyingMissionId} />
@@ -1078,9 +1201,21 @@ const claimPendingReward = useCallback(
                     <button key={value} type="button" onClick={() => setHistoryStatus(value)} aria-pressed={historyStatus === value} className={`min-h-8 rounded-full px-3 text-[10px] font-bold capitalize transition ${historyStatus === value ? "bg-[var(--gh-green)] text-white" : "border border-border bg-background text-muted-foreground hover:text-foreground"}`}>{value === "all" ? "All" : value.replace(/_/g, " ")}</button>
                   ))}
                 </div>
-                <p className="mt-2 text-[10px] text-muted-foreground" role="status" aria-live="polite">{serverHistoryStatus === "ready" ? `${filteredServerRewardTransactions.length} server ledger entr${filteredServerRewardTransactions.length === 1 ? "y" : "ies"} · newest first` : serverHistoryStatus === "loading" ? "Synchronizing account ledger…" : "Server ledger unavailable · showing local activity only where available"}</p>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <label className="text-[10px] font-semibold text-muted-foreground">From<input type="date" value={historyFrom} max={historyTo || undefined} onChange={(event) => setHistoryFrom(event.target.value)} className="mt-1 min-h-9 w-full rounded-lg border border-border bg-background px-2 text-xs text-foreground" /></label>
+                  <label className="text-[10px] font-semibold text-muted-foreground">To<input type="date" value={historyTo} min={historyFrom || undefined} onChange={(event) => setHistoryTo(event.target.value)} className="mt-1 min-h-9 w-full rounded-lg border border-border bg-background px-2 text-xs text-foreground" /></label>
+                </div>
+                <FilterSummary className="mt-2" items={[
+                  ...(historyQuery ? [{ id: "query", label: `Search: ${historyQuery}`, onRemove: () => setHistoryQuery("") }] : []),
+                  ...(historyStatus !== "all" ? [{ id: "status", label: `Status: ${historyStatus}`, onRemove: () => setHistoryStatus("all") }] : []),
+                  ...(historyFrom ? [{ id: "from", label: `From: ${historyFrom}`, onRemove: () => setHistoryFrom("") }] : []),
+                  ...(historyTo ? [{ id: "to", label: `To: ${historyTo}`, onRemove: () => setHistoryTo("") }] : []),
+                ]} onClearAll={() => { setHistoryQuery(""); setHistoryStatus("all"); setHistoryFrom(""); setHistoryTo("") }} />
+                <p className="mt-2 text-[10px] text-muted-foreground" role="status" aria-live="polite">{serverHistoryStatus === "ready" ? `${filteredServerRewardTransactions.length} server ledger entr${filteredServerRewardTransactions.length === 1 ? "y" : "ies"} loaded · newest first${serverHistoryHasMore ? " · older entries available" : ""}` : serverHistoryStatus === "loading_more" ? `Loading older ledger entries · ${filteredServerRewardTransactions.length} already loaded` : serverHistoryStatus === "loading" ? "Synchronizing account ledger…" : serverRewardTransactions !== null ? `Could not refresh ledger · showing ${filteredServerRewardTransactions.length} previously loaded server entr${filteredServerRewardTransactions.length === 1 ? "y" : "ies"}` : "Server ledger unavailable · showing local activity only where available"}</p>
               </div>
-              {serverHistoryStatus === "ready" ? (
+              {serverRewardTransactions === null && serverHistoryStatus === "loading" ? <FilterResultState state="loading" description="Synchronizing your server-confirmed reward ledger…" /> : null}
+              {serverRewardTransactions === null && serverHistoryStatus === "unavailable" ? <FilterResultState state="error" title="Reward ledger unavailable" description="The server-confirmed ledger could not be loaded. Your wallet balance remains separate from this history view." onRetry={() => setTick((value) => value + 1)} /> : null}
+              {serverRewardTransactions !== null ? (
                 filteredServerRewardTransactions.length ? filteredServerRewardTransactions.map((row) => (
                   <article key={row.id} className="rounded-[1.25rem] border border-border/60 bg-card px-3.5 py-3 shadow-[var(--gh-card-shadow)]">
                     <div className="flex items-start gap-3">
@@ -1092,11 +1227,17 @@ const claimPendingReward = useCallback(
                       </div>
                     </div>
                   </article>
-                )) : <Empty title="No matching ledger entries" body="Try another search or status filter. Your server-confirmed GHC reward ledger is up to date." />
+                )) : <FilterResultState state={historyQuery || historyStatus !== "all" || historyFrom || historyTo ? "no-results" : "empty"} title={historyQuery || historyStatus !== "all" || historyFrom || historyTo ? "No matching ledger entries" : "No reward ledger entries yet"} description="Adjust or clear your filters, or check again after your next confirmed reward." />
+              ) : null}
+              {serverHistoryHasMore && serverRewardTransactions !== null && serverHistoryStatus !== "loading_more" ? (
+                <button type="button" onClick={() => serverHistoryStatus === "unavailable" ? setTick((value) => value + 1) : setServerHistoryPageCursor(serverHistoryNextCursor)} className="min-h-10 w-full rounded-xl border border-border bg-card px-3 text-[11px] font-bold text-foreground">{serverHistoryStatus === "unavailable" ? "Retry older ledger entries" : "Load older ledger entries"}</button>
+              ) : null}
+              {serverHistoryStatus === "ready" ? (
+                <p className="px-1 text-[10px] leading-relaxed text-muted-foreground">History is ordered newest first. Load older entries to continue through your server ledger.</p>
               ) : null}
               <p className="mb-1 flex items-start gap-1.5 px-1 text-[11px] text-muted-foreground">
                 <Info size={12} className="mt-0.5 shrink-0" />
-                Server ledger entries are authoritative; local reward records are shown below as supplemental activity.
+                Server ledger entries are authoritative; local reward records are shown below as supplemental activity. Local records are not proof of a credited balance.
               </p>
               {filteredLocalRewardRecords.length === 0 ? (
                 <Empty
@@ -1172,7 +1313,7 @@ const claimPendingReward = useCallback(
                               disabled={claimingId === String(r.id) || isOffline}
                               className="mt-2.5 flex min-h-11 w-full items-center justify-center rounded-[1.25rem] bg-[var(--gh-green)] px-3 py-2.5 text-[13px] font-bold text-white shadow-sm shadow-emerald-700/15 transition hover:brightness-110 disabled:opacity-60"
                             >
-                              {claimingId === String(r.id) ? "Claiming…" : claimedFlash === String(r.id) ? "✓ Claimed" : "Claim to available GHC"}
+                              {claimingId === String(r.id) ? "Claiming…" : claimedFlash === String(r.id) ? "✓ Claim accepted" : "Claim to available GHC"}
                             </button>
                           )}
                         </div>
@@ -1305,6 +1446,8 @@ function ChallengeCardView({
             </div>
 
             <p className="mt-2 text-[11px] font-medium text-foreground/90">{nextStep}</p>
+            {!compact ? <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">This progress indicator helps guide your next action. Only a successful server verification creates a durable achievement record.</p> : null}
+            {!compact && missionCodeForChallenge(challenge.id) && status !== "completed" ? <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">Check eligibility against GreenHaven records. If verified, the non-financial achievement is saved automatically; this mission does not issue GHC or Pi.</p> : null}
             {(status === "available" || status === "in_progress") && challenge.ctaHint && (
               <button
                 type="button"
@@ -1315,17 +1458,20 @@ function ChallengeCardView({
                 <ChevronRight size={12} aria-hidden />
               </button>
             )}
-            {(status === "pending_validation" || status === "completed") && missionCodeForChallenge(challenge.id) && onVerifyMission && (
+            {(status === "available" || status === "in_progress" || status === "pending_validation") && missionCodeForChallenge(challenge.id) && onVerifyMission && (
               <button
                 type="button"
                 onClick={() => onVerifyMission(challenge.id)}
                 disabled={verifyingMissionId === challenge.id}
                 className="mt-2.5 inline-flex min-h-9 items-center gap-1 rounded-full border border-emerald-300/80 bg-emerald-50 px-3.5 py-1.5 text-[11px] font-bold text-emerald-900 shadow-sm disabled:opacity-60 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100"
               >
-                {verifyingMissionId === challenge.id ? "Verifying…" : "Verify achievement"}
+                {verifyingMissionId === challenge.id ? "Checking GreenHaven…" : status === "pending_validation" ? "Verify achievement" : "Check eligibility"}
                 <ChevronRight size={12} aria-hidden />
               </button>
             )}
+            {status === "completed" && missionCodeForChallenge(challenge.id) ? (
+              <p className="mt-2 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">Server verified{progress.completedAt ? ` · ${formatWhen(progress.completedAt)}` : ""}</p>
+            ) : null}
             {(status === "pending_validation" || status === "completed") && !missionCodeForChallenge(challenge.id) && (
               <p className="mt-2 text-[10px] text-muted-foreground">This milestone does not currently have a server verification workflow.</p>
             )}

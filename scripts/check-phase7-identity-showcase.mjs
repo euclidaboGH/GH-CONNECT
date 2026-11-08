@@ -9,7 +9,7 @@ const professionalIdentity = read("lib/profile/professional-identity.ts")
 const discoverRoute = read("app/api/social/people/discover/route.ts")
 const privacyProjection = read("lib/server/privacy-feed-contract.ts")
 const checks = [
-  ["owner profile renders professional/business showcase", owner.includes("<ProfileProfessionalShowcase profile={p} onEdit={openEdit} onSave=")],
+  ["owner profile renders professional/business showcase", owner.includes('aria-label="About"') && owner.includes("<ProfileProfessionalShowcase") && owner.includes("profile={p}") && owner.includes("onSave={async (patch)")],
   ["public peer profile renders read-only professional showcase", peer.includes("<ProfileProfessionalShowcase profile={candidate} readOnly />")],
   ["showcase supports service, skills, experience and portfolio", ["Services", "Skills", "Experience", "Selected work"].every((label) => showcase.includes(label))],
   ["portfolio links require HTTPS and reject embedded credentials", showcase.includes('url.protocol !== "https:"') && showcase.includes("url.username || url.password")],

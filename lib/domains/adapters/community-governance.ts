@@ -129,8 +129,9 @@ export function appendModerationLog(
     },
   }
   sessionAppendLog(full)
-  // Fire-and-forget server mirror — never claim durable on session-only success
-  void tryServerMirror("/api/governance/moderation-log", { entry: full })
+  // Report create/resolve RPCs append their own canonical audit row transactionally.
+  // Avoid duplicating that row through the generic moderation mirror.
+  if (entry.action !== "report") void tryServerMirror("/api/governance/moderation-log", { entry: full })
   return full
 }
 

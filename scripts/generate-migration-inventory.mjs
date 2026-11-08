@@ -22,9 +22,16 @@ const proposals = new Set([
 ])
 const requiresApproval = new Set(['20261022010015_connection_request_intents.sql'])
 const reviewRequired = new Set([
+  '20261107120001_withdrawal_pin_recovery_questions.sql',
+  '20261107130001_wallet_security_hardening.sql',
   '20261106170001_phase8_verified_mission_achievements.sql',
   '20261106123001_phase9_membership_lifecycle_and_renewal_guard.sql',
   '20261106143001_phase9_membership_pi_renewal_strict_provider_guard.sql',
+  '20261107160001_membership_active_tier_downgrade_guard.sql',
+  '20261108110001_phase3_wallet_rewards_membership_concurrency_recovery.sql',
+  '20261107180001_marketplace_sku_variants_atomic_inventory.sql',
+  '20261107190001_marketplace_fulfilment_tracking_timeline.sql',
+  '20261108120001_gh_community_server_filter_search.sql',
   '20261027010002_gh_media_asset_create_immutable_identity.sql',
   '20261027010003_gh_media_upload_finalize_identity.sql',
   '20261027010004_ghc_transfer_request_idempotency_intent.sql',
@@ -96,6 +103,10 @@ const reviewRequired = new Set([
 ])
 
 const notes = {
+  '20261108110001_phase3_wallet_rewards_membership_concurrency_recovery.sql': 'Phase 3 closeout across PI payout reservation recovery, GHC reward claim replay and GHC membership purchase serialization. Validate that only reserved Pi Testnet requests with no provider payment/txid, no execution start/lease and zero attempts are released; processing/uncertain requests retain funds until authoritative provider reconciliation; exact gross reservation is compensated once; response reasons are owner-scoped; claim replay by pending UUID/rewardId returns one posted credit; and concurrent membership preflight/debit is serialized with active-tier and downgrade guards. Run concurrency and rollback tests on disposable PostgreSQL plus authenticated Pi Testnet before applying to either live environment. REVIEW_REQUIRED and unapplied.' ,
+  '20261107180001_marketplace_sku_variants_atomic_inventory.sql': 'Phase 9.3 durable SKU variants and atomic per-variant inventory. Validate migration order/history, seller SKU uniqueness, variant replacement atomicity, lock ordering, concurrent oversell attempts, expiry/cancellation release, payment-verification stock commit, legacy-RPC bypass rejection, idempotency conflicts, RLS and service_role ACLs on disposable PostgreSQL. Exercise both GHC and Pi Testnet payment lifecycle with synthetic users before any enablement. This migration is REVIEW_REQUIRED and unapplied; do not enable finite-stock variant sales until database concurrency and payment race evidence passes.',
+  '20261108120001_gh_community_server_filter_search.sql': 'Phase 10.2 server-side public community search. Validate the exact functional GIN expression/index selection, category filtering, plainto_tsquery semantics, bounded offset/limit, deterministic created_at/id ordering, total/hasMore pagination, public-only privacy scope, service_role-only function ACL, and existing RPC compatibility on disposable PostgreSQL. This migration does not expose private/invite communities or alter membership authority. REVIEW_REQUIRED and unapplied; reconcile Testnet/Mainnet migration histories independently.',
+  '20261107190001_marketplace_fulfilment_tracking_timeline.sql': 'Phase 9.4 durable seller fulfilment and buyer tracking. Validate fulfilment-method constraints, HTTPS tracking URL guard, shipping carrier/tracking requirements, shipping dispatch before delivered state, pickup and digital-service paths, legacy in-flight order compatibility, buyer confirmation gate, row-lock and idempotent replay behavior, trigger-backed order/payment/delivery event capture, immutable event journal, participant-only timeline RPC, deny-all client RLS and service_role ACLs on disposable PostgreSQL. Reconcile Testnet/Mainnet migration histories independently; this migration is REVIEW_REQUIRED and unapplied.',
   '20261031010002_gh_community_chat_review_membership_order.sql': 'Security-sensitive Community Chat approval ordering fix. Validate owner-only approval, active-membership requirement, idempotent retries, request-state preservation on rejected approval, and conversation membership on disposable PostgreSQL/Testnet before applying.',
   '20261101010001_gh_security_control_plane_retention.sql': 'Security-control-plane retention and bounded cleanup. Validate cleanup query plans, sampled invocation frequency, event expiry behavior, row-lock/concurrency behavior, and service_role-only RPC execution on disposable PostgreSQL before applying; do not infer remote migration status.',
   '20261104170001_marketplace_order_read_cleanup_separation.sql': 'Phase 23 lock-scope hardening. Validate the side-effect-free order snapshot, explicit application cleanup RPC, service_role ACL, expired reservation behavior, and concurrent order transition/cleanup behavior on disposable PostgreSQL and Testnet. Review migration ordering/history before applying.',

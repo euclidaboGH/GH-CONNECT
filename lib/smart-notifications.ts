@@ -8,6 +8,8 @@
  */
 
 import { notificationSystem } from "./notifications"
+import { loadNotificationPreferences, type NotificationCategory } from "./domains/notification-domain"
+import { IdentityService } from "@/lib/identity/identity-service"
 
 export type NotificationType = "match" | "message" | "like" | "friend-request" | "system"
 export type NotificationPriority = "high" | "medium" | "low"
@@ -22,6 +24,7 @@ export interface Notification {
   read: boolean
   actionUrl?: string
   deepLink?: string
+  ownerUserId?: string
 }
 
 const TYPE_ICON: Record<NotificationType, string> = {
@@ -38,12 +41,23 @@ function toSystemType(type: NotificationType): Parameters<typeof notificationSys
   return type as Parameters<typeof notificationSystem.addNotification>[0]
 }
 
+let smartNotificationOwner = IdentityService.getCurrentUserId()
+function ensureSmartNotificationOwner(): string {
+  const current = IdentityService.getCurrentUserId()
+  if (current !== smartNotificationOwner) {
+    smartNotificationOwner = current
+    smartNotifications.notifications = []
+    smartNotifications.browserAlertQueue = []
+  }
+  return current
+}
+
 export const smartNotifications = {
-  // Local prioritization mirror (non-authoritative)
+  // Local prioritization mirror (non-authoritative), scoped to the active identity.
   notifications: [] as Notification[],
 
-  // Queue for Web Push API
-  pushQueue: [] as Notification[],
+  // Legacy local browser-alert batching queue; this is not a remote Web Push queue.
+  browserAlertQueue: [] as Notification[],
 
   // Generate notification — mirrors into canonical notificationSystem
   create: (
@@ -56,6 +70,7 @@ export const smartNotifications = {
       priority?: NotificationPriority
     }
   ): Notification => {
+    const ownerUserId = ensureSmartNotificationOwner()
     const notification: Notification = {
       id: `notif-${Date.now()}-${Math.random()}`,
       type,
@@ -66,23 +81,33 @@ export const smartNotifications = {
       priority: options?.priority || smartNotifications.getPriorityForType(type),
       actionUrl: options?.actionUrl,
       deepLink: options?.deepLink,
+      ownerUserId,
     }
 
     smartNotifications.notifications.push(notification)
-    smartNotifications.scheduleNotification(notification)
-
+    // notificationSystem owns in-app persistence. Suppress its browser-alert
+    // side effect here, then route the optional browser alert through this
+    // module exactly once so push-only preferences continue to work.
     try {
-      notificationSystem.addNotification(
-        toSystemType(type),
-        title,
-        message,
-        TYPE_ICON[type] || "bell",
-        { actionUrl: options?.actionUrl, deepLink: options?.deepLink, priority: notification.priority }
-      )
+      const categoryByType: Record<NotificationType, NotificationCategory> = {
+        match: "matches", message: "messages", like: "comments",
+        "friend-request": "connections", system: "system",
+      }
+      const category = categoryByType[type]
+      if (loadNotificationPreferences()[category]?.inApp) {
+        notificationSystem.addNotification(
+          toSystemType(type),
+          title,
+          message,
+          TYPE_ICON[type] || "bell",
+          { actionUrl: options?.actionUrl, deepLink: options?.deepLink, priority: notification.priority, category, pushEnabled: false }
+        )
+      }
     } catch {
       /* notificationSystem may be unavailable in non-browser tests */
     }
 
+    smartNotifications.scheduleNotification(notification)
     return notification
   },
 
@@ -103,19 +128,21 @@ export const smartNotifications = {
     }
   },
 
-  // Schedule notification delivery (respects user preferences)
+  // Schedule a local browser alert (respects user preferences). Not remote Web Push.
   scheduleNotification: (notification: Notification) => {
-    // Check if notifications are enabled and notification time is appropriate
+    const ownerUserId = ensureSmartNotificationOwner()
+    if (notification.ownerUserId && notification.ownerUserId !== ownerUserId) return
+    // Check whether the user opted into local browser alerts for this category.
     if (smartNotifications.shouldSendNotification(notification)) {
-      smartNotifications.pushQueue.push(notification)
+      smartNotifications.browserAlertQueue.push(notification)
 
       // Send immediately if high priority
       if (notification.priority === "high") {
-        smartNotifications.sendPushNotification(notification)
+        smartNotifications.showBrowserAlert(notification)
       } else {
         // Batch send lower priority notifications
         setTimeout(() => {
-          smartNotifications.flushPushQueue()
+          smartNotifications.flushBrowserAlertQueue()
         }, 5000)
       }
     }
@@ -123,40 +150,53 @@ export const smartNotifications = {
 
   // Check if notification should be sent based on user settings
   shouldSendNotification: (notification: Notification): boolean => {
-    // In production, would check user notification settings
-    // For now, always send
-    return true
+    const categoryByType: Record<NotificationType, NotificationCategory> = {
+      match: "matches",
+      message: "messages",
+      like: "comments",
+      "friend-request": "connections",
+      system: "system",
+    }
+    try {
+      return Boolean(loadNotificationPreferences()[categoryByType[notification.type]]?.push)
+    } catch {
+      return false
+    }
   },
 
-  // Send Web Push notification
-  sendPushNotification: async (notification: Notification) => {
-    if ("serviceWorker" in navigator && "PushManager" in window) {
+  // Display a local browser alert through the service worker. This does not contact a push provider.
+  showBrowserAlert: async (notification: Notification) => {
+    const ownerUserId = ensureSmartNotificationOwner()
+    if (notification.ownerUserId && notification.ownerUserId !== ownerUserId) return
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+      const options = {
+        body: notification.message,
+        icon: "/icon-light-32x32.png",
+        tag: notification.type,
+        requireInteraction: notification.priority === "high",
+        data: { deepLink: notification.deepLink, actionUrl: notification.actionUrl },
+      }
       try {
-        const registration = await navigator.serviceWorker.ready
-        
-        // Send notification via service worker
-        registration.showNotification(notification.title, {
-          body: notification.message,
-          icon: "/icon-light-32x32.png",
-          tag: notification.type,
-          requireInteraction: notification.priority === "high",
-          data: {
-            deepLink: notification.deepLink,
-            actionUrl: notification.actionUrl,
-          },
-        })
+        if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+          const registration = await navigator.serviceWorker.ready
+          // Local display only; no PushSubscription or remote provider is involved.
+          await registration.showNotification(notification.title, options)
+        } else {
+          new Notification(notification.title, options)
+        }
       } catch (error) {
-        console.log("[v0] Push notification failed:", error)
+        console.warn("[GreenHaven] Local browser alert failed:", error)
       }
     }
   },
 
-  // Flush queued notifications
-  flushPushQueue: async () => {
-    while (smartNotifications.pushQueue.length > 0) {
-      const notification = smartNotifications.pushQueue.shift()
+  // Flush queued local browser alerts.
+  flushBrowserAlertQueue: async () => {
+    const ownerUserId = ensureSmartNotificationOwner()
+    while (smartNotifications.browserAlertQueue.length > 0 && IdentityService.getCurrentUserId() === ownerUserId) {
+      const notification = smartNotifications.browserAlertQueue.shift()
       if (notification) {
-        await smartNotifications.sendPushNotification(notification)
+        await smartNotifications.showBrowserAlert(notification)
         // Stagger notifications
         await new Promise((resolve) => setTimeout(resolve, 1000))
       }
@@ -165,6 +205,7 @@ export const smartNotifications = {
 
   // Mark notification as read
   markAsRead: (notificationId: string) => {
+    ensureSmartNotificationOwner()
     const notif = smartNotifications.notifications.find((n) => n.id === notificationId)
     if (notif) {
       notif.read = true
@@ -173,16 +214,19 @@ export const smartNotifications = {
 
   // Get unread count
   getUnreadCount: (): number => {
+    ensureSmartNotificationOwner()
     return smartNotifications.notifications.filter((n) => !n.read).length
   },
 
   // Get notifications by type
   getByType: (type: NotificationType): Notification[] => {
+    ensureSmartNotificationOwner()
     return smartNotifications.notifications.filter((n) => n.type === type)
   },
 
   // Clear old notifications (older than 7 days)
   cleanup: () => {
+    ensureSmartNotificationOwner()
     const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
     smartNotifications.notifications = smartNotifications.notifications.filter(
       (n) => n.timestamp > weekAgo
@@ -191,6 +235,7 @@ export const smartNotifications = {
 
   // Get notification summary
   getSummary: () => {
+    ensureSmartNotificationOwner()
     return {
       total: smartNotifications.notifications.length,
       unread: smartNotifications.getUnreadCount(),

@@ -208,6 +208,47 @@ export function filterByBucket(
 }
 
 /** Resolve deep-link from notification data + type — never default to Settings. */
+
+const ALLOWED_OPEN = new Set([
+  "feed", "home", "chat", "messages", "wallet", "rewards", "membership",
+  "communities", "discover", "matches", "profile", "settings", "marketplace",
+])
+const ALLOWED_TAB = new Set([
+  "home", "discover", "matches", "messages", "communities", "profile",
+  "wallet", "rewards", "membership", "settings", "marketplace",
+])
+const ALLOWED_SECTION = new Set([
+  "post", "comments", "conversation", "transaction", "transfer-request",
+  "friend-request", "connection_requests", "group-request", "membership",
+  "verification", "security",
+])
+
+/** Phase 5: only allow in-app surfaces; strip URL-like and oversized ids. */
+export function sanitizeNotificationDeepLink(link: NotificationDeepLink): NotificationDeepLink {
+  const cleanId = (value: string | undefined, max = 120): string | undefined => {
+    if (value == null) return undefined
+    const s = String(value).trim()
+    if (!s || s.length > max) return undefined
+    if (/^https?:/i.test(s) || /^javascript:/i.test(s) || s.includes("://")) return undefined
+    return s
+  }
+  const out: NotificationDeepLink = {}
+  if (link.open && ALLOWED_OPEN.has(link.open)) out.open = link.open
+  if (link.tab && ALLOWED_TAB.has(link.tab)) out.tab = link.tab
+  if (link.section && ALLOWED_SECTION.has(link.section)) out.section = link.section
+  out.id = cleanId(link.id)
+  out.postId = cleanId(link.postId)
+  out.conversationId = cleanId(link.conversationId)
+  out.userId = cleanId(link.userId)
+  out.transactionId = cleanId(link.transactionId)
+  out.requestId = cleanId(link.requestId)
+  out.groupId = cleanId(link.groupId)
+  out.greenHavenId = cleanId(link.greenHavenId)
+  out.listingId = cleanId(link.listingId)
+  out.commentId = cleanId(link.commentId)
+  return out
+}
+
 export function resolveNotificationDeepLink(n: Notification): NotificationDeepLink {
   const rawData = (n.data || {}) as Record<string, unknown>
   const correlation = rawData.correlation && typeof rawData.correlation === "object" ? rawData.correlation as Record<string, unknown> : {}
@@ -221,7 +262,7 @@ export function resolveNotificationDeepLink(n: Notification): NotificationDeepLi
     ) {
       return { open: "feed", tab: "home", section: "post", postId: forced.postId || String(data.postId || "") }
     }
-    return forced
+    return sanitizeNotificationDeepLink(forced)
   }
 
   const open = String(data.open || "").toLowerCase()
@@ -265,57 +306,57 @@ export function resolveNotificationDeepLink(n: Notification): NotificationDeepLi
     link.open = "feed"
     link.tab = "home"
     link.section = "post"
-    return link
+    return sanitizeNotificationDeepLink(link)
   }
   if (open === "chat" || open === "messages") {
     link.open = "chat"
     link.tab = "messages"
     link.section = "conversation"
-    return link
+    return sanitizeNotificationDeepLink(link)
   }
   if (open === "wallet" || open === "transaction") {
     link.open = "wallet"
     link.tab = "wallet"
     link.section = "transaction"
-    return link
+    return sanitizeNotificationDeepLink(link)
   }
   if (open === "rewards") {
     link.open = "rewards"
     link.tab = "rewards"
-    return link
+    return sanitizeNotificationDeepLink(link)
   }
   if (open === "membership" || open === "premium") {
     link.open = "membership"
     link.tab = "membership"
     link.section = "membership"
-    return link
+    return sanitizeNotificationDeepLink(link)
   }
   if (open === "communities") {
     link.open = "communities"
     link.tab = "communities"
-    return link
+    return sanitizeNotificationDeepLink(link)
   }
   if (open === "matches") {
     link.open = "matches"
     link.tab = "matches"
-    return link
+    return sanitizeNotificationDeepLink(link)
   }
   if (open === "discover" || open === "find") {
     link.open = "discover"
     link.tab = "discover"
-    return link
+    return sanitizeNotificationDeepLink(link)
   }
   if (open === "marketplace" || open === "market" || open === "orders") {
     link.open = "marketplace"
     link.tab = "home"
     if (data.listingId) link.listingId = String(data.listingId)
-    return link
+    return sanitizeNotificationDeepLink(link)
   }
   if (open === "security" || open === "verification") {
     link.open = "settings"
     link.tab = "settings"
     link.section = open === "security" ? "security" : "verification"
-    return link
+    return sanitizeNotificationDeepLink(link)
   }
   // open === "settings" only when explicitly intended for system prefs
   if (open === "settings" && (n.type === "system" || String(data.category) === "system")) {
@@ -335,7 +376,7 @@ export function resolveNotificationDeepLink(n: Notification): NotificationDeepLi
     ) {
       link.section = rawSection
     }
-    return link
+    return sanitizeNotificationDeepLink(link)
   }
 
   // Type-based routing
@@ -467,7 +508,7 @@ export function resolveNotificationDeepLink(n: Notification): NotificationDeepLi
     link.section = "post"
   }
 
-  return link
+  return sanitizeNotificationDeepLink(link)
 }
 
 /** Dispatch navigation for a deep-link — Settings only when tab/open is settings. */

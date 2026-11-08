@@ -9,6 +9,8 @@ import { createPaymentIntent, listIntentsForUserAsync } from "@/lib/server/payme
 import type { PaymentPurpose } from "@/lib/server/payments/intent-types"
 import { ASSET_POLICY } from "@/lib/asset-separation"
 import { checkDurableRateLimit, durableRateLimitStatus, durableRateLimitCode } from "@/lib/server/security/control-plane"
+import { tryGetEntitlementAuthoritative } from "@/lib/server/membership/entitlement-store"
+import { isDatabaseConfigured } from "@/lib/server/economy/http"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -142,6 +144,26 @@ export async function POST(request: Request) {
       { ok: false, error: "UNSUPPORTED_PAYMENT_CURRENCY", supported: ["PI"] },
       { status: 400, headers: NO_STORE },
     )
+  }
+
+  // Reject a VVIP-to-VIP downgrade before a provider intent is created, so a
+  // lower-tier payment is never initiated for an account with active VVIP.
+  if (purpose === "membership") {
+    const productId = String(metadata.productId || "").toLowerCase()
+    const productMatch = productId.match(/^membership_(vip|vvip)_(monthly|four_months|eight_months|yearly)$/)
+    if (!productMatch) {
+      return NextResponse.json({ ok: false, error: "CANONICAL_MEMBERSHIP_PRODUCT_REQUIRED" }, { status: 400, headers: NO_STORE })
+    }
+    const requestedTier = productMatch[1]
+    const current = await tryGetEntitlementAuthoritative(auth.userId)
+    if (!current.ok && isDatabaseConfigured()) {
+      return NextResponse.json({ ok: false, error: "MEMBERSHIP_STORE_UNAVAILABLE", message: "Membership status could not be verified. No Pi payment was started." }, { status: 503, headers: NO_STORE })
+    }
+    const currentIsActive = current.ok && current.entitlement.tier !== "free" && current.entitlement.active === true &&
+      (!current.entitlement.expiresAt || current.entitlement.expiresAt > Date.now())
+    if (currentIsActive && current.entitlement.tier === "vvip" && requestedTier === "vip") {
+      return NextResponse.json({ ok: false, error: "MEMBERSHIP_DOWNGRADE_NOT_ALLOWED", message: "Your active VVIP membership is already the highest tier. No Pi payment was started." }, { status: 409, headers: NO_STORE })
+    }
   }
 
   const intent = await createPaymentIntent({

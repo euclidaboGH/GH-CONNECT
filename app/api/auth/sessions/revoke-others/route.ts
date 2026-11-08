@@ -7,6 +7,7 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { revokeOtherSessionsForUser } from "@/lib/server/identity/session-store"
+import { requireAccountSecurityContext } from "@/lib/server/identity/auth-integrity"
 import { requireRecentStepUp, revokeStepUpsForSession } from "@/lib/server/identity/step-up-store"
 import { listSessionsForUser } from "@/lib/server/identity/session-store"
 import { checkRateLimit, pruneRateLimitBuckets } from "@/lib/server/economy/rate-limit"

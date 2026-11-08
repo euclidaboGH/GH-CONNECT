@@ -42,6 +42,8 @@ export type ReadinessReport = {
   status: ReadinessLevel
   service: "gh-connect"
   version: string
+  /** Programme release line (source gates 4–10). */
+  programmePhase: string
   environment: {
     nodeEnv: string
     vercelEnv: string
@@ -374,6 +376,7 @@ export function evaluateReadiness(opts?: {
     status,
     service: "gh-connect",
     version: process.env.npm_package_version || APP_RELEASE_VERSION,
+    programmePhase: "10-platform-acceptance",
     environment: {
       nodeEnv,
       vercelEnv: vercelEnv || "local",

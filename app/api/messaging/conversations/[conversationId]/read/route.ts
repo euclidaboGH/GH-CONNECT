@@ -4,7 +4,7 @@
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import {
   markConversationRead,
   isMessagingStoreDurable,
@@ -24,9 +24,9 @@ export async function POST(request: Request, ctx: Ctx) {
         { status: 401, headers: { "Cache-Control": "no-store" } }
       )
     }
-    const rl = checkRateLimit(`messaging-read-receipt:${auth.userId}`, 120, 60_000)
+    const rl = await checkDurableRateLimit(`messaging-read-receipt:${auth.userId}`, 120, 60_000, { onUnavailable: "deny" })
     if (!rl.ok) {
-      return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(rl.retryAfterSec) } })
+      return NextResponse.json({ ok: false, error: durableRateLimitCode(rl), retryAfterSec: rl.retryAfterSec }, { status: durableRateLimitStatus(rl), headers: { "Cache-Control": "no-store", "Retry-After": String(rl.retryAfterSec) } })
     }
     const { conversationId } = await ctx.params
     if (!conversationId || conversationId.length > 180 || /[\u0000-\u001f\u007f]/.test(conversationId)) {

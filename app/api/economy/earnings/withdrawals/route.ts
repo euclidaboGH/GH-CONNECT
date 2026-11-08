@@ -5,6 +5,7 @@ import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkDurableRateLimit, durableRateLimitStatus, durableRateLimitCode } from "@/lib/server/security/control-plane"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { quoteWithdrawal, createPiEarningsPayoutRequest } from "@/lib/server/earnings/unified-ledger"
+import { checkPinProof, pinProofConfigured } from "@/lib/server/identity/withdrawal-pin-proof"
 import { assertPayoutWalletAuthorization } from "@/lib/server/identity/wallet-authorization"
 
 export const runtime = "nodejs"
@@ -40,13 +41,19 @@ export async function POST(request: Request) {
   }
   const parsed = await readBoundedJson(request, 8 * 1024)
   if (!parsed.ok) return reply({ ok: false, error: parsed.error }, parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400)
-  const body = parsed.value as { amountAtomic?: unknown; idempotencyKey?: unknown }
+  const body = parsed.value as { amountAtomic?: unknown; idempotencyKey?: unknown; pinProof?: unknown }
   if (typeof body.amountAtomic !== "number" || !Number.isSafeInteger(body.amountAtomic) || body.amountAtomic <= 0) {
     return reply({ ok: false, error: "INVALID_AMOUNT_ATOMIC" }, 400)
   }
   const key = typeof body.idempotencyKey === "string" ? body.idempotencyKey.trim() : ""
   if (key.length < 16 || key.length > 160 || !/^[A-Za-z0-9._:-]+$/.test(key)) {
     return reply({ ok: false, error: "IDEMPOTENCY_KEY_REQUIRED" }, 400)
+  }
+
+  // Server-enforced withdrawal PIN: no valid proof for this user + key, no reservation.
+  if (!pinProofConfigured()) return reply({ ok: false, error: "PIN_PROOF_SECRET_MISSING" }, 503)
+  if (!checkPinProof(auth.userId, key, body.pinProof)) {
+    return reply({ ok: false, error: "PIN_PROOF_REQUIRED", message: "Verify your withdrawal PIN to continue." }, 403)
   }
 
   const quote = await quoteWithdrawal({ userId: auth.userId, grossAtomic: body.amountAtomic })
@@ -91,6 +98,6 @@ export async function POST(request: Request) {
     duplicate: result.duplicate === true, grossAtomic: result.grossAtomic,
     feeAtomic: result.feeAtomic, netAtomic: result.netAtomic,
     network: "Pi Testnet", transferSubmitted: false,
-    message: "Payout request reserved. Pi transfer execution is not enabled in this release.",
+    message: "Your payout request is securely reserved. Pi has not been sent yet; the balance will return to Available only after a safe, verified release, or settle after a verified Pi Testnet payment.",
   }, result.duplicate ? 200 : 201)
 }

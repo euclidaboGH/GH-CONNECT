@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import {
   getConversationPresence,
@@ -22,8 +22,8 @@ export async function GET(request: Request, ctx: Ctx) {
   try {
     const auth = await resolveAuthenticatedUser(request.headers)
     if (!auth) return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: noStore })
-    const rl = checkRateLimit(`messaging-presence-read:${auth.userId}`, 120, 60_000)
-    if (!rl.ok) return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { ...noStore, "Retry-After": String(rl.retryAfterSec) } })
+    const rl = await checkDurableRateLimit(`messaging-presence-read:${auth.userId}`, 120, 60_000, { onUnavailable: "deny" })
+    if (!rl.ok) return NextResponse.json({ ok: false, error: durableRateLimitCode(rl), retryAfterSec: rl.retryAfterSec }, { status: durableRateLimitStatus(rl), headers: { ...noStore, "Retry-After": String(rl.retryAfterSec) } })
     const { conversationId } = await ctx.params
     if (!validConversationId(conversationId)) return NextResponse.json({ ok: false, error: "INVALID_CONVERSATION_ID" }, { status: 400, headers: noStore })
     const presence = await getConversationPresence({ conversationId, userId: auth.userId })
@@ -38,8 +38,8 @@ export async function POST(request: Request, ctx: Ctx) {
   try {
     const auth = await resolveAuthenticatedUser(request.headers)
     if (!auth) return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: noStore })
-    const rl = checkRateLimit(`messaging-presence-write:${auth.userId}`, 120, 60_000)
-    if (!rl.ok) return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { ...noStore, "Retry-After": String(rl.retryAfterSec) } })
+    const rl = await checkDurableRateLimit(`messaging-presence-write:${auth.userId}`, 120, 60_000, { onUnavailable: "deny" })
+    if (!rl.ok) return NextResponse.json({ ok: false, error: durableRateLimitCode(rl), retryAfterSec: rl.retryAfterSec }, { status: durableRateLimitStatus(rl), headers: { ...noStore, "Retry-After": String(rl.retryAfterSec) } })
     const { conversationId } = await ctx.params
     if (!validConversationId(conversationId)) return NextResponse.json({ ok: false, error: "INVALID_CONVERSATION_ID" }, { status: 400, headers: noStore })
     const parsed = await readBoundedJson(request, 2 * 1024)

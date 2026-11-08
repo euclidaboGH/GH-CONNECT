@@ -26,6 +26,8 @@ export type DurableConversation = {
   avatarUrl?: string | null
   isPinned?: boolean
   isArchived?: boolean
+  isMuted?: boolean
+  muteUntil?: number | null
 }
 
 export type DurableMediaAttachment = {
@@ -223,8 +225,8 @@ export async function listConversationsForUser(
       if (!convRes.ok || !Array.isArray(convRes.data)) return []
       {
         const out: DurableConversation[] = []
-        const memberRows = await rest<Array<{ conversation_id: string; gh_user_id: string; is_pinned?: boolean; is_archived?: boolean }>>(
-          `gh_conversation_members?conversation_id=in.(${inList})&gh_user_id=eq.${encodeURIComponent(uid)}&left_at=is.null&select=conversation_id,gh_user_id,is_pinned,is_archived`
+        const memberRows = await rest<Array<{ conversation_id: string; gh_user_id: string; is_pinned?: boolean; is_archived?: boolean; muted_until?: string | null }>>(
+          `gh_conversation_members?conversation_id=in.(${inList})&gh_user_id=eq.${encodeURIComponent(uid)}&left_at=is.null&select=conversation_id,gh_user_id,is_pinned,is_archived,muted_until`
         )
         const membersByConversation = new Map<string, string[]>()
         if (memberRows.ok && Array.isArray(memberRows.data)) {
@@ -234,8 +236,14 @@ export async function listConversationsForUser(
             membersByConversation.set(member.conversation_id, list)
           }
         }
-        const selfPrefs = new Map<string, {is_pinned:boolean; is_archived:boolean}>()
-        if (memberRows.ok && Array.isArray(memberRows.data)) for (const m of memberRows.data) selfPrefs.set(m.conversation_id,{is_pinned:Boolean(m.is_pinned),is_archived:Boolean(m.is_archived)})
+        const selfPrefs = new Map<string, { is_pinned: boolean; is_archived: boolean; muted_until: string | null }>()
+        if (memberRows.ok && Array.isArray(memberRows.data)) {
+          for (const m of memberRows.data) selfPrefs.set(m.conversation_id, {
+            is_pinned: Boolean(m.is_pinned),
+            is_archived: Boolean(m.is_archived),
+            muted_until: m.muted_until ? String(m.muted_until) : null,
+          })
+        }
         const allMemberRows = await rest<Array<{ conversation_id: string; gh_user_id: string }>>(`gh_conversation_members?conversation_id=in.(${inList})&left_at=is.null&select=conversation_id,gh_user_id`)
         if (allMemberRows.ok && Array.isArray(allMemberRows.data)) {
           membersByConversation.clear()
@@ -259,6 +267,9 @@ export async function listConversationsForUser(
         for (const row of convRes.data) {
           const id = String(row.id || "")
           const members = membersByConversation.get(id) || []
+          const rawMuteUntil = selfPrefs.get(id)?.muted_until
+          const parsedMuteUntil = rawMuteUntil ? Date.parse(String(rawMuteUntil)) : null
+          const muteUntil = parsedMuteUntil !== null && Number.isFinite(parsedMuteUntil) ? parsedMuteUntil : null
           out.push({
             id,
             kind: (row.kind as ConversationKind) || "direct",
@@ -278,8 +289,12 @@ export async function listConversationsForUser(
             contextType: row.context_type != null ? String(row.context_type) : null,
             contextId: row.context_id != null ? String(row.context_id) : null,
             avatarUrl: row.avatar_url != null ? String(row.avatar_url) : null,
-            isPinned: Boolean(selfPrefs.get(id)?.is_pinned),
-            isArchived: Boolean(selfPrefs.get(id)?.is_archived),
+            ...(memberRows.ok ? {
+              isPinned: Boolean(selfPrefs.get(id)?.is_pinned),
+              isArchived: Boolean(selfPrefs.get(id)?.is_archived),
+              isMuted: muteUntil !== null && muteUntil > Date.now(),
+              muteUntil,
+            } : {}),
           })
         }
         return out

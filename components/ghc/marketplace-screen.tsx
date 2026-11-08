@@ -7,6 +7,8 @@ import { getProductMessage } from "@/lib/i18n/product"
 import { getWorkflowMessage } from "@/lib/i18n/workflows"
 
 import { formatPrice, listedWhen, relatedSearchTokens, relatedListingsFor, suggestedCommunitiesFor } from "@/lib/marketplace/discovery-presentation"
+import { parseProductOptionsText, productOptionsToText } from "@/lib/marketplace/product-options"
+import { parseProductVariantsText, productVariantsToText } from "@/lib/marketplace/product-variants"
 import { mapMarketplaceListingRecord, mapMarketplaceOrderRecord, mapSavedMarketplaceListingRecord } from "@/lib/marketplace/record-mappers"
 
 /**
@@ -41,6 +43,8 @@ import {
   CheckCircle2,
   Clock3,
 } from "lucide-react"
+import { FilterSummary } from "./filtering/filter-summary"
+import { FilterResultState } from "./filtering/filter-result-state"
 import { getMarketplaceDomain } from "@/lib/domains/compat"
 import {
   MARKETPLACE_CATEGORIES,
@@ -58,6 +62,8 @@ import {
   type BrowseSort,
 } from "@/lib/marketplace/order-lifecycle"
 import { useSectionRefresh } from "@/hooks/use-section-refresh"
+import { useAccountFilterState } from "@/hooks/use-account-filter-state"
+import { matchesFilterCurrencyRange } from "@/lib/filtering/filter-contract"
 import { emitSectionRefresh } from "@/lib/client/section-refresh"
 import {
   DELIVERY_MODE_LABELS,
@@ -99,6 +105,7 @@ import {
   quoteListingEditFee,
   type ListingFeeRail,
 } from "@/lib/marketplace/listing-fee-client"
+import { getMarketplaceOrderCurrency, type MarketplaceCurrency } from "@/lib/marketplace/checkout-contract"
 
 function kindLabel(kind: MarketplaceListing["kind"]): string {
   if (kind === "service") return "Service"
@@ -205,12 +212,12 @@ function CheckoutPanel({ listing }: { listing: MarketplaceListing }) {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  const idempotencyKeyRef = useRef<string | null>(null)
   const listingCur = (listing.currency || "GHC").toUpperCase()
   // Orders are settled in the listing's server-authoritative currency. Do not offer
   // a second rail unless a verified conversion/dual-currency quote exists.
   const requiredRail: "ghc" | "pi" = listingCur === "PI" ? "pi" : "ghc"
   const [payRail, setPayRail] = useState<"ghc" | "pi">(requiredRail)
-  const viewerId = IdentityService.getCurrentUserId() || ""
   const isOwn = isOwnedByCurrentUser(listing.sellerId)
 
   const runCheckout = async () => {
@@ -222,10 +229,15 @@ function CheckoutPanel({ listing }: { listing: MarketplaceListing }) {
       const { socialCreateMarketplaceOrder, socialPayMarketplaceOrder } = await import(
         "@/lib/social/client"
       )
+      const nonce = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `${Date.now()}_${Math.random().toString(36).slice(2, 12)}`
+      const idempotencyKey = idempotencyKeyRef.current || `buy_${nonce}`
+      idempotencyKeyRef.current = idempotencyKey
       const created = await socialCreateMarketplaceOrder({
         listingId: listing.id,
         quantity: 1,
-        idempotencyKey: `buy_${listing.id}_${viewerId || "anon"}_${Math.floor(Date.now() / 60_000)}`,
+        idempotencyKey,
       })
       if (!created.ok || !created.order) {
         const errCode = !created.ok ? String(created.error || "") : ""
@@ -234,12 +246,19 @@ function CheckoutPanel({ listing }: { listing: MarketplaceListing }) {
       }
       const orderId = String((created.order as { id?: string }).id || "")
       if (!orderId) {
-        setErr("Order created without id")
+        setErr("Order created without id. Check Orders before retrying.")
+        return
+      }
+      const authoritativeCurrency = getMarketplaceOrderCurrency(created.order)
+      if (!authoritativeCurrency) {
+        setMsg("Your order may be reserved, but its payment currency could not be verified. Open Orders before taking another action.")
+        setErr("Payment was not started because the server order did not return a supported currency.")
         return
       }
       emitMarketplaceEconomyRefresh("marketplace-order-create")
+      setPayRail(authoritativeCurrency === "PI" ? "pi" : "ghc")
 
-      if (payRail === "pi") {
+      if (authoritativeCurrency === "PI") {
         setMsg("Order reserved. Complete Pi payment to confirm.")
         openPayForListing(
           {
@@ -276,7 +295,10 @@ function CheckoutPanel({ listing }: { listing: MarketplaceListing }) {
         }
         return
       }
-      setMsg("Paid with GHC. Order confirmed — track it under Orders.")
+      idempotencyKeyRef.current = null
+      setMsg(authoritativeCurrency === "GHC"
+        ? "Paid with GHC. Order confirmed — track it under Orders."
+        : "Order payment confirmed — track it under Orders.")
       emitMarketplaceEconomyRefresh("marketplace-order-paid-ghc")
       try {
         window.dispatchEvent(
@@ -371,7 +393,7 @@ function ListingDetail({
   onEditListing?: (listing: MarketplaceListing) => void
   onDelist?: (listing: MarketplaceListing) => void
   onRemoveListing?: (listing: MarketplaceListing) => void
-  onAddToCart?: (listing: MarketplaceListing) => void
+  onAddToCart?: (listing: MarketplaceListing, variantId?: string) => void
 }) {
   const effectiveStatus = listing.kind === "product" && listing.status === "active" && listing.availability <= 0
     ? "sold_out"
@@ -379,10 +401,21 @@ function ListingDetail({
   const chip = statusChip(effectiveStatus)
   const mediaItems = Array.isArray(listing.media) ? listing.media.filter(Boolean) : []
   const [mediaIndex, setMediaIndex] = useState(0)
+  const [selectedVariantId, setSelectedVariantId] = useState(listing.variants?.find((variant) => variant.active && (variant.available ?? variant.stockOnHand) > 0)?.id || "")
+  useEffect(() => {
+    const selectedStillAvailable = listing.variants?.some((variant) =>
+      variant.id === selectedVariantId && variant.active && (variant.available ?? variant.stockOnHand) > 0
+    )
+    if (selectedStillAvailable) return
+    setSelectedVariantId(listing.variants?.find((variant) => variant.active && (variant.available ?? variant.stockOnHand) > 0)?.id || "")
+  }, [listing.id, listing.variants, selectedVariantId])
   const [saved, setSaved] = useState(false)
   const [saveBusy, setSaveBusy] = useState(false)
   const media = mediaItems[mediaIndex] || mediaItems[0]
-  const canBuy = listing.status === "active" && (listing.kind !== "product" || listing.availability > 0)
+  const activeVariants = listing.variants?.filter((variant) => variant.active) || []
+  const selectedVariant = activeVariants.find((variant) => variant.id === selectedVariantId)
+  const hasVariants = activeVariants.length > 0
+  const canBuy = listing.status === "active" && (hasVariants ? Boolean(selectedVariant && (selectedVariant.available ?? selectedVariant.stockOnHand) > 0) : (listing.kind !== "product" || listing.availability > 0))
   const viewerId = IdentityService.getCurrentUserId() || ""
   const isOwner = isOwnedByCurrentUser(listing.sellerId)
   const relatedTokens = useMemo(() => relatedSearchTokens(listing), [listing])
@@ -701,6 +734,24 @@ function ListingDetail({
           </div>
         </section>
 
+        {listing.productOptions?.length ? (
+          <section className="border-b border-border/50 px-4 py-4">
+            <h3 className="text-[15px] font-bold text-foreground">Available product options</h3>
+            <p className="mt-1 text-[11px] text-muted-foreground">Options share the listed price and stock. Message the seller to confirm your choice before checkout.</p>
+            <div className="mt-3 space-y-3">
+              {listing.productOptions.map((option) => (
+                <div key={option.name}>
+                  <p className="text-[12px] font-semibold text-foreground">{option.name}</p>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {option.values.map((value) => <span key={`${option.name}-${value}`} className="rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-[11px] text-foreground">{value}</span>)}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {!isOwner ? <button type="button" onClick={() => messageSeller("I would like to confirm product options before ordering.")} className="mt-3 min-h-10 rounded-full border border-border px-3 text-xs font-bold">Ask seller about options</button> : null}
+          </section>
+        ) : null}
+
         {/* Delivery & fulfillment */}
         <section className="border-b border-border/50 px-4 py-4">
           <h3 className="text-[15px] font-bold text-foreground">Delivery</h3>
@@ -943,7 +994,17 @@ function ListingDetail({
         <section className="px-4 py-4 pb-8">
           <div className="rounded-2xl border border-border/50 bg-card p-4 shadow-sm">
             <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Purchase</p>
-            <p className="mt-1 text-xl font-bold tracking-tight text-foreground">{formatPrice(listing)}</p>
+            <p className="mt-1 text-xl font-bold tracking-tight text-foreground">{selectedVariant ? `${selectedVariant.price.toLocaleString()} ${selectedVariant.currency}` : formatPrice(listing)}</p>
+            {hasVariants ? (
+              <div className="mt-3 space-y-1.5">
+                <label htmlFor={`variant-${listing.id}`} className="text-[11px] font-semibold text-foreground">Choose a SKU variant</label>
+                <select id={`variant-${listing.id}`} value={selectedVariantId} onChange={(event) => setSelectedVariantId(event.target.value)} className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm">
+                  <option value="">Select variant</option>
+                  {activeVariants.map((variant) => <option key={variant.id} value={variant.id} disabled={(variant.available ?? variant.stockOnHand) < 1}>{variant.label} · {variant.sku} · {variant.price} {variant.currency} · {variant.available ?? variant.stockOnHand} available</option>)}
+                </select>
+                {selectedVariant ? <p className="text-[11px] text-muted-foreground">SKU {selectedVariant.sku} · {selectedVariant.available ?? selectedVariant.stockOnHand} available</p> : null}
+              </div>
+            ) : null}
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
               Price and availability are provided by the seller. Review payment details before confirming.
             </p>
@@ -952,14 +1013,14 @@ function ListingDetail({
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    onClick={() => onAddToCart?.(listing)}
+                    onClick={() => onAddToCart?.(listing, selectedVariant?.id)}
                     className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-emerald-600/35 bg-emerald-50 px-3 text-[12px] font-bold text-emerald-800 transition hover:bg-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-200"
                   >
                     <ShoppingCart size={15} aria-hidden />
                     Add to cart
                   </button>
                 </div>
-                <CheckoutPanel listing={listing} />
+                {!hasVariants ? <CheckoutPanel listing={listing} /> : <p className="mt-2 text-[10px] text-muted-foreground">Variant price and stock are revalidated atomically when you reserve the order.</p>}
               </>
             ) : null}
           </div>
@@ -976,6 +1037,8 @@ function SellListingForm({
   setTitle,
   price,
   setPrice,
+  availability,
+  setAvailability,
   currency,
   setCurrency,
   description,
@@ -988,6 +1051,10 @@ function SellListingForm({
   setDeliveryMode,
   deliveryNotes,
   setDeliveryNotes,
+  productOptionsText,
+  setProductOptionsText,
+  productVariantsText,
+  setProductVariantsText,
   mediaUrls,
   setMediaUrls,
   feeRail,
@@ -1003,6 +1070,8 @@ function SellListingForm({
   setTitle: (v: string) => void
   price: string
   setPrice: (v: string) => void
+  availability: string
+  setAvailability: (v: string) => void
   currency: "GHC" | "PI"
   setCurrency: (v: "GHC" | "PI") => void
   description: string
@@ -1015,6 +1084,10 @@ function SellListingForm({
   setDeliveryMode: (v: DeliveryMode) => void
   deliveryNotes: string
   setDeliveryNotes: (v: string) => void
+  productOptionsText: string
+  setProductOptionsText: (v: string) => void
+  productVariantsText: string
+  setProductVariantsText: (v: string) => void
   mediaUrls: string[]
   setMediaUrls: (v: string[]) => void
   feeRail: ListingFeeRail
@@ -1118,14 +1191,50 @@ function SellListingForm({
         />
       </label>
       <label className="block">
-        <span className="text-[12px] font-bold text-muted-foreground">{wt("price")}</span>
+        <span className="text-[12px] font-bold text-muted-foreground">Base listing price · {wt("price")}</span>
         <input
           value={price}
           onChange={(e) => setPrice(e.target.value.replace(/[^0-9.]/g, ""))}
           inputMode="decimal"
           className="mt-1 w-full rounded-xl border border-border/70 bg-card px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
           placeholder="0.00"
+          aria-describedby="gh-market-base-price-help"
         />
+        <span id="gh-market-base-price-help" className="mt-1 block text-[11px] text-muted-foreground">Used for listings without active SKU variants. When variants are defined, each SKU's own price is charged and shown to buyers.</span>
+      </label>
+      <label className="block">
+        <span className="text-[12px] font-bold text-muted-foreground">Product options (informational)</span>
+        <textarea
+          value={productOptionsText}
+          onChange={(e) => setProductOptionsText(e.target.value.slice(0, 1200))}
+          rows={3}
+          maxLength={1200}
+          className="mt-1 w-full resize-y rounded-xl border border-border/70 bg-card px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
+          placeholder={"Size: S, M, L\nColour: Black, White"}
+          aria-describedby="gh-market-options-help"
+        />
+        <span id="gh-market-options-help" className="mt-1 block text-[11px] text-muted-foreground">Up to 4 descriptive groups, 12 values each. These are informational only; use SKU variants below for independent prices and inventory.</span>
+      </label>
+      <label className="block">
+        <span className="text-[12px] font-bold text-muted-foreground">SKU variants (optional)</span>
+        <textarea value={productVariantsText} onChange={(event) => setProductVariantsText(event.target.value.slice(0, 12000))} rows={4} maxLength={12000}
+          className="mt-1 w-full resize-y rounded-xl border border-border/70 bg-card px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
+          placeholder={"TSHIRT-S-BLK | Small / Black | 12.50 | 8\nTSHIRT-M-BLK | Medium / Black | 12.50 | 12"}
+          aria-describedby="gh-market-variants-help" />
+        <span id="gh-market-variants-help" className="mt-1 block text-[11px] text-muted-foreground">One real SKU per line: SKU | buyer-facing variant label | unit price | on-hand stock. Up to 100 SKUs; each has its own price and inventory. Saving deactivates omitted SKUs; existing reserved stock is protected.</span>
+      </label>
+      <label className="block">
+        <span className="text-[12px] font-bold text-muted-foreground">Base / shared stock fallback</span>
+        <input
+          value={availability}
+          onChange={(e) => setAvailability(e.target.value.replace(/[^0-9]/g, "").slice(0, 4))}
+          inputMode="numeric"
+          pattern="[0-9]*"
+          aria-describedby="gh-market-stock-help"
+          className="mt-1 w-full rounded-xl border border-border/70 bg-card px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
+          placeholder="1"
+        />
+        <span id="gh-market-stock-help" className="mt-1 block text-[11px] text-muted-foreground">Used only when no active SKU variants exist. With variants, available stock is derived from each SKU's on-hand minus reserved units.</span>
       </label>
       <label className="block">
         <span className="text-[12px] font-bold text-muted-foreground">Listing currency</span>
@@ -1276,7 +1385,7 @@ function CartPanel({
   onContinueShopping,
 }: {
   items: MarketplaceCartItem[]
-  onChange: (listingId: string, quantity: number) => void
+  onChange: (listingId: string, quantity: number, variantId?: string) => void
   onRemove: (listingId: string) => void
   onClear: () => void
   onContinueShopping: () => void
@@ -1325,7 +1434,7 @@ function CartPanel({
           try { controller?.abort() } catch { /* */ }
         }, 90_000)
       : null
-    const created: Array<{ id: string; item: MarketplaceCartItem }> = []
+    const created: Array<{ id: string; item: MarketplaceCartItem; currency: MarketplaceCurrency | null }> = []
     const paidGhcIds: string[] = []
     try {
       const { socialCreateMarketplaceOrder, socialPayMarketplaceOrder } = await import("@/lib/social/client")
@@ -1335,7 +1444,7 @@ function CartPanel({
         if (controller?.signal?.aborted) throw new Error("Checkout timed out")
         const item = purchasableItems[i]
         setCheckoutProgress(`Reserving ${i + 1} of ${total}: ${item.title}`)
-        const lineKey = `${item.listingId}:${item.quantity}:${item.sellerId}`
+        const lineKey = `${item.listingId}:${item.variantId || "legacy"}:${item.quantity}:${item.sellerId}`
         let idempotencyKey = checkoutKeysRef.current.get(lineKey)
         if (!idempotencyKey) {
           const nonce = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
@@ -1346,6 +1455,7 @@ function CartPanel({
         }
         const result = await socialCreateMarketplaceOrder({
           listingId: item.listingId,
+          variantId: item.variantId,
           quantity: item.quantity,
           idempotencyKey,
         })
@@ -1355,7 +1465,11 @@ function CartPanel({
         }
         const id = String((result.order as { id?: string }).id || "")
         if (!id) throw new Error(`Order created without an id for ${item.title}`)
-        created.push({ id, item })
+        // Record the reservation before validating its response so a malformed
+        // response still warns the buyer to inspect Orders rather than retry blindly.
+        const currency = getMarketplaceOrderCurrency(result.order)
+        created.push({ id, item, currency })
+        if (!currency) throw new Error(`Order for ${item.title} was reserved, but the server did not return a supported currency. Open Orders before retrying.`)
       }
 
       if (!created.length) {
@@ -1363,8 +1477,8 @@ function CartPanel({
         return
       }
 
-      const piOrders = created.filter(({ item }) => (item.currency || "GHC").toUpperCase() === "PI")
-      const ghcOrders = created.filter(({ item }) => (item.currency || "GHC").toUpperCase() !== "PI")
+      const piOrders = created.filter(({ currency }) => currency === "PI")
+      const ghcOrders = created.filter(({ currency }) => currency === "GHC")
       for (let i = 0; i < ghcOrders.length; i++) {
         if (controller?.signal?.aborted) throw new Error("Checkout timed out")
         const { id, item } = ghcOrders[i]
@@ -1383,7 +1497,7 @@ function CartPanel({
       const completedLineIds = created.map(({ item }) => item.listingId)
       removeMarketplaceCartItemsByIds(completedLineIds)
       for (const { item } of created) {
-        checkoutKeysRef.current.delete(`${item.listingId}:${item.quantity}:${item.sellerId}`)
+        checkoutKeysRef.current.delete(`${item.listingId}:${item.variantId || "legacy"}:${item.quantity}:${item.sellerId}`)
       }
 
       if (piOrders.length === 1) {
@@ -1468,7 +1582,7 @@ function CartPanel({
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-300">Your basket</p>
             <h2 className="mt-1 text-xl font-bold">Ready to checkout</h2>
-            <p className="mt-1 text-xs text-muted-foreground">{items.length} item{items.length === 1 ? "" : "s"} · quantities and inventory are rechecked at checkout</p>
+            <p className="mt-1 text-xs text-muted-foreground">{items.length} item{items.length === 1 ? "" : "s"} · prices, currency and inventory are revalidated by the server at checkout</p>
           </div>
           <button type="button" onClick={onClear} disabled={busy} className="min-h-9 rounded-full border border-border px-3 text-[11px] font-bold text-muted-foreground hover:text-foreground disabled:opacity-50">Clear</button>
         </div>
@@ -1503,7 +1617,7 @@ function CartPanel({
           const currency = (item.currency || "GHC").toUpperCase()
           const isOwn = isOwnedByCurrentUser(item.sellerId)
           return (
-            <article key={item.listingId} className={`flex gap-3 rounded-2xl border p-3 shadow-sm ${isOwn ? "border-amber-300/70 bg-amber-50/50 dark:border-amber-800/40 dark:bg-amber-950/20" : "border-border/60 bg-card"}`}>
+            <article key={`${item.listingId}:${item.variantId || "legacy"}`} className={`flex gap-3 rounded-2xl border p-3 shadow-sm ${isOwn ? "border-amber-300/70 bg-amber-50/50 dark:border-amber-800/40 dark:bg-amber-950/20" : "border-border/60 bg-card"}`}>
               <div className="h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-muted/60">
                 {item.media ? <LazyImage src={item.media} alt={item.title} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center"><Package size={22} className="text-muted-foreground" /></div>}
               </div>
@@ -1511,6 +1625,7 @@ function CartPanel({
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <h3 className="line-clamp-2 text-sm font-bold">{item.title}</h3>
+                    {item.variantLabel ? <p className="mt-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">{item.variantLabel} · SKU {item.variantSku}</p> : null}
                     <p className="mt-0.5 text-[11px] text-muted-foreground">
                       {isOwn
                         ? "Your listing · can't be purchased"
@@ -1523,9 +1638,9 @@ function CartPanel({
                 </div>
                 <div className="mt-2 flex items-center justify-between gap-2">
                   <div className="inline-flex items-center rounded-full border border-border/70 bg-background">
-                    <button type="button" onClick={() => onChange(item.listingId, item.quantity - 1)} disabled={busy || item.quantity <= 1} className="flex h-8 w-8 items-center justify-center disabled:opacity-30" aria-label="Decrease quantity"><Minus size={13} /></button>
+                    <button type="button" onClick={() => onChange(item.listingId, item.quantity - 1, item.variantId)} disabled={busy || item.quantity <= 1} className="flex h-8 w-8 items-center justify-center disabled:opacity-30" aria-label="Decrease quantity"><Minus size={13} /></button>
                     <span className="min-w-7 text-center text-xs font-bold">{item.quantity}</span>
-                    <button type="button" onClick={() => onChange(item.listingId, item.quantity + 1)} disabled={busy || (Boolean(item.availability) && item.quantity >= Number(item.availability))} className="flex h-8 w-8 items-center justify-center disabled:opacity-30" aria-label="Increase quantity"><Plus size={13} /></button>
+                    <button type="button" onClick={() => onChange(item.listingId, item.quantity + 1, item.variantId)} disabled={busy || (Boolean(item.availability) && item.quantity >= Number(item.availability))} className="flex h-8 w-8 items-center justify-center disabled:opacity-30" aria-label="Increase quantity"><Plus size={13} /></button>
                   </div>
                   <p className="text-sm font-extrabold">{currency === "GHC" ? "₲ " : ""}{lineTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}{currency === "GHC" ? "" : currency === "PI" ? " π" : ` ${currency}`}</p>
                 </div>
@@ -1599,9 +1714,12 @@ function SellerCommandCenter({
   const activeListings = listings.filter((listing) => listing.status === "active" && !isSoldOut(listing)).length
   const pausedListings = listings.filter((listing) => listing.status === "paused").length
   const soldOutListings = listings.filter(isSoldOut).length
+  const draftListings = listings.filter((listing) => listing.status === "draft").length
+  const lowStockListings = listings.filter((listing) => listing.kind === "product" && listing.status === "active" && listing.availability > 0 && listing.availability <= 3).length
+  const incompleteListings = listings.filter((listing) => listing.status === "active" && (!listing.description?.trim() || !listing.media?.length || !listing.category?.trim())).length
   const openOrders = sellerOrders.filter((order) => !["completed", "cancelled", "refunded"].includes(String(order.status))).length
   const completedOrders = sellerOrders.filter((order) => String(order.status) === "completed").length
-  const needsAttention = sellerOrders.filter((order) => ["created", "paid", "confirmed"].includes(String(order.status))).length
+  const needsAttention = sellerOrders.filter((order) => ["created", "payment_pending", "payment_verified", "paid", "confirmed", "fulfilling", "disputed"].includes(String(order.status))).length
 
   return (
     <section className="mb-4 overflow-hidden rounded-[1.5rem] border border-border/60 bg-card shadow-sm" aria-label="Seller command center">
@@ -1610,14 +1728,17 @@ function SellerCommandCenter({
           <div>
             <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-300">Seller Centre</p>
             <h2 className="mt-1 text-lg font-extrabold">Run your GreenHaven storefront</h2>
-            <p className="mt-1 max-w-xl text-xs leading-relaxed text-muted-foreground">See what needs attention, keep listings active, and move buyer orders toward successful completion from one place.</p>
+            <p className="mt-1 max-w-xl text-xs leading-relaxed text-muted-foreground">Monitor stock risk, listing quality and order work from one place. Metrics are derived from the currently loaded durable seller listings and orders; no revenue is estimated from stale client prices.</p>
           </div>
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"><BarChart3 size={18} /></span>
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6" aria-live="polite">
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8" aria-live="polite">
           <div className="rounded-2xl border border-border/50 bg-background/80 p-3"><p className="text-[10px] text-muted-foreground">Active</p><p className="mt-1 text-lg font-extrabold">{loading ? "—" : activeListings}</p></div>
           <div className="rounded-2xl border border-border/50 bg-background/80 p-3"><p className="text-[10px] text-muted-foreground">Paused</p><p className="mt-1 text-lg font-extrabold">{loading ? "—" : pausedListings}</p></div>
           <div className="rounded-2xl border border-border/50 bg-background/80 p-3"><p className="text-[10px] text-muted-foreground">Sold out</p><p className="mt-1 text-lg font-extrabold">{loading ? "—" : soldOutListings}</p></div>
+          <div className="rounded-2xl border border-border/50 bg-background/80 p-3"><p className="text-[10px] text-muted-foreground">Drafts</p><p className="mt-1 text-lg font-extrabold">{loading ? "—" : draftListings}</p></div>
+          <div className="rounded-2xl border border-amber-300/50 bg-amber-50/70 p-3 dark:bg-amber-950/20"><p className="text-[10px] text-muted-foreground">Low stock</p><p className="mt-1 text-lg font-extrabold">{loading ? "—" : lowStockListings}</p></div>
+          <div className="rounded-2xl border border-border/50 bg-background/80 p-3"><p className="text-[10px] text-muted-foreground">Needs polish</p><p className="mt-1 text-lg font-extrabold">{loading ? "—" : incompleteListings}</p></div>
           <div className="rounded-2xl border border-border/50 bg-background/80 p-3"><p className="text-[10px] text-muted-foreground">Open orders</p><p className="mt-1 text-lg font-extrabold">{loading ? "—" : openOrders}</p></div>
           <div className="rounded-2xl border border-border/50 bg-background/80 p-3"><p className="text-[10px] text-muted-foreground">Needs attention</p><p className="mt-1 text-lg font-extrabold">{loading ? "—" : needsAttention}</p></div>
           <div className="rounded-2xl border border-border/50 bg-background/80 p-3"><p className="text-[10px] text-muted-foreground">Completed</p><p className="mt-1 text-lg font-extrabold">{loading ? "—" : completedOrders}</p></div>
@@ -1656,7 +1777,7 @@ function MarketplaceOutcomeCenter({
   const sellerOrders = orders.filter((order) => isOwnedByCurrentUser(order.sellerId))
   const terminal = new Set(["completed", "cancelled", "refunded"])
   const activeBuyerOrders = buyerOrders.filter((order) => !terminal.has(String(order.status)))
-  const sellerAttention = sellerOrders.filter((order) => ["created", "paid", "confirmed"].includes(String(order.status)))
+  const sellerAttention = sellerOrders.filter((order) => ["created", "payment_pending", "payment_verified", "paid", "confirmed", "fulfilling", "disputed"].includes(String(order.status)))
 
   let kicker = "Marketplace next step"
   let title = "Discover something useful"
@@ -1722,6 +1843,120 @@ function MarketplaceOutcomeCenter({
   )
 }
 
+
+function SellerFulfilmentControls({
+  order,
+  busy,
+  onAction,
+}: {
+  order: MarketplaceOrder
+  busy: boolean
+  onAction: (action: string, payload?: Record<string, unknown>) => void
+}) {
+  const [method, setMethod] = useState<"shipping" | "pickup" | "digital">("shipping")
+  const [carrier, setCarrier] = useState("")
+  const [trackingNumber, setTrackingNumber] = useState("")
+  const [trackingUrl, setTrackingUrl] = useState("")
+  const [estimatedDelivery, setEstimatedDelivery] = useState("")
+  const [note, setNote] = useState("")
+  const [expanded, setExpanded] = useState(false)
+  const [error, setError] = useState("")
+
+  if (order.status === "confirmed") {
+    return <div className="mt-3 rounded-xl border border-emerald-600/25 bg-emerald-50/40 p-3 dark:bg-emerald-950/15">
+      <button type="button" onClick={() => setExpanded((value) => !value)} className="flex min-h-9 w-full items-center justify-between text-left text-xs font-bold">
+        <span>Prepare fulfilment</span><span aria-hidden="true">{expanded ? "−" : "+"}</span>
+      </button>
+      {expanded ? <div className="mt-2 space-y-2">
+        <label className="block text-[11px] font-semibold">Delivery method
+          <select value={method} onChange={(event) => setMethod(event.target.value as typeof method)} className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm">
+            <option value="shipping">Ship to buyer</option><option value="pickup">Local pickup / meetup</option><option value="digital">Digital product / service</option>
+          </select>
+        </label>
+        {method === "shipping" ? <>
+          <label className="block text-[11px] font-semibold">Carrier / courier
+            <input value={carrier} onChange={(event) => setCarrier(event.target.value)} maxLength={80} placeholder="e.g. DHL, Royal Mail, local courier" className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
+          </label>
+          <label className="block text-[11px] font-semibold">Tracking number
+            <input value={trackingNumber} onChange={(event) => setTrackingNumber(event.target.value)} maxLength={120} placeholder="Enter carrier tracking number" className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
+          </label>
+          <label className="block text-[11px] font-semibold">Tracking link (HTTPS)
+            <input value={trackingUrl} onChange={(event) => setTrackingUrl(event.target.value)} maxLength={500} type="url" placeholder="https://carrier.example/track/..." className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
+          </label>
+        </> : null}
+        <label className="block text-[11px] font-semibold">Estimated delivery (optional)
+          <input type="date" value={estimatedDelivery} onChange={(event) => setEstimatedDelivery(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
+        </label>
+        <label className="block text-[11px] font-semibold">Buyer update (optional)
+          <textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={500} rows={2} placeholder="Add a short fulfilment update" className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
+        </label>
+        {error ? <p role="alert" className="text-[11px] text-red-600">{error}</p> : null}
+        <button type="button" disabled={busy || (method === "shipping" && (carrier.trim().length < 2 || trackingNumber.trim().length < 3))} onClick={() => {
+          setError("")
+          if (trackingUrl) { try { const parsed = new URL(trackingUrl); if (parsed.protocol !== "https:" || parsed.username || parsed.password) throw new Error(); } catch { setError("Enter a valid HTTPS tracking link."); return } }
+          onAction("seller_fulfill", { method, carrier, trackingNumber, trackingUrl, estimatedDeliveryAt: estimatedDelivery ? new Date(`${estimatedDelivery}T23:59:59`).toISOString() : undefined, note })
+        }} className="min-h-10 w-full rounded-full bg-[var(--gh-green)] px-3 text-xs font-bold text-white disabled:opacity-50">Save fulfilment plan</button>
+      </div> : null}
+    </div>
+  }
+  if (order.status !== "fulfilling") return null
+  if (!order.fulfilmentMethod) return <button type="button" disabled={busy} onClick={() => onAction("seller_mark_delivered")} className="min-h-9 rounded-full bg-[var(--gh-green)] px-3 text-xs font-bold text-white">Complete legacy delivery</button>
+  if (order.fulfilmentMethod === "shipping" && order.deliveryStatus === "processing") {
+    return <button type="button" disabled={busy} onClick={() => onAction("seller_dispatch")} className="min-h-9 rounded-full bg-[var(--gh-green)] px-3 text-xs font-bold text-white">Mark dispatched</button>
+  }
+  if ((order.fulfilmentMethod === "pickup" || order.fulfilmentMethod === "digital" || order.deliveryStatus === "shipped") && !["delivered", "service_active"].includes(String(order.deliveryStatus))) {
+    return <button type="button" disabled={busy} onClick={() => onAction("seller_mark_delivered")} className="min-h-9 rounded-full bg-[var(--gh-green)] px-3 text-xs font-bold text-white">{order.fulfilmentMethod === "digital" ? "Activate service" : "Mark delivered"}</button>
+  }
+  return null
+}
+
+function OrderTimelinePanel({ orderId }: { orderId: string }) {
+  const [open, setOpen] = useState(false)
+  const [events, setEvents] = useState<Array<{ id: number; actorRole: string; eventType: string; note?: string; createdAt: number }>>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    setLoading(true); setError("")
+    fetch(`/api/marketplace/orders/${encodeURIComponent(orderId)}/timeline`, { credentials: "include", cache: "no-store" })
+      .then(async (response) => { const data = await response.json().catch(() => ({})); if (!response.ok || !data.ok) throw new Error(String(data.error || "Timeline unavailable")); return Array.isArray(data.events) ? data.events : [] })
+      .then((rows) => { if (!cancelled) setEvents(rows) })
+      .catch((reason) => { if (!cancelled) setError(reason instanceof Error ? reason.message : "Timeline unavailable") })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [open, orderId])
+  return <div className="mt-3 border-t border-border/50 pt-2">
+    <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)} className="min-h-8 text-[11px] font-bold text-emerald-700 dark:text-emerald-300">{open ? "Hide order activity" : "View order activity"}</button>
+    {open ? <div className="mt-2 space-y-2">
+      {loading ? <p className="text-[11px] text-muted-foreground">Loading verified order events…</p> : null}
+      {error ? <p role="alert" className="text-[11px] text-amber-700">{error}</p> : null}
+      {!loading && !error && events.length === 0 ? <p className="text-[11px] text-muted-foreground">No recorded order events yet.</p> : null}
+      {events.map((event) => <div key={event.id} className="flex gap-2 text-[11px]"><span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-emerald-600"/><div><p className="font-semibold">{event.eventType.replace(/_/g, " ")} · {event.actorRole}</p>{event.note ? <p className="text-muted-foreground">{event.note}</p> : null}<p className="text-[10px] text-muted-foreground">{event.createdAt ? new Date(event.createdAt).toLocaleString() : "Time unavailable"}</p></div></div>)}
+    </div> : null}
+  </div>
+}
+
+type MarketplaceBrowseFilters = { query: string; category: string; kind: ListingKind | "all"; delivery: DeliveryMode | "all"; priceCurrency: "all" | "GHC" | "PI"; minPrice: string; maxPrice: string; from: string; to: string }
+const DEFAULT_MARKETPLACE_BROWSE_FILTERS: MarketplaceBrowseFilters = { query: "", category: "", kind: "all", delivery: "all", priceCurrency: "all", minPrice: "", maxPrice: "", from: "", to: "" }
+function validateMarketplaceBrowseFilters(value: unknown): MarketplaceBrowseFilters {
+  const raw = value && typeof value === "object" ? value as Record<string, unknown> : {}
+  const date = (v: unknown) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && Number.isFinite(Date.parse(`${v}T00:00:00.000Z`)) && new Date(`${v}T00:00:00.000Z`).toISOString().slice(0,10) === v ? v : ""
+  const amount = (v: unknown) => typeof v === "string" && /^\d{0,12}(?:\.\d{0,6})?$/.test(v) ? v : ""
+  const from = date(raw.from), to = date(raw.to)
+  const minPrice = amount(raw.minPrice), maxPrice = amount(raw.maxPrice)
+  const invalidPriceOrder = minPrice !== "" && maxPrice !== "" && Number(minPrice) > Number(maxPrice)
+  return {
+    query: typeof raw.query === "string" ? raw.query.slice(0,120) : "",
+    category: typeof raw.category === "string" && MARKETPLACE_CATEGORIES.some((category) => category === raw.category) ? raw.category : "",
+    kind: ["all", "product", "service", "opportunity"].includes(String(raw.kind)) ? raw.kind as MarketplaceBrowseFilters["kind"] : "all",
+    delivery: ["all", "meetup", "shipping", "digital", "service"].includes(String(raw.delivery)) ? raw.delivery as MarketplaceBrowseFilters["delivery"] : "all",
+    priceCurrency: ["all", "GHC", "PI"].includes(String(raw.priceCurrency)) ? raw.priceCurrency as MarketplaceBrowseFilters["priceCurrency"] : "all",
+    minPrice: invalidPriceOrder ? "" : minPrice, maxPrice: invalidPriceOrder ? "" : maxPrice,
+    from: from && to && from > to ? "" : from, to: from && to && from > to ? "" : to,
+  }
+}
+
 export function MarketplaceScreen({
   onBack,
   initialListingId,
@@ -1731,10 +1966,20 @@ export function MarketplaceScreen({
 }) {
   const regional = useRegionalContext()
   const msg = useCallback((key: Parameters<typeof getProductMessage>[0]) => getProductMessage(key, regional.locale), [regional.locale])
-  const [query, setQuery] = useState("")
-  const [category, setCategory] = useState<string | null>(null)
-  const [kindFilter, setKindFilter] = useState<ListingKind | "all">("all")
-  const [deliveryFilter, setDeliveryFilter] = useState<DeliveryMode | "all">("all")
+  const browseFilters = useAccountFilterState("marketplace-browse", IdentityService.getCurrentUserId() || "anonymous", DEFAULT_MARKETPLACE_BROWSE_FILTERS, validateMarketplaceBrowseFilters)
+  const { query, category: categoryValue, kind: kindFilter, delivery: deliveryFilter, priceCurrency, minPrice, maxPrice, from: browseFrom, to: browseTo } = browseFilters.value
+  const category = categoryValue || null
+  const [browseOffset, setBrowseOffset] = useState(0)
+  const resetBrowsePage = useCallback(() => setBrowseOffset(0), [])
+  const setQuery = useCallback((value: string) => { resetBrowsePage(); browseFilters.update("query", value) }, [browseFilters.update, resetBrowsePage])
+  const setCategory = useCallback((value: string | null) => { resetBrowsePage(); browseFilters.update("category", value || "") }, [browseFilters.update, resetBrowsePage])
+  const setKindFilter = useCallback((value: ListingKind | "all") => { resetBrowsePage(); browseFilters.update("kind", value) }, [browseFilters.update, resetBrowsePage])
+  const setDeliveryFilter = useCallback((value: DeliveryMode | "all") => { resetBrowsePage(); browseFilters.update("delivery", value) }, [browseFilters.update, resetBrowsePage])
+  const setPriceCurrency = useCallback((value: MarketplaceBrowseFilters["priceCurrency"]) => { resetBrowsePage(); browseFilters.update("priceCurrency", value) }, [browseFilters.update, resetBrowsePage])
+  const setMinPrice = useCallback((value: string) => { resetBrowsePage(); browseFilters.update("minPrice", value); if (value && maxPrice && Number(value) > Number(maxPrice)) browseFilters.update("maxPrice", "") }, [browseFilters.update, maxPrice, resetBrowsePage])
+  const setMaxPrice = useCallback((value: string) => { resetBrowsePage(); browseFilters.update("maxPrice", value); if (value && minPrice && Number(value) < Number(minPrice)) browseFilters.update("minPrice", "") }, [browseFilters.update, minPrice, resetBrowsePage])
+  const setBrowseFrom = useCallback((value: string) => { resetBrowsePage(); browseFilters.update("from", value); if (value && browseTo && value > browseTo) browseFilters.update("to", "") }, [browseFilters.update, browseTo, resetBrowsePage])
+  const setBrowseTo = useCallback((value: string) => { resetBrowsePage(); browseFilters.update("to", value); if (value && browseFrom && value < browseFrom) browseFilters.update("from", "") }, [browseFilters.update, browseFrom, resetBrowsePage])
   const [selectedId, setSelectedId] = useState<string | null>(initialListingId || null)
   const [bucket, setBucket] = useState<"browse" | "orders" | "saved" | "sell" | "mine" | "cart">("browse")
   const [mineListings, setMineListings] = useState<MarketplaceListing[]>([])
@@ -1744,15 +1989,22 @@ export function MarketplaceScreen({
   const [searchFocused, setSearchFocused] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
   const [tick, setTick] = useState(0)
+  const [serverBrowseListings, setServerBrowseListings] = useState<MarketplaceListing[] | null>(null)
+  const [serverBrowseState, setServerBrowseState] = useState<"loading" | "ready" | "unavailable" | "invalid">("loading")
+  const [serverBrowseHasMore, setServerBrowseHasMore] = useState(false)
+  const browseRequestRef = useRef(0)
   // Sell form (domain.createListing when available — no invented success)
   const [sellTitle, setSellTitle] = useState("")
   const [sellPrice, setSellPrice] = useState("")
+  const [sellAvailability, setSellAvailability] = useState("1")
   const [sellCurrency, setSellCurrency] = useState<"GHC" | "PI">("GHC")
   const [sellDesc, setSellDesc] = useState("")
   const [sellCategory, setSellCategory] = useState<string>(MARKETPLACE_CATEGORIES[0] || "Goods")
   const [sellLocation, setSellLocation] = useState("")
   const [sellDeliveryMode, setSellDeliveryMode] = useState<DeliveryMode>("meetup")
   const [sellDeliveryNotes, setSellDeliveryNotes] = useState("")
+  const [sellProductOptionsText, setSellProductOptionsText] = useState("")
+  const [sellProductVariantsText, setSellProductVariantsText] = useState("")
   const [sellMedia, setSellMedia] = useState<string[]>([])
   const [sellFeeRail, setSellFeeRail] = useState<ListingFeeRail>("GHC")
   // Preserve identity/intent across retries so a successful fee payment can be reconciled
@@ -1772,7 +2024,8 @@ export function MarketplaceScreen({
   const [reviewRating, setReviewRating] = useState(5)
   const [reviewText, setReviewText] = useState("")
   const [reviewBusy, setReviewBusy] = useState(false)
-  const [browseSort, setBrowseSort] = useState<BrowseSort>("newest")
+  const [browseSort, setBrowseSortState] = useState<BrowseSort>("newest")
+  const setBrowseSort = useCallback((value: BrowseSort) => { resetBrowsePage(); setBrowseSortState(value) }, [resetBrowsePage])
   const [cartItems, setCartItems] = useState<MarketplaceCartItem[]>([])
   // Ignore stale async responses when users switch marketplace sections quickly.
   const savedRequestRef = useRef(0)
@@ -1801,7 +2054,7 @@ export function MarketplaceScreen({
     }
   }, [syncCart])
 
-  const addToCart = useCallback((listing: MarketplaceListing) => {
+  const addToCart = useCallback((listing: MarketplaceListing, variantId?: string) => {
     if (listing.status !== "active" || (listing.kind === "product" && listing.availability <= 0)) {
       try { window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "This listing is currently unavailable", type: "info" } })) } catch { /* */ }
       return
@@ -1816,16 +2069,23 @@ export function MarketplaceScreen({
       (listing as { sellerName?: string }).sellerName ||
       (listing as { sellerDisplayName?: string }).sellerDisplayName ||
       undefined
+    const activeVariants = listing.variants?.filter((entry) => entry.active) || []
+    const variant = variantId ? activeVariants.find((entry) => entry.id === variantId && (entry.available ?? entry.stockOnHand) > 0) : undefined
+    if (activeVariants.length > 0 && !variant) {
+      try { window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "Choose an available product variant first", type: "info" } })) } catch { /* */ }
+      return
+    }
     addMarketplaceCartItem({
       listingId: listing.id,
+      ...(variant ? { variantId: variant.id, variantSku: variant.sku, variantLabel: variant.label } : {}),
       quantity: 1,
       title: listing.title,
-      price: listing.price,
-      currency: listing.currency,
+      price: variant?.price ?? listing.price,
+      currency: variant?.currency ?? listing.currency,
       sellerId: listing.sellerId,
       sellerName: sellerLabel,
       media: listing.media?.[0],
-      availability: listing.availability,
+      availability: variant ? (variant.available ?? variant.stockOnHand) : listing.availability,
     })
     setBucket("cart")
     try {
@@ -1983,11 +2243,11 @@ export function MarketplaceScreen({
     }
   }, [])
 
-  const runOrderAction = useCallback(async (orderId: string, action: string) => {
+  const runOrderAction = useCallback(async (orderId: string, action: string, payload: Record<string, unknown> = {}) => {
     if (orderBusy) return
     setOrderBusy(orderId + ":" + action)
     try {
-      const res = await fetch(`/api/marketplace/orders/${encodeURIComponent(orderId)}/commerce`, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ action }) })
+      const res = await fetch(`/api/marketplace/orders/${encodeURIComponent(orderId)}/commerce`, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ action, ...payload }) })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data.ok) throw new Error(String(data.error || "Order action failed"))
       await loadDurableOrders()
@@ -1999,66 +2259,84 @@ export function MarketplaceScreen({
 
   const domain = getMarketplaceDomain()
 
-  // Phase 9: merge durable public listings into local domain store
+  // Phase 10.2: server-side search/category/price/date filtering before pagination.
   useEffect(() => {
     let cancelled = false
-    ;(async () => {
-      try {
-        const { socialFetchMarketplaceListings } = await import("@/lib/social/client")
-        const remote = await socialFetchMarketplaceListings({ scope: "public", limit: 50 })
-        if (cancelled || !remote.ok || !remote.listings.length) return
-        const KEY = "ghc_marketplace_listings_v1"
-        let local: MarketplaceListing[] = []
-        try {
-          const raw = window.localStorage.getItem(KEY)
-          local = raw ? (JSON.parse(raw) as MarketplaceListing[]) : []
-          if (!Array.isArray(local)) local = []
-        } catch {
-          local = []
-        }
-        const byId = new Map<string, MarketplaceListing>()
-        for (const l of local) {
-          if (l?.id) byId.set(l.id, l)
-        }
-        for (const row of remote.listings) {
-          const id = String(row.id || "")
-          if (!id) continue
-          const mapped = mapMarketplaceListingRecord(row)
-          if (!mapped) continue
-          byId.set(id, mapped)
-        }
-        const merged = Array.from(byId.values()).sort(
-          (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)
-        )
-        try {
-          window.localStorage.setItem(KEY, JSON.stringify(merged.slice(0, 500)))
-        } catch {
-          /* */
-        }
-        setTick((n) => n + 1)
-      } catch {
-        /* offline */
-      }
-    })()
-    return () => {
-      cancelled = true
+    const requestId = ++browseRequestRef.current
+    if ((minPrice || maxPrice) && priceCurrency === "all") {
+      setServerBrowseListings(null)
+      setServerBrowseHasMore(false)
+      setServerBrowseState("invalid")
+      return
     }
-  }, [])
+    setServerBrowseState("loading")
+    if (browseOffset === 0) { setServerBrowseListings(null); setServerBrowseHasMore(false) }
+    const timer = window.setTimeout(() => {
+      ;(async () => {
+        try {
+          const { socialFetchMarketplaceListings } = await import("@/lib/social/client")
+          const sort = browseSort === "price_asc" || browseSort === "price_desc" ? "price" : "updated_at"
+          const direction = browseSort === "price_asc" ? "asc" : "desc"
+          const remote = await socialFetchMarketplaceListings({
+            scope: "public", limit: 50, offset: browseOffset, q: query.trim() || undefined, category: category || undefined,
+            kind: kindFilter === "all" ? undefined : kindFilter,
+            min: minPrice ? Number(minPrice) : undefined, max: maxPrice ? Number(maxPrice) : undefined,
+            currency: priceCurrency === "all" ? undefined : priceCurrency,
+            from: browseFrom || undefined, to: browseTo || undefined, sort, direction,
+          })
+          if (cancelled || requestId !== browseRequestRef.current) return
+          if (!remote.ok || !remote.durable) {
+            if (browseOffset === 0) setServerBrowseListings(null)
+            setServerBrowseHasMore(false)
+            setServerBrowseState("unavailable")
+            return
+          }
+          const mapped = remote.listings.flatMap((row) => { const listing = mapMarketplaceListingRecord(row); return listing ? [listing] : [] })
+          setServerBrowseListings((current) => {
+            if (browseOffset === 0 || !current) return mapped
+            const byId = new Map(current.map((listing) => [listing.id, listing]))
+            for (const listing of mapped) byId.set(listing.id, listing)
+            return Array.from(byId.values())
+          })
+          setServerBrowseHasMore(Boolean(remote.pagination?.hasMore))
+          setServerBrowseState("ready")
+          const KEY = "ghc_marketplace_listings_v1"
+          try {
+            const raw = window.localStorage.getItem(KEY)
+            const local = raw ? JSON.parse(raw) as MarketplaceListing[] : []
+            const byId = new Map<string, MarketplaceListing>()
+            if (Array.isArray(local)) for (const item of local) if (item?.id) byId.set(item.id, item)
+            for (const item of mapped) byId.set(item.id, item)
+            window.localStorage.setItem(KEY, JSON.stringify(Array.from(byId.values()).slice(0, 500)))
+          } catch { /* Cache is an optimization only; server response remains authoritative. */ }
+        } catch {
+          if (!cancelled && requestId === browseRequestRef.current) { if (browseOffset === 0) setServerBrowseListings(null); setServerBrowseHasMore(false); setServerBrowseState("unavailable") }
+        }
+      })()
+    }, 250)
+    return () => { cancelled = true; window.clearTimeout(timer) }
+  }, [query, category, kindFilter, minPrice, maxPrice, priceCurrency, browseFrom, browseTo, browseSort, browseOffset, tick])
 
     const listings = useMemo(() => {
     void tick
-    if (!domain?.listListings) return [] as MarketplaceListing[]
-    const raw = domain.listListings({
+    if (!serverBrowseListings && !domain?.listListings) return [] as MarketplaceListing[]
+    const raw = serverBrowseListings ?? (domain?.listListings?.({
       status: "active",
       category: category || undefined,
       kind: kindFilter === "all" ? undefined : kindFilter,
       query: query.trim() || undefined,
-    }) || []
+    }) || [])
     const deliveryFiltered = deliveryFilter === "all"
       ? raw
       : raw.filter((listing) => parseDeliveryMode(listing.shippingInfo) === deliveryFilter)
-    return sortMarketplaceListings(deliveryFiltered, browseSort)
-  }, [domain, category, kindFilter, deliveryFilter, query, tick, browseSort])
+    const ranged = deliveryFiltered.filter((listing) => matchesFilterCurrencyRange(
+      listing.price,
+      listing.currency,
+      { min: minPrice === "" ? null : Number(minPrice), max: maxPrice === "" ? null : Number(maxPrice) },
+      priceCurrency,
+    ))
+    return sortMarketplaceListings(ranged, browseSort)
+  }, [domain, category, kindFilter, deliveryFilter, query, tick, browseSort, serverBrowseListings, minPrice, maxPrice, priceCurrency])
 
   const filteredMineListings = useMemo(() => {
     if (mineStatusFilter === "all") return mineListings
@@ -2071,7 +2349,7 @@ export function MarketplaceScreen({
     return mineListings.filter((listing) => listing.status === mineStatusFilter)
   }, [mineListings, mineStatusFilter])
 
-  const hasBrowseFilters = Boolean(query.trim() || category || kindFilter !== "all" || deliveryFilter !== "all")
+  const hasBrowseFilters = Boolean(query.trim() || category || kindFilter !== "all" || deliveryFilter !== "all" || priceCurrency !== "all" || minPrice || maxPrice || browseFrom || browseTo)
 
     const orders = useMemo(() => {
     void tick
@@ -2129,8 +2407,9 @@ export function MarketplaceScreen({
           currency: String(row.currency || "GHC"),
           condition: (String(row.condition || "new") as MarketplaceListing["condition"]) || "new",
           location: row.location ? String(row.location) : undefined,
+          shippingInfo: row.shippingInfo ? String(row.shippingInfo) : undefined,
           sellerId: String(row.sellerId || row.seller_id || ""),
-          availability: Number(row.availability) || 1,
+          availability: Number.isFinite(Number(row.availability)) ? Math.max(0, Math.floor(Number(row.availability))) : 0,
           status: (String(row.status || "active") as MarketplaceListing["status"]) || "active",
           createdAt: Number(row.createdAt || Date.now()) || Date.now(),
           updatedAt: Number(row.updatedAt || Date.now()) || Date.now(),
@@ -2188,12 +2467,15 @@ export function MarketplaceScreen({
           setSellEditId(listing.id)
           setSellTitle(listing.title || "")
           setSellPrice(String(listing.price ?? ""))
+          setSellAvailability(String(Math.max(0, Math.floor(Number(listing.availability) || 0))))
           setSellCurrency((listing.currency || "GHC").toUpperCase() === "PI" ? "PI" : "GHC")
           setSellDesc(listing.description || "")
           setSellCategory(listing.category || MARKETPLACE_CATEGORIES[0] || "Goods")
           setSellLocation(listing.location || "")
           setSellDeliveryMode(parseDeliveryMode(listing.shippingInfo) || "meetup")
           setSellDeliveryNotes(String(listing.shippingInfo || "").replace(/^(meetup|shipping|digital|service)\s*:\s*/i, ""))
+          setSellProductOptionsText(productOptionsToText(listing.productOptions))
+          setSellProductVariantsText(productVariantsToText(listing.variants))
           setSellMedia(Array.isArray(listing.media) ? listing.media.filter(Boolean).map(String) : [])
           setSelectedId(null)
           setBucket("sell")
@@ -2408,9 +2690,10 @@ export function MarketplaceScreen({
             </label>
 
             {showCategories ? (
-              <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide" role="listbox" aria-label="Categories">
+              <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide" role="group" aria-label="Categories">
                 <button
                   type="button"
+                  aria-pressed={!category}
                   onClick={() => setCategory(null)}
                   className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
                     !category
@@ -2424,6 +2707,7 @@ export function MarketplaceScreen({
                   <button
                     key={c}
                     type="button"
+                    aria-pressed={category === c}
                     onClick={() => setCategory(c)}
                     className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
                       category === c
@@ -2456,16 +2740,38 @@ export function MarketplaceScreen({
                   <option value="service">Service / remote</option>
                 </select>
               </label>
-              {category || kindFilter !== "all" || deliveryFilter !== "all" || query ? (
-                <button
-                  type="button"
-                  onClick={() => { setCategory(null); setKindFilter("all"); setDeliveryFilter("all"); setQuery("") }}
-                  className="min-h-9 rounded-xl px-2.5 text-[11px] font-bold text-emerald-700 underline-offset-2 hover:underline dark:text-emerald-300"
-                >
-                  Clear filters
-                </button>
-              ) : null}
             </div>
+            <label className="flex min-h-9 items-center gap-2 rounded-xl border border-border/70 bg-card px-2.5 text-[11px] font-semibold text-muted-foreground">
+              <span>Price currency</span>
+              <select value={priceCurrency} onChange={(event) => setPriceCurrency(event.target.value as MarketplaceBrowseFilters["priceCurrency"])} className="bg-transparent text-[11px] font-bold text-foreground outline-none">
+                <option value="all">All currencies (no numeric range)</option>
+                <option value="GHC">GHC</option>
+                <option value="PI">Pi</option>
+              </select>
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="text-[10px] font-semibold text-muted-foreground">Minimum price<input inputMode="decimal" value={minPrice} onChange={(event) => setMinPrice(event.target.value.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1").slice(0,19))} placeholder="No minimum" className="mt-1 min-h-9 w-full rounded-lg border border-border bg-background px-2 text-xs text-foreground" /></label>
+              <label className="text-[10px] font-semibold text-muted-foreground">Maximum price<input inputMode="decimal" value={maxPrice} onChange={(event) => setMaxPrice(event.target.value.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1").slice(0,19))} placeholder="No maximum" className="mt-1 min-h-9 w-full rounded-lg border border-border bg-background px-2 text-xs text-foreground" /></label>
+              <label className="text-[10px] font-semibold text-muted-foreground">Listed from<input type="date" value={browseFrom} max={browseTo || undefined} onChange={(event) => setBrowseFrom(event.target.value)} className="mt-1 min-h-9 w-full rounded-lg border border-border bg-background px-2 text-xs text-foreground" /></label>
+              <label className="text-[10px] font-semibold text-muted-foreground">Listed to<input type="date" value={browseTo} min={browseFrom || undefined} onChange={(event) => setBrowseTo(event.target.value)} className="mt-1 min-h-9 w-full rounded-lg border border-border bg-background px-2 text-xs text-foreground" /></label>
+            </div>
+            <p className="text-[10px] text-muted-foreground" role="status" aria-live="polite">{serverBrowseState === "invalid" ? "Choose GHC or Pi before applying a numeric price range; these currencies are never compared as one scale." : serverBrowseState === "loading" ? "Updating server-filtered listings…" : serverBrowseState === "ready" ? (deliveryFilter === "all" ? "Search, category, type, currency-specific price and date filters run on the server before pagination." : "Search, category, type, currency-specific price and date filters run on the server; delivery refines the returned page.") : "Server filtering is temporarily unavailable; showing locally available catalog data."}</p>
+            <FilterSummary
+              className="mt-2"
+              items={[
+                ...(query.trim() ? [{ id: "query", label: `Search: ${query.trim()}`, onRemove: () => setQuery("") }] : []),
+                ...(category ? [{ id: "category", label: `Category: ${category}`, onRemove: () => setCategory(null) }] : []),
+                ...(kindFilter !== "all" ? [{ id: "kind", label: `Type: ${kindFilter}`, onRemove: () => setKindFilter("all") }] : []),
+                ...(deliveryFilter !== "all" ? [{ id: "delivery", label: `Delivery: ${deliveryFilter}`, onRemove: () => setDeliveryFilter("all") }] : []),
+                ...(minPrice ? [{ id: "min-price", label: `Min: ${minPrice}`, onRemove: () => setMinPrice("") }] : []),
+                ...(priceCurrency !== "all" ? [{ id: "price-currency", label: `Currency: ${priceCurrency}`, onRemove: () => setPriceCurrency("all") }] : []),
+                ...(maxPrice ? [{ id: "max-price", label: `Max: ${maxPrice}`, onRemove: () => setMaxPrice("") }] : []),
+                ...(browseFrom ? [{ id: "from", label: `From: ${browseFrom}`, onRemove: () => setBrowseFrom("") }] : []),
+                ...(browseTo ? [{ id: "to", label: `To: ${browseTo}`, onRemove: () => setBrowseTo("") }] : []),
+              ]}
+              onClearAll={() => { setCategory(null); setKindFilter("all"); setDeliveryFilter("all"); setQuery(""); setMinPrice(""); setMaxPrice(""); setPriceCurrency("all"); setBrowseFrom(""); setBrowseTo("") }}
+              ariaLabel="Active marketplace filters"
+            />
           </>
         ) : null}
       </header>
@@ -2488,8 +2794,8 @@ export function MarketplaceScreen({
         {bucket === "cart" ? (
           <CartPanel
             items={cartItems}
-            onChange={(id, quantity) => {
-              const next = updateMarketplaceCartQuantity(id, quantity)
+            onChange={(id, quantity, variantId) => {
+              const next = updateMarketplaceCartQuantity(id, quantity, variantId)
               setCartItems(next)
               try {
                 window.dispatchEvent(new CustomEvent("ghc:marketplace-cart-changed", { detail: { count: next.reduce((n, i) => n + (i.quantity || 0), 0) } }))
@@ -2519,7 +2825,7 @@ export function MarketplaceScreen({
                 listings={mineListings}
                 orders={durableOrders}
                 loading={mineLoading || ordersLoading}
-                onNewListing={() => { setSellEditId(null); setSellMedia([]); setBucket("sell") }}
+                onNewListing={() => { setSellEditId(null); setSellMedia([]); setSellProductOptionsText(""); setSellProductVariantsText(""); setSellAvailability("1"); setBucket("sell") }}
                 onOpenOrders={() => { setOrderRoleFilter("selling"); setBucket("orders") }}
               />
               <div className="mb-3 flex items-center justify-between gap-2">
@@ -2599,6 +2905,8 @@ export function MarketplaceScreen({
             setTitle={setSellTitle}
             price={sellPrice}
             setPrice={setSellPrice}
+            availability={sellAvailability}
+            setAvailability={setSellAvailability}
             currency={sellCurrency}
             setCurrency={setSellCurrency}
             description={sellDesc}
@@ -2611,6 +2919,10 @@ export function MarketplaceScreen({
             setDeliveryMode={setSellDeliveryMode}
             deliveryNotes={sellDeliveryNotes}
             setDeliveryNotes={setSellDeliveryNotes}
+            productOptionsText={sellProductOptionsText}
+            setProductOptionsText={setSellProductOptionsText}
+            productVariantsText={sellProductVariantsText}
+            setProductVariantsText={setSellProductVariantsText}
             mediaUrls={sellMedia}
             setMediaUrls={setSellMedia}
             feeRail={sellFeeRail}
@@ -2621,6 +2933,9 @@ export function MarketplaceScreen({
             onCancel={() => {
               setSellEditId(null)
               setSellMedia([])
+              setSellProductOptionsText("")
+              setSellProductVariantsText("")
+              setSellAvailability("1")
               setBucket("browse")
             }}
             onSubmit={async () => {
@@ -2634,6 +2949,22 @@ export function MarketplaceScreen({
                 setSellError("Enter a valid price")
                 return
               }
+              const availabilityNum = sellAvailability.trim() === "" ? Number.NaN : Number(sellAvailability)
+              if (!Number.isSafeInteger(availabilityNum) || availabilityNum < 0 || availabilityNum > 9999) {
+                setSellError("Enter whole-number stock from 0 to 9,999")
+                return
+              }
+              const productOptions = parseProductOptionsText(sellProductOptionsText)
+              if (productOptions === null) {
+                setSellError("Check product options: use one 'Name: value, value' line per group, with at most 4 groups and 12 values per group.")
+                return
+              }
+              const parsedVariants = parseProductVariantsText(sellProductVariantsText, sellCurrency)
+              if (parsedVariants === null) {
+                setSellError("Check SKU variants: use SKU | label | price | whole-number stock, with unique SKUs and at most 100 lines.")
+                return
+              }
+              const productVariants = parsedVariants
               setSellBusy(true)
               try {
                 if (sellEditId) {
@@ -2646,10 +2977,12 @@ export function MarketplaceScreen({
                     currency: sellCurrency,
                     status: "active",
                     kind: "product",
-                    availability: 1,
+                    availability: availabilityNum,
                     media: sellMedia.slice(0, 6),
                     location: sellLocation.trim() || undefined,
                     shippingInfo: encodeShippingInfo(sellDeliveryMode, sellDeliveryNotes),
+                    productOptions,
+                    variants: productVariants,
                     category: sellCategory,
                   })
                   if (!remote.ok) {
@@ -2662,9 +2995,11 @@ export function MarketplaceScreen({
                       description: sellDesc.trim() || sellTitle.trim(),
                       category: sellCategory,
                       price: priceNum,
+                      availability: availabilityNum,
                       currency: sellCurrency,
                       location: sellLocation.trim() || undefined,
                       shippingInfo: encodeShippingInfo(sellDeliveryMode, sellDeliveryNotes),
+                      productOptions,
                       media: sellMedia.slice(0, 6),
                       status: "active",
                     })
@@ -2684,8 +3019,10 @@ export function MarketplaceScreen({
                   setSellEditId(null)
                   setSellTitle("")
                   setSellPrice("")
+                  setSellAvailability("1")
                   setSellDesc("")
                   setSellLocation("")
+                  setSellProductOptionsText("")
                   setSellMedia([])
                   setBucket("browse")
                   setSelectedId(editedId)
@@ -2756,6 +3093,7 @@ export function MarketplaceScreen({
                     currency: sellCurrency,
                     location: sellLocation.trim() || undefined,
                     shippingInfo: encodeShippingInfo(sellDeliveryMode, sellDeliveryNotes),
+                    productOptions,
                     media: sellMedia.slice(0, 6),
                     status: "active",
                     kind: "product",
@@ -2812,9 +3150,10 @@ export function MarketplaceScreen({
                         currency: sellCurrency,
                         status: "active",
                         kind: "product",
-                        availability: 1,
+                        availability: availabilityNum,
                         location: sellLocation.trim() || undefined,
                         shippingInfo: encodeShippingInfo(sellDeliveryMode, sellDeliveryNotes),
+                        productOptions,
                         category: sellCategory,
                         media: sellMedia.slice(0, 6),
                       },
@@ -2823,8 +3162,11 @@ export function MarketplaceScreen({
                     // Keep local draft listing for this device; public publish waits for flush
                     setSellTitle("")
                     setSellPrice("")
+                    setSellAvailability("1")
                     setSellDesc("")
                     setSellLocation("")
+                    setSellProductOptionsText("")
+                    setSellProductVariantsText("")
                     setSellMedia([])
                     setSellDraftId(null)
                     setSellFeeIntentId(null)
@@ -2861,10 +3203,12 @@ export function MarketplaceScreen({
                       currency: sellCurrency,
                       status: "active",
                       kind: "product",
-                      availability: 1,
+                      availability: availabilityNum,
                       media: sellMedia.slice(0, 6),
                       location: sellLocation.trim() || undefined,
                       shippingInfo: encodeShippingInfo(sellDeliveryMode, sellDeliveryNotes),
+                      productOptions,
+                      variants: productVariants,
                       category: sellCategory,
                       feeCurrency: sellFeeRail,
                     })
@@ -2911,6 +3255,8 @@ export function MarketplaceScreen({
                 setSellPrice("")
                 setSellDesc("")
                 setSellLocation("")
+                setSellProductOptionsText("")
+                setSellProductVariantsText("")
                 setSellMedia([])
                 setSellEditId(null)
                 setSellDraftId(null)
@@ -3016,6 +3362,7 @@ export function MarketplaceScreen({
                         <p className="mt-0.5 text-[12px] text-muted-foreground">
                           Qty {o.quantity} · {isSeller ? "You are seller" : "You are buyer"}
                         </p>
+                        {o.variantSku ? <p className="mt-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">{o.variantLabel || "Product variant"} · SKU {o.variantSku}</p> : null}
                       </div>
                       <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
                         {orderStatusLabel(status)}
@@ -3044,6 +3391,14 @@ export function MarketplaceScreen({
                         Delivery: {String(o.deliveryStatus || "—").replace(/_/g, " ")}
                       </p>
                     ) : null}
+                    {o.fulfilmentMethod ? <div className="mt-2 rounded-xl border border-border/60 bg-muted/20 p-3 text-[11px]">
+                      <p className="font-bold">{o.fulfilmentMethod === "shipping" ? "Shipment details" : o.fulfilmentMethod === "pickup" ? "Pickup / meetup" : "Digital delivery / service"}</p>
+                      {o.shippingCarrier ? <p className="mt-1 text-muted-foreground">Carrier: {o.shippingCarrier}</p> : null}
+                      {o.trackingNumber ? <p className="text-muted-foreground">Tracking: <span className="font-semibold text-foreground">{o.trackingNumber}</span></p> : null}
+                      {o.trackingUrl ? <a href={o.trackingUrl} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex min-h-8 items-center gap-1 font-bold text-emerald-700 underline dark:text-emerald-300">Track shipment <Truck className="h-3 w-3" /></a> : null}
+                      {o.estimatedDeliveryAt ? <p className="mt-1 text-muted-foreground">Estimated delivery: {new Date(o.estimatedDeliveryAt).toLocaleDateString()}</p> : null}
+                      {o.dispatchedAt ? <p className="text-muted-foreground">Dispatched: {new Date(o.dispatchedAt).toLocaleString()}</p> : null}
+                    </div> : null}
                     {nextHint ? (
                       <p className="mt-1.5 text-[11px] font-semibold text-emerald-800 dark:text-emerald-300">{nextHint}</p>
                     ) : null}
@@ -3094,8 +3449,7 @@ export function MarketplaceScreen({
                         </button>
                       ) : null}
                       {!isSeller && ["created","payment_pending"].includes(status) ? <button type="button" disabled={busy} onClick={() => void runOrderAction(o.id,"cancel_unpaid")} className="min-h-9 rounded-full border border-border px-3 text-xs font-bold">Cancel</button> : null}
-                      {isSeller && status === "confirmed" ? <button type="button" disabled={busy} onClick={() => void runOrderAction(o.id,"seller_fulfill")} className="min-h-9 rounded-full bg-[var(--gh-green)] px-3 text-xs font-bold text-white">Start fulfillment</button> : null}
-                      {isSeller && status === "fulfilling" ? <button type="button" disabled={busy} onClick={() => void runOrderAction(o.id,"seller_mark_delivered")} className="min-h-9 rounded-full bg-[var(--gh-green)] px-3 text-xs font-bold text-white">Mark delivered</button> : null}
+                      {isSeller ? <SellerFulfilmentControls order={o} busy={busy} onAction={(action, payload) => void runOrderAction(o.id, action, payload)} /> : null}
                       {!isSeller && status === "fulfilling" && ["delivered","service_active"].includes(String(o.deliveryStatus || "")) ? <button type="button" disabled={busy} onClick={() => void runOrderAction(o.id,"buyer_confirm")} className="min-h-9 rounded-full bg-emerald-600 px-3 text-xs font-bold text-white">Confirm received</button> : null}
                       {!isSeller && status === "completed" ? (
                         <button
@@ -3113,6 +3467,7 @@ export function MarketplaceScreen({
                       ) : null}
                       {!['completed','cancelled','disputed','refunded'].includes(status) && o.paymentStatus === "verified" ? <button type="button" disabled={busy} onClick={() => void runOrderAction(o.id,"dispute")} className="min-h-9 rounded-full border border-amber-500/50 px-3 text-xs font-bold text-amber-700 dark:text-amber-300">Open dispute</button> : null}
                     </div>
+                    <OrderTimelinePanel orderId={o.id} />
                     <p className="mt-2 text-[11px] text-muted-foreground">Updated {new Date(o.updatedAt || o.createdAt).toLocaleString()}</p>
                     {reviewDraftOrderId === o.id ? (
                       <div className="mt-3 space-y-2 rounded-xl border border-emerald-600/25 bg-emerald-50/40 p-3 dark:bg-emerald-950/20">
@@ -3192,6 +3547,12 @@ export function MarketplaceScreen({
             </ul>
           )}
           </div>
+        ) : listings.length === 0 && serverBrowseState === "invalid" ? (
+          <FilterResultState state="error" title="Choose a price currency" description="Select GHC or Pi before applying a minimum or maximum price. GreenHaven keeps the two currency scales separate." />
+        ) : listings.length === 0 && serverBrowseState === "loading" ? (
+          <FilterResultState state="loading" description="Searching the server catalog with your selected filters…" />
+        ) : listings.length === 0 && serverBrowseState === "unavailable" ? (
+          <FilterResultState state="error" title="Server catalog unavailable" description="The server-filtered catalog could not be loaded. Try again or review the locally available catalog." onRetry={refresh} />
         ) : listings.length === 0 ? (
           <div className="flex flex-col items-center px-2 pt-6">
             <EmptyState
@@ -3211,6 +3572,7 @@ export function MarketplaceScreen({
             >
               Refresh
             </button>
+            {serverBrowseHasMore && browseOffset < 10000 ? <button type="button" onClick={() => setBrowseOffset((value) => value + 50)} className="mt-2 min-h-10 rounded-full border border-border px-4 text-xs font-bold">Load more listings</button> : null}
           </div>
         ) : (
           <>
@@ -3245,6 +3607,7 @@ export function MarketplaceScreen({
                 <ListingCard key={l.id} listing={l} onOpen={setSelectedId} />
               ))}
             </div>
+            {serverBrowseHasMore && browseOffset < 10000 && serverBrowseState === "ready" ? <button type="button" onClick={() => setBrowseOffset((value) => value + 50)} className="mt-3 min-h-11 w-full rounded-xl border border-border bg-card px-3 text-xs font-bold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">Load more listings</button> : null}
           </>
         )}
       </div>

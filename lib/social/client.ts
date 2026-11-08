@@ -508,18 +508,25 @@ export async function socialDeleteComment(
   )
 }
 
-export async function socialListCommunities(limit = 50): Promise<{
+export async function socialListCommunities(opts: number | { limit?: number; q?: string; category?: string; offset?: number } = 50): Promise<{
   ok: boolean
   durable: boolean
   communities: unknown[]
+  pagination?: Record<string, unknown>
 }> {
-  const data = await json<{ communities?: unknown[] }>(
-    `/api/communities?limit=${limit}`
+  const options = typeof opts === "number" ? { limit: opts } : opts
+  const params = new URLSearchParams({ limit: String(options.limit ?? 50) })
+  if (options.q) params.set("q", options.q)
+  if (options.category) params.set("category", options.category)
+  if (options.offset != null) params.set("offset", String(options.offset))
+  const data = await json<{ communities?: unknown[]; pagination?: Record<string, unknown> }>(
+    `/api/communities?${params.toString()}`
   )
   return {
     ok: data.ok !== false,
     durable: Boolean(data.durable),
     communities: Array.isArray(data.communities) ? data.communities : [],
+    pagination: data.pagination,
   }
 }
 
@@ -896,16 +903,30 @@ export async function socialFetchMatchInbox(): Promise<{
 export async function socialFetchMarketplaceListings(opts?: {
   scope?: "public" | "mine"
   limit?: number
+  q?: string
+  category?: string
+  min?: number
+  max?: number
+  from?: string
+  to?: string
+  offset?: number
+  sort?: "price" | "updated_at"
+  direction?: "asc" | "desc"
+  kind?: "product" | "service" | "opportunity"
+  currency?: "GHC" | "PI"
 }): Promise<{
   ok: boolean
   durable: boolean
   listings: Array<Record<string, unknown>>
+  pagination?: { limit?: number; offset?: number; returned?: number; hasMore?: boolean; filtering?: string }
   error?: string
 }> {
   const scope = opts?.scope || "public"
-  const limit = opts?.limit ?? 50
-  const data = await json<{ listings?: unknown[] }>(
-    `/api/marketplace/listings?scope=${encodeURIComponent(scope)}&limit=${limit}`
+  const params = new URLSearchParams({ scope, limit: String(opts?.limit ?? 50) })
+  for (const key of ["q", "category", "from", "to", "sort", "direction", "kind", "currency"] as const) if (opts?.[key]) params.set(key, String(opts[key]))
+  for (const key of ["min", "max", "offset"] as const) if (opts?.[key] != null) params.set(key, String(opts[key]))
+  const data = await json<{ listings?: unknown[]; pagination?: { limit?: number; offset?: number; returned?: number; hasMore?: boolean; filtering?: string } }>(
+    `/api/marketplace/listings?${params.toString()}`
   )
   return {
     ok: data.ok !== false,
@@ -913,6 +934,7 @@ export async function socialFetchMarketplaceListings(opts?: {
     listings: Array.isArray(data.listings)
       ? (data.listings as Array<Record<string, unknown>>)
       : [],
+    pagination: data.pagination,
     error: data.error,
   }
 }
@@ -932,6 +954,8 @@ export async function socialCreateMarketplaceListing(input: {
   category?: string
   condition?: string
   tags?: string[]
+  productOptions?: Array<{ name: string; values: string[] }>
+  variants?: Array<{ id?: string; sku: string; label: string; price: number; currency: string; stockOnHand: number; active?: boolean }>
   /** Preferred listing-fee rail — server settles GHC or verifies Pi intent */
   feeCurrency?: "GHC" | "PI"
   listingFeePaymentId?: string
@@ -972,6 +996,7 @@ export async function socialFetchMarketplaceListing(
 /** Server-first marketplace order create (idempotent). */
 export async function socialCreateMarketplaceOrder(input: {
   listingId: string
+  variantId?: string
   quantity?: number
   idempotencyKey?: string
 }): Promise<{
@@ -989,6 +1014,7 @@ export async function socialCreateMarketplaceOrder(input: {
     headers: { "Idempotency-Key": key },
     body: JSON.stringify({
       listingId: input.listingId,
+      ...(input.variantId ? { variantId: input.variantId } : {}),
       quantity: input.quantity ?? 1,
       idempotencyKey: key,
     }),

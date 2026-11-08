@@ -22,6 +22,7 @@ export function WalletBalanceCard({
   lastSynced,
   pending,
   locked,
+  escrowLocked = 0,
   monthEarned,
   monthSpent,
   onOpenPending,
@@ -37,6 +38,7 @@ export function WalletBalanceCard({
   lastSynced?: number | null
   pending: number
   locked: number
+  escrowLocked?: number
   monthEarned: number
   monthSpent: number
   onOpenPending: () => void
@@ -58,6 +60,15 @@ export function WalletBalanceCard({
   } | null>(null)
   const [piLoading, setPiLoading] = useState(true)
   const [piFailed, setPiFailed] = useState(false)
+  const [releasing, setReleasing] = useState(false)
+  const [releaseMsg, setReleaseMsg] = useState<string | null>(null)
+  const [releaseItems, setReleaseItems] = useState<Array<{
+    requestId: string
+    status: string
+    grossAtomic: number | string
+    reason: string
+    unlockCondition: string
+  }>>([])
   const lastPiFetchRef = useRef(0)
   const [walletOnline, setWalletOnline] = useState(
     typeof navigator === "undefined" ? true : navigator.onLine !== false,
@@ -168,6 +179,46 @@ export function WalletBalanceCard({
     }
   }, [refreshPi])
 
+  const releaseReserved = useCallback(async () => {
+    setReleasing(true)
+    setReleaseMsg(null)
+    try {
+      const res = await fetch("/api/economy/earnings/withdrawals/cancel", {
+        method: "POST", credentials: "include", cache: "no-store", headers: { Accept: "application/json" },
+      })
+      const body = (await res.json().catch(() => null)) as {
+        ok?: boolean
+        released?: number
+        message?: string
+        items?: Array<{ requestId?: string; status?: string; grossAtomic?: number | string; reason?: string; unlockCondition?: string }>
+      } | null
+      if (res.ok && body?.ok) {
+        setReleaseMsg(body.released
+          ? `${body.released} withdrawal request${body.released === 1 ? " was" : "s were"} safely released back to Available. ${body.message || ""}`.trim()
+          : body.message || "The server found no request that could be safely released immediately. Detailed reasons require the latest Phase 3 recovery migration; no active reservation was force-released.")
+        setReleaseItems(Array.isArray(body.items) ? body.items.filter((item) =>
+          typeof item.requestId === "string" && typeof item.reason === "string" && typeof item.unlockCondition === "string"
+        ).map((item) => ({
+          requestId: item.requestId!,
+          status: String(item.status || "unknown"),
+          grossAtomic: item.grossAtomic ?? "—",
+          reason: item.reason!,
+          unlockCondition: item.unlockCondition!,
+        })) : [])
+        void refreshPi()
+        window.dispatchEvent(new CustomEvent("ghc:earnings-refresh"))
+      } else {
+        setReleaseMsg("Couldn't verify the reservation state, so no funds were changed. Try again shortly.")
+        setReleaseItems([])
+      }
+    } catch {
+      setReleaseMsg("Couldn't verify the reservation state, so no funds were changed. Check your connection and retry.")
+      setReleaseItems([])
+    } finally {
+      setReleasing(false)
+    }
+  }, [refreshPi])
+
   const mask = (n: number) => (balanceVisible ? formatGhc(n) : "••••")
   const maskPi = (n: number) =>
     balanceVisible
@@ -269,9 +320,9 @@ export function WalletBalanceCard({
             </p>
           </div>
           <div className="min-w-0 border-l border-white/15 pl-3">
-            <p className="text-[9px] uppercase tracking-wide text-white/55">{piSelected ? "Reserved" : "Status"}</p>
-            <p className="mt-1 truncate text-[12px] font-bold text-white">
-              {piSelected ? (piSnapshot ? maskPi(piSnapshot.reserved) : "—") : (ghcVerified ? "Confirmed" : "Unverified")}
+            <p className="text-[9px] uppercase tracking-wide text-white/55">{piSelected ? "Reserved" : "Escrow locked"}</p>
+            <p className="mt-1 truncate text-[12px] font-bold tabular-nums text-white">
+              {piSelected ? (piSnapshot ? maskPi(piSnapshot.reserved) : "—") : ghcVerified ? mask(escrowLocked) : "—"}
             </p>
           </div>
         </div>
@@ -369,37 +420,71 @@ export function WalletBalanceCard({
       {/* Meta strip for active rail */}
       <div className="border-t border-border/60 bg-muted/20 px-4 py-2.5">
         {piSelected ? (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-            <span>
-              Withdrawable{" "}
-              <strong className="text-foreground">
-                {piSnapshot ? maskPi(piSnapshot.withdrawable) : "—"}
-              </strong>
-            </span>
-            <span>
-              Pending{" "}
-              <strong className="text-foreground">
-                {piSnapshot ? maskPi(piSnapshot.pending) : "—"}
-              </strong>
-            </span>
+          <div className="space-y-2.5 text-[11px] text-muted-foreground">
+            <dl className="grid grid-cols-3 gap-2">
+              {[
+                { label: "Eligible to withdraw", value: piSnapshot?.withdrawable, tone: "text-emerald-700 dark:text-emerald-300" },
+                { label: "Pending", value: piSnapshot?.pending, tone: "text-foreground" },
+                { label: "Reserved for requests", value: piSnapshot?.reserved, tone: "text-violet-700 dark:text-violet-300" },
+              ].map((row) => (
+                <div key={row.label} className="rounded-xl border border-border/60 bg-card/70 px-2.5 py-2">
+                  <dt className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">{row.label}</dt>
+                  <dd className={`mt-0.5 truncate text-[13px] font-black tabular-nums ${row.tone}`}>
+                    {piSnapshot && typeof row.value === "number" ? maskPi(row.value) : "—"}
+                  </dd>
+                </div>
+              ))}
+            </dl>
             {piSnapshot && piSnapshot.reserved > 0 ? (
-              <span>
-                Reserved <strong className="text-foreground">{maskPi(piSnapshot.reserved)}</strong> is held for
-                withdrawal requests in progress
-              </span>
+              <p
+                role="note"
+                className="rounded-xl border border-violet-300/50 bg-violet-50/80 px-3 py-2 leading-relaxed text-violet-950 dark:border-violet-400/30 dark:bg-violet-950/40 dark:text-violet-100"
+              >
+                <strong>Reserved {maskPi(piSnapshot.reserved)}</strong> is held against Pi withdrawal requests; it has not disappeared, but it is not spendable while those requests remain active.
+                {piSnapshot.withdrawable <= 0
+                  ? " Your eligible-to-withdraw amount is currently zero. The server must complete or safely release an unstarted request before those funds can become available again."
+                  : " Your eligible-to-withdraw amount is shown separately and may differ from the total available balance because withdrawal eligibility and fees are checked by the server."}
+                <span className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <button
+                    type="button"
+                    onClick={() => void releaseReserved()}
+                    disabled={releasing}
+                    className="font-bold underline underline-offset-2 disabled:opacity-50"
+                  >
+                    {releasing ? "Checking requests…" : "Check for releasable requests"}
+                  </button>
+                  {releaseMsg ? <span role="status">{releaseMsg}</span> : null}
+                </span>
+                {releaseItems.length > 0 ? (
+                  <ul className="mt-2 space-y-2" aria-label="Pi reservation explanations">
+                    {releaseItems.map((item) => (
+                      <li key={item.requestId} className="rounded-lg border border-violet-300/40 bg-white/50 p-2 dark:bg-black/10">
+                        <p className="font-semibold">{item.status.replaceAll("_", " ").toUpperCase()} · {item.requestId.slice(0, 8)}</p>
+                        <p className="mt-0.5">{item.reason}</p>
+                        <p className="mt-1"><strong>When it unlocks:</strong> {item.unlockCondition}</p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                <span className="block text-[10px] leading-relaxed text-violet-900/80 dark:text-violet-100/80">Safety rule: unstarted requests can be released immediately. Processing or uncertain requests remain reserved only while Pi's outcome is unresolved; this control cannot force-release them. The server releases them after authoritative cancellation with no transaction, or settles them after verified payment. A timeout alone never forfeits your earned balance.</span>
+              </p>
             ) : null}
-            <span>withdrawable · fees and eligibility apply</span>
-            <span>3% withdrawal fee</span>
-            <button
-              type="button"
-              onClick={() => void refreshPi()}
-              disabled={piLoading}
-              className="font-semibold text-violet-700 underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
-              aria-label="Refresh PI balance"
-              aria-busy={piLoading}
-            >
-              {piLoading ? "Refreshing PI…" : "Refresh PI balance"}
-            </button>
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+              <span className="flex flex-wrap gap-x-2">
+                <span>withdrawable · fees and eligibility apply</span>
+                <span className="font-semibold text-foreground/80">3% withdrawal fee</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => void refreshPi()}
+                disabled={piLoading}
+                className="font-semibold text-violet-700 underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-50 dark:text-violet-300"
+                aria-label="Refresh PI balance"
+                aria-busy={piLoading}
+              >
+                {piLoading ? "Refreshing PI…" : "Refresh PI balance"}
+              </button>
+            </div>
           </div>
         ) : (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">

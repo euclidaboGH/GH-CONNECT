@@ -1,7 +1,7 @@
 # GreenHaven Testnet migration review order
 
 **Generated from:** `supabase/migrations/*.sql` and the canonical classification policy in `scripts/generate-migration-inventory.mjs`.
-**Current source inventory:** 189 migrations.
+**Current source inventory:** 197 migrations.
 
 > **This is a review order, not permission to apply.** It does not prove remote migration history, database compatibility, or Testnet/Mainnet readiness. Never run `supabase db push` while any pending migration is held for review, approval, validation, or marked proposal. Supabase CLI does not enforce these classifications.
 
@@ -209,6 +209,14 @@ The rows are sorted by the canonical migration identifier for review. Dependenci
 | 187 | `20261106143001_phase9_membership_pi_renewal_strict_provider_guard.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
 | 188 | `20261106150001_marketplace_listing_report_intake.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
 | 189 | `20261106170001_phase8_verified_mission_achievements.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
+| 190 | `20261107120001_withdrawal_pin_recovery_questions.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
+| 191 | `20261107130001_wallet_security_hardening.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
+| 192 | `20261107160001_membership_active_tier_downgrade_guard.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
+| 193 | `20261107170001_phase7_durable_community_governance.sql` | REQUIRED | REVIEW_THEN_APPLY |
+| 194 | `20261107180001_marketplace_sku_variants_atomic_inventory.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
+| 195 | `20261107190001_marketplace_fulfilment_tracking_timeline.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
+| 196 | `20261108110001_phase3_wallet_rewards_membership_concurrency_recovery.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
+| 197 | `20261108120001_gh_community_server_filter_search.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
 
 ## Classification meanings
 

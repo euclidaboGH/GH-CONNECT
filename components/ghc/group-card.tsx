@@ -33,6 +33,9 @@ interface GroupCardProps {
   onJoin?: () => void
   /** Privacy-aware CTA — Join vs Request to join */
   joinLabel?: string
+  membershipStatus?: "pending" | "invited"
+  onAcceptInvite?: () => Promise<boolean>
+  onDeclineInvite?: () => Promise<boolean>
   memberAvatars?: Array<{ id: string; name: string; photo?: string }>
   onMemberProfile?: (memberId: string) => void
   region?: string
@@ -58,11 +61,15 @@ function GroupCardContent({
   onClick,
   onJoin,
   joinLabel = "Preview & join",
+  membershipStatus,
+  onAcceptInvite,
+  onDeclineInvite,
   region,
   role,
   isSample = false,
 }: GroupCardProps) {
   const [timeAgo, setTimeAgo] = useState("")
+  const [inviteBusy, setInviteBusy] = useState(false)
 
   useEffect(() => {
     const calculateTimeAgo = () => {
@@ -208,7 +215,46 @@ function GroupCardContent({
             {isMuted && (
               <span className="text-[10px] font-medium text-muted-foreground">Muted</span>
             )}
-            {!isJoined && onJoin && (
+            {!isJoined && membershipStatus === "pending" ? (
+              <span className="ml-auto rounded-full border border-amber-300/70 bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100" role="status">
+                Request pending
+              </span>
+            ) : null}
+            {!isJoined && membershipStatus === "invited" ? (
+              <div className="ml-auto flex items-center gap-1.5">
+                {onAcceptInvite ? (
+                  <button
+                    type="button"
+                    disabled={inviteBusy}
+                    onClick={async (e) => {
+                      e.stopPropagation()
+                      if (inviteBusy) return
+                      setInviteBusy(true)
+                      try { await onAcceptInvite() } finally { setInviteBusy(false) }
+                    }}
+                    className="min-h-9 rounded-full bg-[var(--gh-green)] px-3 text-[11px] font-bold text-white disabled:opacity-60"
+                  >
+                    {inviteBusy ? "Working…" : "Accept"}
+                  </button>
+                ) : null}
+                {onDeclineInvite ? (
+                  <button
+                    type="button"
+                    disabled={inviteBusy}
+                    onClick={async (e) => {
+                      e.stopPropagation()
+                      if (inviteBusy) return
+                      setInviteBusy(true)
+                      try { await onDeclineInvite() } finally { setInviteBusy(false) }
+                    }}
+                    className="min-h-9 rounded-full border border-border px-2.5 text-[11px] font-semibold text-muted-foreground disabled:opacity-60"
+                  >
+                    Decline
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+            {!isJoined && !membershipStatus && onJoin && (
               <button
                 type="button"
                 onClick={(e) => {

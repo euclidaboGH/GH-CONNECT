@@ -32,7 +32,7 @@ const app = read("components/ghc/app.tsx")
 ok("bottom nav cart badge uses quantity sum", app.includes("items.reduce") && app.includes("cartBadgeCount"))
 
 const cartSource = read("components/ghc/marketplace-screen.tsx")
-ok("retry-stable cart idempotency keys", /checkoutKeysRef = useRef\(new Map<string, string>\(\)\)/.test(cartSource) && /checkoutKeysRef\.current\.get\(lineKey\)/.test(cartSource) && /checkoutKeysRef\.current\.delete\(`\$\{item\.listingId\}:\$\{item\.quantity\}:\$\{item\.sellerId\}`\)/.test(cartSource))
+ok("retry-stable cart idempotency keys", /checkoutKeysRef = useRef\(new Map<string, string>\(\)\)/.test(cartSource) && /checkoutKeysRef\.current\.get\(lineKey\)/.test(cartSource) && /checkoutKeysRef\.current\.delete\(`\$\{item\.listingId\}:\$\{item\.variantId \|\| "legacy"\}:\$\{item\.quantity\}:\$\{item\.sellerId\}`\)/.test(cartSource))
 
 console.log("")
 console.log(`Phase 2 commerce cart: ${14 - fail}/14 passed`)

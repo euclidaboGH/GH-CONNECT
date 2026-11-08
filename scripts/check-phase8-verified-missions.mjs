@@ -44,7 +44,7 @@ const checks = [
   ['Migration is classified for operator review, not auto-applied', migrationGenerator.includes('20261106170001_phase8_verified_mission_achievements.sql')],
   ['Release package and lock metadata are synchronized', Boolean(pkg.version) && lock.version === pkg.version && lock.packages?.['']?.version === pkg.version && release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],
   ['Mission contract is registered exactly once in prebuild and static verification', (pkg.scripts.prebuild.match(/check-phase8-verified-missions\.mjs/g) || []).length === 1 && (pkg.scripts['verify:static'].match(/check-phase8-verified-missions\.mjs/g) || []).length === 1],
-  ['Roadmap closes Phase 8 source work and advances to Phase 9', roadmap.includes('| 8 | Rewards | Source implementation closed') && roadmap.includes('| 9 | Membership | Source implementation complete')],
+  ['Roadmap places Rewards at Priority 3 and Membership at Priority 4', roadmap.includes('| 3 | **Rewards** |') && roadmap.includes('0.323.0') && roadmap.includes('| 4 | **Membership** |')],
 ]
 let failed = 0
 for (const [label, ok] of checks) { console.log(`${ok ? 'PASS' : 'FAIL'} ${label}`); if (!ok) failed++ }

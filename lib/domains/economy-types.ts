@@ -40,6 +40,8 @@ export interface GhcTransaction {
   referenceId?: string
   metadata?: Record<string, unknown>
   createdAt: number
+  /** Exact database timestamp used only to build stable keyset history cursors. */
+  createdAtCursor?: string
   postedAt?: number
   expiresAt?: number
   /** Admin adjustment actor when kind === adjusted */

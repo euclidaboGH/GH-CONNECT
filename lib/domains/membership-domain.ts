@@ -86,7 +86,7 @@ export interface MembershipStatus {
   expiresAt?: number
   billingPeriod?: "monthly" | "four_months" | "eight_months" | "yearly" | "lifetime" | "comp"
   lastPurchaseTxId?: string
-  source?: "ghc" | "external" | "admin" | "default" | "trial"
+  source?: "ghc" | "pi" | "external" | "admin" | "default" | "trial"
   /**
    * Account/trial anchor (ms). Trial tiers are derived from this timestamp
    * so refresh/login/device cannot reset the 24h VVIP → 24h VIP window.

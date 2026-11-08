@@ -5,6 +5,7 @@ import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { nonDurableWriteResponse } from "@/lib/server/production-guard"
 import { emitSocialNotification } from "@/lib/server/social/notifications"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+import { humanizeRelationshipError, sanitizeTargetUserId } from "@/lib/server/social/relationship-integrity"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -42,9 +43,15 @@ export async function POST(req: Request) {
     }
     const targetUserId = body.targetUserId.trim()
     const signal = body.signal.trim().toLowerCase()
-    if (!targetUserId || targetUserId === auth.userId) {
-      return NextResponse.json({ ok: false, error: "INVALID_TARGET" }, { status: 400 })
+    const targetCheck = sanitizeTargetUserId(targetUserId, auth.userId)
+    if (!targetCheck.ok) {
+      return NextResponse.json(
+        { ok: false, error: targetCheck.error, message: humanizeRelationshipError(targetCheck.error) },
+        { status: 400, headers: { "Cache-Control": "no-store, private" } }
+      )
     }
+    const safeTarget = targetCheck.targetUserId
+
     if (!["like", "pass", "superlike"].includes(signal)) {
       return NextResponse.json({ ok: false, error: "INVALID_SIGNAL" }, { status: 400 })
     }
@@ -66,7 +73,7 @@ export async function POST(req: Request) {
         },
         body: JSON.stringify({
           p_from_user_id: auth.userId,
-          p_to_user_id: targetUserId,
+          p_to_user_id: safeTarget,
           p_signal: signal,
         }),
       }
@@ -88,7 +95,7 @@ export async function POST(req: Request) {
       const base = env.supabaseUrl.replace(/\/$/, "")
       const q =
         `${base}/rest/v1/ghc_match_signals` +
-        `?from_user_id=eq.${encodeURIComponent(targetUserId)}` +
+        `?from_user_id=eq.${encodeURIComponent(safeTarget)}` +
         `&to_user_id=eq.${encodeURIComponent(auth.userId)}` +
         `&signal=in.(like,superlike)&select=id&limit=1`
       const peer = await fetch(q, {
@@ -109,26 +116,26 @@ export async function POST(req: Request) {
     if (signal === "like" || signal === "superlike") {
       if (mutual) {
         void emitSocialNotification({
-          recipientUserId: targetUserId,
+          recipientUserId: safeTarget,
           actorUserId: auth.userId,
           type: "follow",
           entityType: "user",
           entityId: auth.userId,
           title: "It's a Match",
           body: "You both expressed interest on GreenHaven",
-          dedupeKey: `match_mutual:${[auth.userId, targetUserId].sort().join(":")}`,
+          dedupeKey: `match_mutual:${[auth.userId, safeTarget].sort().join(":")}`,
           metadata: { kind: "match_mutual" },
         })
       } else {
         void emitSocialNotification({
-          recipientUserId: targetUserId,
+          recipientUserId: safeTarget,
           actorUserId: auth.userId,
           type: "follow",
           entityType: "user",
           entityId: auth.userId,
           title: "New interest",
           body: "Someone liked your profile",
-          dedupeKey: `match_like:${auth.userId}:${targetUserId}`,
+          dedupeKey: `match_like:${auth.userId}:${safeTarget}`,
           metadata: { kind: "match_like", signal },
         })
       }

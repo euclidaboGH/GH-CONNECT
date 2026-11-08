@@ -135,9 +135,9 @@ function ConversationItemBase({
   conversation: Conversation
   isSelected: boolean
   onClick: () => void
-  onPin?: (conversationId: string) => void
-  onArchive?: (conversationId: string) => void
-  onMute?: (conversationId: string) => void
+  onPin?: (conversationId: string, pinned: boolean) => void
+  onArchive?: (conversationId: string, archived: boolean) => void
+  onMute?: (conversationId: string, muted: boolean) => void
   onOpenProfile?: () => void
 }) {
   const hasUnread = conversation.unread || Boolean(conversation.unreadCount)
@@ -264,10 +264,10 @@ function ConversationItemBase({
         </div>
       </div>
 
-      <div className="hidden gap-2 border-t border-gray-50 px-3 py-1.5 transition group-hover:flex">
-        {onPin && <button onClick={(e) => { e.stopPropagation(); onPin(conversation.id) }} className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-200" title={conversation.isPinned ? "Unpin" : "Pin"}><Pin size={12} />{conversation.isPinned ? "Unpin" : "Pin"}</button>}
-        {onArchive && <button onClick={(e) => { e.stopPropagation(); onArchive(conversation.id) }} className="inline-flex items-center gap-1 rounded-lg bg-muted px-2.5 py-1.5 text-xs font-semibold text-foreground transition hover:bg-muted/80" title={conversation.isArchived ? "Unarchive" : "Archive"}><Archive size={12} />{conversation.isArchived ? "Unarchive" : "Archive"}</button>}
-        {onMute && <button onClick={(e) => { e.stopPropagation(); onMute(conversation.id) }} className="inline-flex items-center gap-1 rounded-lg bg-muted px-2.5 py-1.5 text-xs font-semibold text-foreground transition hover:bg-muted/80" title={conversation.isMuted ? "Unmute" : "Mute"}><VolumeX size={12} />{conversation.isMuted ? "Unmute" : "Mute"}</button>}
+      <div className="flex gap-2 border-t border-gray-50 px-3 py-2 transition sm:hidden sm:group-hover:flex sm:group-focus-within:flex">
+        {onPin && <button type="button" aria-label={`${conversation.isPinned ? "Unpin" : "Pin"} ${displayName}`} onClick={(e) => { e.stopPropagation(); onPin(conversation.id, !Boolean(conversation.isPinned)) }} className="inline-flex min-h-9 items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-200" title={conversation.isPinned ? "Unpin" : "Pin"}><Pin size={12} />{conversation.isPinned ? "Unpin" : "Pin"}</button>}
+        {onArchive && <button type="button" aria-label={`${conversation.isArchived ? "Restore" : "Archive"} ${displayName}`} onClick={(e) => { e.stopPropagation(); onArchive(conversation.id, !Boolean(conversation.isArchived)) }} className="inline-flex min-h-9 items-center gap-1 rounded-lg bg-muted px-2.5 py-1.5 text-xs font-semibold text-foreground transition hover:bg-muted/80" title={conversation.isArchived ? "Unarchive" : "Archive"}><Archive size={12} />{conversation.isArchived ? "Unarchive" : "Archive"}</button>}
+        {onMute && <button type="button" aria-label={`${conversation.isMuted ? "Unmute" : "Mute"} ${displayName}`} onClick={(e) => { e.stopPropagation(); onMute(conversation.id, !Boolean(conversation.isMuted)) }} className="inline-flex min-h-9 items-center gap-1 rounded-lg bg-muted px-2.5 py-1.5 text-xs font-semibold text-foreground transition hover:bg-muted/80" title={conversation.isMuted ? "Unmute" : "Mute"}><VolumeX size={12} />{conversation.isMuted ? "Unmute" : "Mute"}</button>}
       </div>
     </div>
   )
@@ -282,6 +282,8 @@ const EmojiPickerGrid = memo(({ onEmojiSelect }: { onEmojiSelect: (emoji: string
     {COMMON_EMOJIS.map((emoji) => (
       <button
         key={emoji}
+        type="button"
+        aria-label={`Insert ${emoji}`}
         onClick={() => onEmojiSelect(emoji)}
         className="flex h-10 w-10 items-center justify-center rounded-xl text-xl transition hover:bg-card active:scale-110"
       >
@@ -387,6 +389,8 @@ export function MessageInput({
           placeholder={disabled ? "Messaging unavailable…" : "Type a message…"}
           disabled={disabled}
           aria-label="Message text"
+          aria-describedby="message-composer-hint"
+          maxLength={8000}
           className="min-h-11 min-w-0 max-h-[120px] flex-1 resize-none rounded-2xl border border-border bg-muted px-3 py-2.5 text-[15px] leading-[1.45] transition focus:border-[var(--gh-green)] focus:bg-card focus:outline-none focus:ring-2 focus:ring-emerald-100 disabled:opacity-60"
           rows={1}
           style={{ minHeight: "44px", maxHeight: "120px" }}
@@ -417,7 +421,10 @@ export function MessageInput({
         </button>
       </div>
 
-      <p className="mt-1.5 text-[10px] text-muted-foreground">{disabled ? "Sending is paused until you are back online or the connection recovers." : "Enter to send · Shift+Enter for new line"}</p>
+      <p id="message-composer-hint" className="mt-1.5 flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
+        <span>{disabled ? "Sending is paused while this message is being processed." : "Enter to send · Shift+Enter for new line"}</span>
+        <span className="shrink-0 tabular-nums">{messageText.length}/8000</span>
+      </p>
     </div>
   )
 }
@@ -523,8 +530,8 @@ function MessageBubbleBase({
           </div>
         ) : (
         <div
-          role="button"
-          tabIndex={0}
+          role="group"
+          aria-label={`Message from ${isSentByCurrentUser ? "you" : "conversation member"} at ${timestamp}`}
           onTouchStart={startLongPress}
           onTouchEnd={clearLongPress}
           onTouchMove={clearLongPress}
@@ -532,10 +539,7 @@ function MessageBubbleBase({
             e.preventDefault()
             setMenuOpen(true)
           }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") setMenuOpen(true)
-          }}
-          className={`group max-w-[min(82vw,24rem)] cursor-pointer select-none rounded-2xl px-4 py-2.5 text-sm shadow-sm ${
+          className={`group max-w-[min(82vw,24rem)] select-text rounded-2xl px-4 py-2.5 text-sm shadow-sm ${
             isSentByCurrentUser ? "rounded-br-none border border-emerald-600/30 bg-emerald-600/15 text-emerald-950 dark:bg-emerald-600/25 dark:text-emerald-50" : "rounded-bl-none bg-muted text-foreground"
           }`}
         >
@@ -659,7 +663,7 @@ function MessageBubbleBase({
 
         {/* Desktop hover actions */}
         <div
-          className={`mt-1 flex gap-1 opacity-0 transition group-hover:opacity-100 ${
+          className={`mt-1 flex gap-1 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 ${
             isSentByCurrentUser ? "justify-end" : "justify-start"
           }`}
         >
@@ -667,7 +671,8 @@ function MessageBubbleBase({
             <button
               type="button"
               onClick={() => onReply(message.id)}
-              className="rounded bg-muted px-2 py-1 text-xs text-foreground/90 transition hover:bg-muted/80"
+              className="min-h-9 rounded bg-muted px-3 py-1 text-xs text-foreground/90 transition hover:bg-muted/80"
+              aria-label="Reply to message"
             >
               Reply
             </button>
@@ -675,7 +680,8 @@ function MessageBubbleBase({
           <button
             type="button"
             onClick={() => setMenuOpen(true)}
-            className="rounded bg-muted px-2 py-1 text-xs text-foreground/90 transition hover:bg-muted/80"
+            className="min-h-9 rounded bg-muted px-3 py-1 text-xs text-foreground/90 transition hover:bg-muted/80"
+            aria-label="More message actions"
           >
             More
           </button>

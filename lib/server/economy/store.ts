@@ -21,6 +21,7 @@ import { getServerEconomyLimits } from "./limits"
 import type { GhcTransferResult } from "@/lib/domains/economy-transfer-contract"
 import { mapTransferFailure } from "@/lib/domains/economy-transfer-contract"
 import { allowMemoryServer } from "./http"
+import { parseGhcSpendRpcResult } from "./spend-rpc-contract.mjs"
 
 export type GhcLedgerRow = GhcTransaction
 
@@ -831,9 +832,12 @@ export async function executeDurableGhcSpend(input: {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Cache-Control": "no-store",
           apikey: env.supabaseServiceRoleKey,
           Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
         },
+        cache: "no-store",
+        signal: AbortSignal.timeout(10_000),
         body: JSON.stringify({
           p_user_id: input.userId,
           p_amount: amount,
@@ -844,29 +848,13 @@ export async function executeDurableGhcSpend(input: {
       }
     )
     const data = await res.json().catch(() => null)
-    if (!res.ok) {
-      const err =
-        data && typeof data === "object" && "message" in data
-          ? String((data as { message: string }).message)
-          : "SPEND_FAILED"
-      return { ok: false, error: err }
-    }
-    if (data && typeof data === "object" && (data as { ok?: boolean }).ok === false) {
-      return {
-        ok: false,
-        error: String(
-          (data as { code?: string; message?: string }).code ||
-            (data as { message?: string }).message ||
-            "SPEND_FAILED"
-        ),
-      }
-    }
-    const tx = (data as { tx?: GhcLedgerRow; transaction?: GhcLedgerRow })?.tx
-      || (data as { transaction?: GhcLedgerRow })?.transaction
+    if (!res.ok) return { ok: false, error: "SPEND_FAILED" }
+    const result = parseGhcSpendRpcResult(data, { amount, referenceId: ref })
+    if (!result.ok) return { ok: false, error: result.error }
     return {
       ok: true,
-      tx: tx,
-      idempotent: Boolean((data as { idempotent?: boolean })?.idempotent),
+      tx: result.tx as GhcLedgerRow,
+      idempotent: result.idempotent,
       raw: data,
     }
   } catch (e) {

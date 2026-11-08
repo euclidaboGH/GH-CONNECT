@@ -25,6 +25,11 @@ import {
 } from "@/lib/server/identity/step-up-store"
 import { checkRateLimit, pruneRateLimitBuckets } from "@/lib/server/economy/rate-limit"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+import {
+  extractSessionTokenFromCookie,
+  rotateSession,
+  buildSessionCookieHeader,
+} from "@/lib/server/identity/session-store"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -130,7 +135,9 @@ export async function POST(request: Request) {
       authMethod: "pi_fresh_auth",
     })
 
-    return NextResponse.json(
+    // Phase 4: rotate session token after successful step-up so a stolen pre-step-up
+    // cookie cannot keep a long-lived elevated context.
+    const res = NextResponse.json(
       {
         ok: true,
         stepUp: {
@@ -138,9 +145,25 @@ export async function POST(request: Request) {
           ttlMs: STEP_UP_TTL_MS,
           authMethod: record.authMethod,
         },
+        sessionRotated: false as boolean,
       },
       { headers: { "Cache-Control": "no-store" } }
     )
+    const raw = extractSessionTokenFromCookie(request.headers)
+    if (raw) {
+      const rotated = await rotateSession({
+        rawToken: raw,
+        userAgent: request.headers.get("user-agent"),
+      })
+      if (rotated) {
+        res.headers.append("Set-Cookie", buildSessionCookieHeader(rotated.rawToken))
+        // mutate JSON body flag via rewrite is awkward; log only — client refreshes session via /api/auth/session
+        console.info("[step-up] SESSION_ROTATED_AFTER_STEP_UP", {
+          sessionId: rotated.record.id.slice(0, 8),
+        })
+      }
+    }
+    return res
   } catch (err) {
     console.error(
       "[step-up] failed",

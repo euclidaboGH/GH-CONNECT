@@ -35,6 +35,15 @@ export function isValidPinFormat(pin: unknown): pin is string {
   return typeof pin === "string" && /^\d{6}$/.test(pin)
 }
 
+/** Rejects trivially guessable PINs (repeated digits, straight runs, common patterns). */
+export function isWeakPin(pin: string): boolean {
+  if (/^(\d)\1{5}$/.test(pin)) return true
+  const asc = "0123456789012345", desc = "9876543210987654"
+  if (asc.includes(pin) || desc.includes(pin)) return true
+  if (/^(\d{2})\1\1$/.test(pin) || /^(\d{3})\1$/.test(pin)) return true
+  return ["123123", "121212", "112233", "696969", "654321", "123321"].includes(pin)
+}
+
 export async function getWithdrawalPinStatus(userId: string): Promise<PinStatus> {
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
@@ -75,6 +84,7 @@ export async function setWithdrawalPin(input: {
   pin: string
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!isValidPinFormat(input.pin)) return { ok: false, error: "PIN_FORMAT_INVALID" }
+  if (isWeakPin(input.pin)) return { ok: false, error: "PIN_TOO_WEAK" }
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
     return { ok: false, error: "PIN_SERVICE_UNAVAILABLE" }
@@ -119,62 +129,27 @@ export async function verifyWithdrawalPin(input: {
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!isValidPinFormat(input.pin)) return { ok: false, error: "PIN_FORMAT_INVALID" }
   const env = readGhcServerEnv()
-  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
-    return { ok: false, error: "PIN_SERVICE_UNAVAILABLE" }
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return { ok: false, error: "PIN_SERVICE_UNAVAILABLE" }
+  const base = env.supabaseUrl.replace(/\/$/, "")
+  const call = async (fn: string, body: Record<string, unknown>) => {
+    const res = await fetch(`${base}/rest/v1/rpc/${fn}`, {
+      method: "POST", headers: restHeaders(env.supabaseServiceRoleKey!), body: JSON.stringify(body),
+      cache: "no-store", signal: AbortSignal.timeout(10_000),
+    })
+    if (!res.ok) throw new Error(`RPC_${res.status}`)
+    return res.json().catch(() => null)
   }
   try {
-    const url = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_withdrawal_pins?user_id=eq.${encodeURIComponent(input.userId)}&select=pin_hash,pin_salt,failed_attempts,locked_until`
-    const res = await fetch(url, {
-      headers: restHeaders(env.supabaseServiceRoleKey),
-      cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
-    })
-    if (!res.ok) return { ok: false, error: "PIN_SERVICE_UNAVAILABLE" }
-    const rows = (await res.json().catch(() => [])) as Array<{
-      pin_hash: string
-      pin_salt: string
-      failed_attempts: number
-      locked_until: string | null
-    }>
-    if (!Array.isArray(rows) || rows.length === 0) {
-      return { ok: false, error: "PIN_NOT_CONFIGURED" }
-    }
-    const row = rows[0]
-    if (row.locked_until && new Date(row.locked_until).getTime() > Date.now()) {
-      return { ok: false, error: "PIN_LOCKED" }
-    }
-    const computed = hashPin(input.pin, row.pin_salt)
-    const a = Buffer.from(computed, "hex")
-    const b = Buffer.from(row.pin_hash, "hex")
-    const match = a.length === b.length && timingSafeEqual(a, b)
-    if (match) {
-      await fetch(
-        `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_withdrawal_pins?user_id=eq.${encodeURIComponent(input.userId)}`,
-        {
-          method: "PATCH",
-          headers: restHeaders(env.supabaseServiceRoleKey),
-          body: JSON.stringify({ failed_attempts: 0, locked_until: null, updated_at: new Date().toISOString() }),
-          cache: "no-store",
-        },
-      ).catch(() => null)
-      return { ok: true }
-    }
-    const attempts = (row.failed_attempts || 0) + 1
-    const lockedUntil = attempts >= MAX_ATTEMPTS ? new Date(Date.now() + LOCK_MS).toISOString() : null
-    await fetch(
-      `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_withdrawal_pins?user_id=eq.${encodeURIComponent(input.userId)}`,
-      {
-        method: "PATCH",
-        headers: restHeaders(env.supabaseServiceRoleKey),
-        body: JSON.stringify({
-          failed_attempts: Math.min(attempts, MAX_ATTEMPTS),
-          locked_until: lockedUntil,
-          updated_at: new Date().toISOString(),
-        }),
-        cache: "no-store",
-      },
-    ).catch(() => null)
-    return { ok: false, error: lockedUntil ? "PIN_LOCKED" : "PIN_INVALID" }
+    // The attempt is counted atomically (row lock) BEFORE comparing, so parallel guesses cannot exceed the limit.
+    const begin = (await call("gh_withdrawal_pin_begin_attempt", {
+      p_user_id: input.userId, p_max_attempts: MAX_ATTEMPTS, p_lock_seconds: LOCK_MS / 1000,
+    })) as { ok?: boolean; error?: string; pinHash?: string; pinSalt?: string } | null
+    if (!begin?.ok) return { ok: false, error: begin?.error || "PIN_SERVICE_UNAVAILABLE" }
+    const a = Buffer.from(hashPin(input.pin, String(begin.pinSalt)), "hex")
+    const b = Buffer.from(String(begin.pinHash), "hex")
+    if (!(a.length === b.length && timingSafeEqual(a, b))) return { ok: false, error: "PIN_INVALID" }
+    await call("gh_withdrawal_pin_attempt_succeeded", { p_user_id: input.userId })
+    return { ok: true }
   } catch {
     return { ok: false, error: "PIN_SERVICE_UNAVAILABLE" }
   }

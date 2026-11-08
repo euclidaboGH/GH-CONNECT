@@ -99,7 +99,8 @@ type CommunitySummary = {
   name: string
   description?: string
   memberCount: number
-  privacy: "public" | "private"
+  privacy: "public" | "private" | "request" | "invite"
+  membershipState?: "discoverable" | "invited" | "pending" | "member" | "moderator" | "admin" | "owner" | "blocked" | "unavailable"
   isJoined: boolean
   photo?: string
   cover?: string
@@ -178,6 +179,8 @@ export function PremiumCommunityHub({
   onBack,
   onOpenChat,
   onJoin,
+  onAcceptInvitation,
+  onDeclineInvitation,
   onLeave,
   onMute,
   onPost,
@@ -211,6 +214,8 @@ export function PremiumCommunityHub({
   onBack: () => void
   onOpenChat?: () => void
   onJoin?: () => void
+  onAcceptInvitation?: () => Promise<boolean>
+  onDeclineInvitation?: () => Promise<boolean>
   onLeave?: () => void
   onMute?: () => void
   onPost?: (body: string, kind?: "text" | "question" | "resource") => Promise<boolean>
@@ -248,6 +253,7 @@ export function PremiumCommunityHub({
   const [welcomeTick, setWelcomeTick] = useState<number>(0)
   const [tab, setTab] = useState<CommunityHubTab>(community.isJoined ? "board" : "about")
   const [showJoinConfirm, setShowJoinConfirm] = useState(false)
+  const [invitationBusy, setInvitationBusy] = useState(false)
 
   useEffect(() => {
     return onCloseTransientUI(() => setShowJoinConfirm(false))
@@ -355,6 +361,47 @@ export function PremiumCommunityHub({
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({})
   const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({})
   const [safetyTick, setSafetyTick] = useState<number>(0)
+  const [serverGovernanceLog, setServerGovernanceLog] = useState<any[] | null>(null)
+  const [serverGovernanceReports, setServerGovernanceReports] = useState<any[] | null>(null)
+
+  useEffect(() => {
+    if (!isMod) {
+      setServerGovernanceLog(null)
+      setServerGovernanceReports(null)
+      return
+    }
+    let active = true
+    const loadGovernance = async () => {
+      try {
+        const [logResponse, reportResponse] = await Promise.all([
+          fetch(`/api/governance/moderation-log?communityId=${encodeURIComponent(community.id)}`, { cache: "no-store" }),
+          fetch(`/api/governance/reports?communityId=${encodeURIComponent(community.id)}`, { cache: "no-store" }),
+        ])
+        const [logPayload, reportPayload] = await Promise.all([
+          logResponse.json().catch(() => null), reportResponse.json().catch(() => null),
+        ])
+        if (!active) return
+        if (logResponse.ok && logPayload?.ok && logPayload?.durable && Array.isArray(logPayload.entries)) {
+          setServerGovernanceLog(logPayload.entries.map((row: any) => ({
+            id: String(row.id), communityId: String(row.community_id), actorId: String(row.actor_id),
+            action: row.action, targetType: row.target_type, targetId: String(row.target_id),
+            metadata: row.metadata || {}, createdAt: Date.parse(String(row.created_at)) || Date.now(),
+          })))
+        }
+        if (reportResponse.ok && reportPayload?.ok && reportPayload?.durable && Array.isArray(reportPayload.reports)) {
+          setServerGovernanceReports(reportPayload.reports.map((row: any) => ({
+            id: String(row.id), communityId: String(row.community_id), reporterId: String(row.reporter_id),
+            targetType: row.target_type, targetId: String(row.target_id), reason: row.reason,
+            note: row.note || "", status: row.status, resolutionNote: row.resolution_note || "",
+            resolvedBy: row.resolved_by || null, resolvedAt: row.resolved_at ? Date.parse(String(row.resolved_at)) : null,
+            createdAt: Date.parse(String(row.created_at)) || Date.now(),
+          })))
+        }
+      } catch { /* session snapshot remains visible; server failures are not reported as durable */ }
+    }
+    void loadGovernance()
+    return () => { active = false }
+  }, [community.id, isMod, safetyTick])
 
   const membersWithRoles = (() => {
     if (memberPreview.length > 0) return memberPreview
@@ -405,9 +452,9 @@ export function PremiumCommunityHub({
     boardPosts: boardPosts as any,
     events: events as any,
   })
-  const moderationLog = isMod ? listModerationLog(community.id) : []
-  const openReports = isMod ? listCommunityReports(community.id).filter((r) => r.status === "open") : []
-  const allReports = isMod ? listCommunityReports(community.id) : []
+  const moderationLog = isMod ? (serverGovernanceLog ?? listModerationLog(community.id)) : []
+  const allReports = isMod ? (serverGovernanceReports ?? listCommunityReports(community.id)) : []
+  const openReports = allReports.filter((r) => r.status === "open" || r.status === "reviewing")
   const adminHealth = isMod
     ? buildAdminHealthAnalytics({
         communityId: community.id,
@@ -524,6 +571,7 @@ export function PremiumCommunityHub({
   })
 
   const requestJoin = () => {
+    if (community.membershipState === "pending" || community.membershipState === "invited") return
     if (!community.isJoined) {
       setShowJoinConfirm(true)
       setTab("about")
@@ -624,7 +672,7 @@ export function PremiumCommunityHub({
           <div className="absolute bottom-2 left-3 right-3">
             <h1 className="truncate text-base font-bold text-white drop-shadow">{community.name}</h1>
             <p className="flex flex-wrap items-center gap-x-2 text-[11px] text-white/90">
-              <span>{community.privacy === "public" ? "Public" : "Private"}</span>
+              <span>{community.privacy === "public" ? "Public" : community.privacy === "request" ? "Approval required" : community.privacy === "invite" ? "Invite only" : "Private"}</span>
               <span>·</span>
               <span>{community.memberCount} {community.memberCount === 1 ? "member" : "members"}</span>
               {community.region && (
@@ -665,6 +713,37 @@ export function PremiumCommunityHub({
                 {chatState.requestStatus === "pending" ? "Chat requested" : chatState.privacy === "approval" ? "Request chat access" : "Join chat"}
               </button>
             ) : null
+          ) : community.membershipState === "pending" ? (
+            <span className="rounded-full border border-amber-300/70 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100" role="status">
+              Join request pending
+            </span>
+          ) : community.membershipState === "invited" ? (
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                disabled={invitationBusy || !onAcceptInvitation}
+                onClick={async () => {
+                  if (invitationBusy || !onAcceptInvitation) return
+                  setInvitationBusy(true)
+                  try { await onAcceptInvitation() } finally { setInvitationBusy(false) }
+                }}
+                className="min-h-10 rounded-full bg-primary px-3 py-2 text-[11px] font-bold text-primary-foreground disabled:opacity-60"
+              >
+                {invitationBusy ? "Working…" : "Accept invite"}
+              </button>
+              <button
+                type="button"
+                disabled={invitationBusy || !onDeclineInvitation}
+                onClick={async () => {
+                  if (invitationBusy || !onDeclineInvitation) return
+                  setInvitationBusy(true)
+                  try { await onDeclineInvitation() } finally { setInvitationBusy(false) }
+                }}
+                className="min-h-10 rounded-full border border-border px-3 py-2 text-[11px] font-semibold text-muted-foreground disabled:opacity-60"
+              >
+                Decline
+              </button>
+            </div>
           ) : (
             <button
               type="button"
@@ -710,7 +789,7 @@ export function PremiumCommunityHub({
                   else if ((community.chatUnread || 0) > 0 && effectiveCanChat) onOpenChat?.()
                   else setTab("chat")
                 }}
-                className="min-h-9 shrink-0 rounded-full bg-[var(--gh-green)] px-3 text-[10px] font-bold text-white"
+                className="min-h-11 shrink-0 rounded-full bg-[var(--gh-green)] px-3 text-[10px] font-bold text-white"
               >
                 {(community.boardUnread || 0) > 0 ? "Review board" : effectiveCanChat ? "Open chat" : "View chat"}
               </button>
@@ -758,7 +837,7 @@ export function PremiumCommunityHub({
                   }
                   setTab(t.id)
                 }}
-                className={`flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[12px] font-bold transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                className={`flex min-h-11 shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[12px] font-bold transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none motion-reduce:transform-none ${
                   selected
                     ? isChat
                       ? "bg-[var(--gh-green)] text-white shadow-sm shadow-emerald-700/20"
@@ -776,7 +855,7 @@ export function PremiumCommunityHub({
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-3 py-3 scrollbar-hide [touch-action:pan-y]">
+      <div role="region" aria-label={`${community.name} community content`} tabIndex={0} className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-3 py-3 scrollbar-hide focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40 [touch-action:pan-y]">
         {/* Join with eyes open */}
         {showJoinConfirm && !community.isJoined && (
           <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50/90 p-3 dark:border-amber-900 dark:bg-amber-950/40">
@@ -958,7 +1037,7 @@ export function PremiumCommunityHub({
                 <div className="mb-2 flex items-center justify-between">
                   <h2 className="text-xs font-bold text-foreground">Discussion</h2>
                   <div className="flex flex-wrap items-center justify-end gap-1">
-                    <button type="button" onClick={() => void refreshBoard()} disabled={boardRefreshing} className="inline-flex h-7 items-center gap-1 rounded-full border border-border px-2 text-[10px] font-semibold" aria-label="Refresh community board">
+                    <button type="button" onClick={() => void refreshBoard()} disabled={boardRefreshing} className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-full border border-border px-3 text-[10px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40" aria-label="Refresh community board">
                       <RefreshCw size={12} className={boardRefreshing ? "animate-spin" : ""} /> Refresh
                     </button>
                     {(["all", "mine"] as const).map((f) => (
@@ -980,7 +1059,7 @@ export function PremiumCommunityHub({
                 </div>
                 <div className="relative">
                   <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                  <input value={boardQuery} onChange={(e) => setBoardQuery(e.target.value)} placeholder="Search community posts…" className="w-full rounded-xl border border-border bg-background py-2 pl-9 pr-3 text-xs outline-none focus:border-emerald-400" aria-label="Search community posts" />
+                  <input value={boardQuery} onChange={(e) => setBoardQuery(e.target.value)} placeholder="Search community posts…" className="min-h-11 w-full rounded-xl border border-border bg-background py-2 pl-9 pr-3 text-xs outline-none focus:border-emerald-400 focus-visible:ring-2 focus-visible:ring-primary/40" aria-label="Search community posts" />
                 </div>
                 {canonicalBoardStatus === "loading" && renderedBoardPosts.length === 0 ? (
                   <p className="mt-3 rounded-xl border border-border bg-muted/30 px-3 py-4 text-center text-xs text-muted-foreground" role="status">Loading community posts…</p>
@@ -1777,7 +1856,7 @@ export function PremiumCommunityHub({
 
             <section className="rounded-2xl border border-border bg-card p-4" aria-label="Moderation log">
               <h3 className="text-xs font-bold text-foreground">Recent moderation log</h3>
-              <p className="mt-0.5 text-[10px] text-muted-foreground">{governanceDurabilityLabel()}</p>
+              <p className="mt-0.5 text-[10px] text-muted-foreground">{serverGovernanceLog !== null ? "Server-backed moderation history loaded" : governanceDurabilityLabel()}</p>
               {moderationLog.length === 0 ? (
                 <p className="mt-2 text-[12px] text-muted-foreground">No moderation actions yet.</p>
               ) : (
@@ -2089,7 +2168,7 @@ export function PremiumCommunityHub({
             {isMod ? (
               <section className="rounded-2xl border border-border bg-card p-4" aria-label="Moderation log">
                 <h2 className="text-xs font-bold text-foreground">Moderation log</h2>
-                <p className="mt-1 text-[10px] text-muted-foreground">{governanceDurabilityLabel()}</p>
+                <p className="mt-1 text-[10px] text-muted-foreground">{serverGovernanceLog !== null ? "Server-backed moderation history loaded" : governanceDurabilityLabel()}</p>
                 <p className="mt-0.5 text-[10px] text-muted-foreground">
                   Recent moderation actions for this community.
                 </p>

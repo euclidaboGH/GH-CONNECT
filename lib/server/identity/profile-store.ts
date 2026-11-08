@@ -412,6 +412,9 @@ export function serverProfileToClientPartial(
   rec: ServerProfileRecord
 ): Record<string, unknown> {
   const safePayload: Record<string, unknown> = { ...rec.profilePayload }
+  // Notification preferences are private account controls; never expose them
+  // through the public social-profile projection or generic profile response.
+  delete safePayload.notificationPreferences
   if (Object.prototype.hasOwnProperty.call(safePayload, "professional")) {
     safePayload.professional = sanitizeProfessionalIdentityPayload(safePayload.professional)
   }

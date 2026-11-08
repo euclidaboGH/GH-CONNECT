@@ -8,7 +8,7 @@
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser, verifyPiAccessToken } from "@/lib/server/economy/auth"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import { getByGhUserId, getByPiAppUid } from "@/lib/server/identity/pi-identity-store"
 import {
   verifyWalletConsentProof,
@@ -33,8 +33,8 @@ function reply(body: unknown, status = 200) {
 export async function GET(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return reply({ ok: false, error: "AUTH_REQUIRED" }, 401)
-  const limit = checkRateLimit(`wallet-auth-get:${auth.userId}`, 60, 60_000)
-  if (!limit.ok) return reply({ ok: false, error: "RATE_LIMITED" }, 429)
+  const limit = await checkDurableRateLimit(`wallet-auth-get:${auth.userId}`, 60, 60_000, { onUnavailable: "deny" })
+  if (!limit.ok) return reply({ ok: false, error: durableRateLimitCode(limit) }, durableRateLimitStatus(limit))
   const status = await getWalletAuthorization(auth.userId)
   if (!status.ok && status.error === "WALLET_AUTHORIZATION_UNAVAILABLE") {
     return reply({ ok: false, error: "WALLET_AUTHORIZATION_UNAVAILABLE" }, 503)
@@ -45,8 +45,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return reply({ ok: false, error: "AUTH_REQUIRED" }, 401)
-  const limit = checkRateLimit(`wallet-auth-grant:${auth.userId}`, 10, 60_000)
-  if (!limit.ok) return reply({ ok: false, error: "RATE_LIMITED" }, 429)
+  const limit = await checkDurableRateLimit(`wallet-auth-grant:${auth.userId}`, 10, 60_000, { onUnavailable: "deny" })
+  if (!limit.ok) return reply({ ok: false, error: durableRateLimitCode(limit) }, durableRateLimitStatus(limit))
 
   const parsedBody = await readBoundedJson(request, 8 * 1024)
   if (!parsedBody.ok) {
@@ -124,8 +124,8 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return reply({ ok: false, error: "AUTH_REQUIRED" }, 401)
-  const limit = checkRateLimit(`wallet-auth-revoke:${auth.userId}`, 10, 60_000)
-  if (!limit.ok) return reply({ ok: false, error: "RATE_LIMITED" }, 429)
+  const limit = await checkDurableRateLimit(`wallet-auth-revoke:${auth.userId}`, 10, 60_000, { onUnavailable: "deny" })
+  if (!limit.ok) return reply({ ok: false, error: durableRateLimitCode(limit) }, durableRateLimitStatus(limit))
 
   let reason = "user_revoked"
   const parsedBody = await readBoundedJson(request, 4 * 1024)

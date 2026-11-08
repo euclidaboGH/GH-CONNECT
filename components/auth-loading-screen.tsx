@@ -17,7 +17,7 @@ export function AuthLoadingScreen() {
       <div className="relative z-10 flex w-full max-w-sm flex-col items-center text-center">
         <div className="relative mb-6">
           <div className="absolute inset-0 scale-110 rounded-full bg-emerald-400/20 blur-3xl" />
-          <BrandLogo size="hero" priority className="relative drop-shadow-[0_0_40px_rgba(16,185,129,0.4)]" />
+          <BrandLogo onDark size="hero" priority className="relative drop-shadow-[0_0_40px_rgba(16,185,129,0.4)]" />
         </div>
 
         {hasError ? (

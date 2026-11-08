@@ -1,14 +1,26 @@
 import type { MarketplaceListing } from "@/lib/domains/marketplace-domain"
 import { getMarketplaceDomain, getCommunityDomain } from "@/lib/domains/compat"
 
-export function formatPrice(listing: MarketplaceListing): string {
-  const amount = Number(listing.price)
+function formatCurrencyAmount(amount: number, currency: string): string {
   if (!Number.isFinite(amount) || amount < 0) return "—"
-  const cur = (listing.currency || "GHC").trim().toUpperCase()
+  const cur = (currency || "GHC").trim().toUpperCase()
   const formatted = amount.toLocaleString(undefined, { maximumFractionDigits: 2 })
   if (cur === "GHC") return `₲ ${formatted}`
   if (cur === "PI" || cur === "Π") return `${formatted} π`
   return `${formatted} ${cur || "GHC"}`
+}
+
+export function formatPrice(listing: MarketplaceListing): string {
+  const variants = (listing.variants || []).filter((variant) => variant.active !== false && (variant.available ?? variant.stockOnHand) > 0 && Number.isFinite(variant.price) && variant.price >= 0)
+  if (variants.length) {
+    const prices = variants.map((variant) => variant.price)
+    const minimum = Math.min(...prices)
+    const maximum = Math.max(...prices)
+    const formatted = formatCurrencyAmount(minimum, variants[0].currency)
+    return maximum > minimum ? `From ${formatted}` : formatted
+  }
+  const amount = Number(listing.price)
+  return formatCurrencyAmount(amount, listing.currency || "GHC")
 }
 
 export function listedWhen(ts?: number): string {

@@ -13,13 +13,14 @@ import { emitSectionRefresh } from "@/lib/client/section-refresh"
 import { useSectionRefresh } from "@/hooks/use-section-refresh"
 import { useGHCFeed, useGHCShell, useGHCMessaging } from "@/contexts/ghc-context"
 import { IdentityService } from "@/lib/identity/identity-service"
+import { resolveAvatarUrl } from "@/lib/avatar"
 import { socialGetPost, socialRecordAttention } from "@/lib/social/client"
 import { shouldSendAttention } from "@/lib/social/attention-client"
 import { usePermissions } from "@/hooks/usePermissions"
 import { ShareSheet } from "./share-sheet"
 import type { ShareResult } from "@/lib/share-service"
 import { Bookmark, Plus, Search, Filter, Zap, Clock, TrendingUp, Users, MapPin, RefreshCw, MessageCircle, Send, X, UsersRound, Hash, Compass, Store } from "lucide-react"
-import { MOBILE_PAGE_SIZES, prefetchMediaFacades } from "@/lib/mobile-performance"
+import { MOBILE_PAGE_SIZES, prefetchMediaFacades, preferReducedData, setPreferReducedData } from "@/lib/mobile-performance"
 import { getBoundDomainServices } from "@/lib/domains/compat"
 import { GlobalSearchModal } from "./global-search"
 import { EmptyState } from "./empty-state"
@@ -49,6 +50,8 @@ import { PostErrorBoundary } from "@/lib/error-boundary"
 import { LazyImage } from "./lazy-image"
 import { RelationshipActions } from "./relationship-actions"
 import { FeedInterstitial, interstitialKindAt } from "./feed-interstitial"
+import { FilterSummary } from "./filtering/filter-summary"
+import { matchesFilterQuery } from "@/lib/filtering/filter-utils"
 
 const FEED_FILTERS: {
   value: FeedFilter
@@ -118,7 +121,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   const [activeFilter, setActiveFilter] = useState<FeedFilter>(() => {
     try {
       const v = window.localStorage.getItem("ghc.feedFilter")
-      if (v === "for-you" || v === "following" || v === "friends" || v === "communities" || v === "trending") return v
+      if (v === "for-you" || v === "following" || v === "friends" || v === "communities" || v === "trending" || v === "saved") return v
     } catch { /* */ }
     return "for-you"
   })
@@ -128,6 +131,20 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     try { return window.localStorage.getItem("ghc.feedFocusMode") === "1" } catch { return false }
   })
   const [showFeedControls, setShowFeedControls] = useState(false)
+  // Device-local data saver; browser/network constrained-data signals always take precedence.
+  const [reducedData, setReducedData] = useState(() => preferReducedData())
+
+  // Keep the selected feed lane stable across visits on this device. Saved is
+  // intentionally included: it is a first-class feed mode, not a transient tab.
+  useEffect(() => {
+    try { window.localStorage.setItem("ghc.feedFilter", activeFilter) } catch { /* storage may be unavailable */ }
+  }, [activeFilter])
+
+  const handleFeedFilterChange = useCallback((next: FeedFilter) => {
+    setActiveFilter(next)
+    setDisplayedPostsCount(MOBILE_PAGE_SIZES.feed)
+    if (containerRef.current) containerRef.current.scrollTo({ top: 0, behavior: "smooth" })
+  }, [])
   useEffect(() => {
     try {
       const lane = window.localStorage.getItem("ghc.feedLocationLane")
@@ -153,6 +170,9 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   const [feedBootstrapped, setFeedBootstrapped] = useState(false)
   const [initialFeedLoadSettled, setInitialFeedLoadSettled] = useState(false)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
+  // A ref closes the same-render gap before React commits isLoadingMore=true;
+  // IntersectionObserver and the manual button cannot start duplicate pages.
+  const loadMoreLockRef = useRef(false)
   const [hasMorePosts, setHasMorePosts] = useState(true)
   const [displayedPostsCount, setDisplayedPostsCount] = useState<number>(MOBILE_PAGE_SIZES.feed)
   const [likedPosts, setLikedPosts] = useState<string[]>([])
@@ -168,20 +188,46 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
 
   // Prefetch signed URLs for visible post media (idle, best-effort)
   useEffect(() => {
-    const list = rankedPosts.slice(0, 8).flatMap((item) => {
+    if (preferReducedData()) return
+    const list = rankedPosts.slice(0, 6).flatMap((item) => {
       const post = item.post
       const imgs = Array.isArray(post?.images) ? post.images : []
       const vid = typeof post?.video === "string" ? [post.video] : []
       return [...imgs, ...vid].filter((u): u is string => typeof u === "string")
     })
-    if (list.length) prefetchMediaFacades(list, 6)
-  }, [rankedPosts])
+    if (list.length) prefetchMediaFacades(list, 3)
+  }, [rankedPosts, reducedData])
   const [visibilityReasonPostId, setVisibilityReasonPostId] = useState<string | null>(null)
   const [selectedVisibilityReason, setSelectedVisibilityReason] = useState<{
     reason: string
     category: string
   } | null>(null)
-  const [notInterestedIds, setNotInterestedIds] = useState<string[]>([])
+  const feedPreferenceOwnerId = String(profile?.id || profile?.userId || "anonymous").trim() || "anonymous"
+  const feedPreferenceStorageKey = `ghc.not-interested-post-ids:${feedPreferenceOwnerId}`
+  const [notInterestedIds, setNotInterestedIds] = useState<string[]>(() => {
+    try {
+      const raw = typeof window !== "undefined" ? window.localStorage.getItem(feedPreferenceStorageKey) : null
+      const ids: unknown = raw ? JSON.parse(raw) : []
+      return Array.isArray(ids)
+        ? [...new Set(ids.filter((id): id is string => typeof id === "string").map((id) => id.trim()).filter(Boolean))].slice(-200)
+        : []
+    } catch { return [] }
+  })
+  const [notInterestedLoadedFor, setNotInterestedLoadedFor] = useState(feedPreferenceOwnerId)
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(feedPreferenceStorageKey)
+      const ids: unknown = raw ? JSON.parse(raw) : []
+      setNotInterestedIds(Array.isArray(ids)
+        ? [...new Set(ids.filter((id): id is string => typeof id === "string").map((id) => id.trim()).filter(Boolean))].slice(-200)
+        : [])
+    } catch { setNotInterestedIds([]) }
+    setNotInterestedLoadedFor(feedPreferenceOwnerId)
+  }, [feedPreferenceOwnerId, feedPreferenceStorageKey])
+  useEffect(() => {
+    if (notInterestedLoadedFor !== feedPreferenceOwnerId) return
+    try { window.localStorage.setItem(feedPreferenceStorageKey, JSON.stringify(notInterestedIds.slice(-200))) } catch { /* device storage may be unavailable */ }
+  }, [feedPreferenceOwnerId, feedPreferenceStorageKey, notInterestedIds, notInterestedLoadedFor])
   const [hiddenPostIds, setHiddenPostIds] = useState<string[]>([])
   useEffect(() => {
     try {
@@ -270,37 +316,28 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
 
 
   const loadMorePosts = useCallback(async () => {
-    if (isLoadingMore || !hasMorePosts) return
+    if (loadMoreLockRef.current || isLoadingMore || !hasMorePosts) return
     // Reveal already-hydrated posts locally before requesting another server page.
     if (displayedPostsCount < rankedPosts.length) {
       setDisplayedPostsCount((prev) => Math.min(rankedPosts.length, prev + MOBILE_PAGE_SIZES.feed))
       return
     }
 
-    const sorted = [...(posts || [])].sort((a, b) => {
-      const timeDelta = (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0)
-      return timeDelta || String(b.id).localeCompare(String(a.id))
-    })
-    const oldestPost = sorted.length ? sorted[sorted.length - 1] : null
-    const oldest = oldestPost ? Number(oldestPost.createdAt) || 0 : 0
-    if (!oldestPost?.id) {
-      // Initial feed hydration may not have completed when the sentinel first enters view.
-      // Keep pagination eligible until the first hydration attempt has settled.
-      if (posts.length === 0 && !feedBootstrapped) return
-      setHasMorePosts(false)
-      return
-    }
-    if (oldest <= 0 || typeof refreshFeed !== "function") {
+    if (typeof refreshFeed !== "function") {
       setHasMorePosts(false)
       return
     }
 
+    loadMoreLockRef.current = true
     try {
       setIsLoadingMore(true)
-      const page = await refreshFeed({ before: oldest, beforeId: String(oldestPost.id), append: true, limit: 20 })
+      // The provider supplies the last cursor issued by the canonical API.
+      // Do not derive a cursor from merged UI state: that state may contain
+      // optimistic, offline-only or locally reconciled posts.
+      const page = await refreshFeed({ append: true, limit: 20 })
       if (!page.ok) throw new Error(page.error || "Could not load older posts")
       const fetchedCount = Math.max(0, Number(page.appended) || 0)
-      if (fetchedCount === 0) {
+      if (fetchedCount === 0 || !page.nextCursor) {
         setHasMorePosts(false)
         return
       }
@@ -311,19 +348,23 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
       console.error("[Load More Error]", err)
       addToast("Failed to load more posts. Please try again.", "error")
     } finally {
+      loadMoreLockRef.current = false
       setIsLoadingMore(false)
     }
-  }, [addToast, displayedPostsCount, feedBootstrapped, hasMorePosts, isLoadingMore, posts, rankedPosts.length, refreshFeed])
+  }, [addToast, displayedPostsCount, hasMorePosts, isLoadingMore, rankedPosts.length, refreshFeed])
 
 
   useEffect(() => {
+    // Older embedded WebViews may not expose IntersectionObserver; the visible
+    // Load more control remains available as the deterministic fallback.
+    if (typeof IntersectionObserver === "undefined") return
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && !isLoadingMore) {
           loadMorePosts()
         }
       },
-      { threshold: 0.1 }
+      { root: containerRef.current, rootMargin: preferReducedData() ? "240px 0px" : "720px 0px", threshold: 0.01 }
     )
 
     if (observerTargetRef.current) {
@@ -331,7 +372,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     }
 
     return () => observer.disconnect()
-  }, [hasMorePosts, isLoadingMore, displayedPostsCount, loadMorePosts, rankedPosts.length])
+  }, [hasMorePosts, isLoadingMore, displayedPostsCount, loadMorePosts, rankedPosts.length, reducedData])
 
   // Rank posts based on filter
   useEffect(() => {
@@ -596,8 +637,10 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   }, [bookmarkedPostIds, addToast, savePost, unsavePost])
 
   const handleNotInterested = useCallback((postId: string) => {
-    setNotInterestedIds((prev) => [...prev, postId])
-    addToast("You won't see posts like this", "info")
+    const id = String(postId || "").trim()
+    if (!id) return
+    setNotInterestedIds((prev) => prev.includes(id) ? prev : [...prev, id].slice(-200))
+    addToast("This post was removed from your feed. Your preference is saved on this device.", "info")
   }, [addToast])
 
   const openComments = useCallback((postId: string) => {
@@ -699,19 +742,52 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
 
   // Search and filter posts
   const searchResults = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase()
+    const query = searchQuery.trim()
     if (!query) return rankedPosts
     return rankedPosts.filter((rp) => {
       const post = rp.post
-      return (
-        (post.content ?? "").toLowerCase().includes(query) ||
-        post.authorName.toLowerCase().includes(query) ||
-        (post.hashtags?.some((tag) => tag.toLowerCase().includes(query)) || false)
-      )
+      return matchesFilterQuery(query, post.content, post.authorName, post.hashtags?.join(" "))
     })
   }, [rankedPosts, searchQuery])
 
   const displayPosts = useMemo(() => searchResults.slice(0, displayedPostsCount), [searchResults, displayedPostsCount])
+  const discoveryTopics = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const { post } of rankedPosts.slice(0, 40)) {
+      const contentTags = extractHashtags(String(post.content || ""))
+      const suppliedTags = Array.isArray(post.hashtags) ? post.hashtags : []
+      for (const raw of [...contentTags, ...suppliedTags]) {
+        const tag = String(raw || "").replace(/^#/, "").trim().toLowerCase()
+        if (!/^[\p{L}\p{N}_]{2,32}$/u.test(tag)) continue
+        counts.set(tag, (counts.get(tag) || 0) + 1)
+      }
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, 8)
+      .map(([tag]) => tag)
+  }, [rankedPosts])
+  const discoveryCreators = useMemo(() => {
+    const seen = new Set<string>()
+    const ownId = String(profile?.id || profile?.userId || "")
+    return rankedPosts.flatMap(({ post }) => {
+      const id = String(post.authorId || "").trim()
+      const name = String(post.authorName || "").trim()
+      if (!id || !name || id === ownId || seen.has(id)) return []
+      seen.add(id)
+      return [{ id, name, photo: String(post.authorPhoto || "") }]
+    }).slice(0, 5)
+  }, [rankedPosts, profile?.id])
+  const discoveryCommunities = useMemo(() => {
+    const seen = new Set<string>()
+    return rankedPosts.flatMap(({ post }) => {
+      const id = String(post.communityId || "").trim()
+      const name = String(post.communityName || "").trim()
+      if (!id || !name || seen.has(id)) return []
+      seen.add(id)
+      return [{ id, name }]
+    }).slice(0, 4)
+  }, [rankedPosts])
   const hasRealPosts = useMemo(() => posts.some((post) => !seedPostIds.has(post.id)), [posts, seedPostIds])
 
   return (
@@ -756,8 +832,9 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                   type="button"
                   role="tab"
                   aria-selected={active}
+                  aria-pressed={active}
                   title={t(filter.label)}
-                  onClick={() => setActiveFilter(filter.value)}
+                  onClick={() => handleFeedFilterChange(filter.value)}
                   className={`relative inline-flex min-h-10 shrink-0 items-center gap-1.5 border-b-2 px-2.5 text-[12px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                     active
                       ? "border-[var(--gh-green)] text-foreground"
@@ -791,6 +868,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                 <div><p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{t("whatMattersNow")}</p><div className="flex flex-wrap gap-1">{([ ["balanced",t("balanced")], ["friendship",t("connections")], ["professional",t("professional")], ["dating",t("matching")] ] as const).map(([id,label]) => <button key={id} type="button" onClick={() => setIntentionBias(id)} className={`rounded-full px-2.5 py-1.5 text-[11px] font-bold ${intentionBias === id ? "bg-emerald-700 text-white" : "bg-muted text-muted-foreground"}`}>{label}</button>)}</div></div>
               </div>
               <label className="mt-3 flex cursor-pointer items-center justify-between gap-3 rounded-xl bg-muted/50 px-3 py-2"><span><span className="block text-xs font-bold text-foreground">{t("focusMode")}</span><span className="block text-[10px] text-muted-foreground">{t("focusModeHelp")}</span></span><input type="checkbox" checked={focusMode} onChange={(e) => setFocusMode(e.target.checked)} className="h-4 w-4 accent-emerald-700" /></label>
+              <label className="mt-2 flex cursor-pointer items-center justify-between gap-3 rounded-xl bg-muted/50 px-3 py-2"><span><span className="block text-xs font-bold text-foreground">Reduce data in Feed</span><span className="block text-[10px] leading-4 text-muted-foreground">Limit background media prefetch and load older posts closer to the end. Your device and network data-saver settings always take priority.</span></span><input type="checkbox" checked={reducedData} onChange={(e) => { const enabled = e.target.checked; setPreferReducedData(enabled); setReducedData(enabled || preferReducedData()) }} className="h-4 w-4 accent-emerald-700" /></label>
             </section>
           ) : null}
           {isSearchOpen ? (
@@ -803,6 +881,17 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
               className="mt-2 min-h-10 w-full rounded-xl border border-border/70 bg-card px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             />
           ) : null}
+          <FilterSummary
+            className="mt-2"
+            items={[
+              ...(locationLane !== "worldwide" ? [{ id: "location", label: `Location: ${locationLane === "city" ? "Nearby" : "Country"}`, onRemove: () => setLocationLane("worldwide") }] : []),
+              ...(intentionBias !== "balanced" ? [{ id: "intent", label: `Priority: ${intentionBias === "professional" ? "Professional" : intentionBias === "friendship" ? "Connections" : "Matching"}`, onRemove: () => setIntentionBias("balanced") }] : []),
+              ...(focusMode ? [{ id: "focus", label: "Focus mode", onRemove: () => setFocusMode(false) }] : []),
+              ...(searchQuery.trim() ? [{ id: "search", label: `Search: ${searchQuery.trim()}`, onRemove: () => setSearchQuery("") }] : []),
+            ]}
+            onClearAll={() => { setLocationLane("worldwide"); setIntentionBias("balanced"); setFocusMode(false); setSearchQuery("") }}
+            ariaLabel="Active feed filters"
+          />
           {feedStatusMsg ? <p className="mt-1 text-[10px] text-muted-foreground" role="status">{feedStatusMsg}</p> : null}
         </div>
 
@@ -902,6 +991,62 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                 }}
               />
             </div>
+            {discoveryTopics.length > 0 ? (
+              <section className="mx-1 mt-3 rounded-2xl border border-border/60 bg-card/80 px-3 py-3 sm:mx-2" aria-label="Topics in your feed">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-bold tracking-wide text-foreground">Explore conversations</p>
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">Topics appearing in posts you can currently see</p>
+                  </div>
+                  <Compass size={16} className="shrink-0 text-emerald-700 dark:text-emerald-400" aria-hidden="true" />
+                </div>
+                <div className="flex gap-2 overflow-x-auto pb-0.5 scrollbar-hide" role="group" aria-label="Explore feed topics">
+                  {discoveryTopics.map((topic) => (
+                    <button
+                      key={topic}
+                      type="button"
+                      onClick={() => { setSearchQuery(`#${topic}`); setIsSearchOpen(true); containerRef.current?.scrollTo({ top: 0, behavior: "smooth" }) }}
+                      className="inline-flex min-h-9 shrink-0 items-center rounded-full border border-emerald-700/15 bg-emerald-700/[0.06] px-3 text-[11px] font-semibold text-emerald-800 transition hover:bg-emerald-700/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-emerald-300"
+                    >#{topic}</button>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+            {(discoveryCreators.length > 0 || discoveryCommunities.length > 0) ? (
+              <section className="mx-1 mt-3 grid gap-2 sm:mx-2 sm:grid-cols-2" aria-label="People and communities in your feed">
+                {discoveryCreators.length > 0 ? (
+                  <div className="min-w-0 rounded-2xl border border-border/60 bg-card/80 p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <div><p className="text-[11px] font-bold text-foreground">People to explore</p><p className="text-[10px] text-muted-foreground">Creators already appearing in your feed</p></div>
+                      <Users size={15} className="text-emerald-700 dark:text-emerald-400" aria-hidden="true" />
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {discoveryCreators.map((creator) => (
+                        <button key={creator.id} type="button" onClick={() => { try { window.dispatchEvent(new CustomEvent("ghc:open-profile", { detail: { userId: creator.id } })) } catch { onProfile?.(); setTab("discover") } }} aria-label={`Explore ${creator.name}`} className="inline-flex min-h-9 max-w-full items-center gap-1.5 rounded-full border border-border/60 bg-muted/40 py-1 pl-1 pr-3 text-[11px] font-semibold text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                          <span className="h-7 w-7 shrink-0 overflow-hidden rounded-full bg-muted">{creator.photo ? <LazyImage src={resolveAvatarUrl(creator.photo, { seed: creator.id, size: 96 })} alt="" className="h-full w-full object-cover" /> : <span className="flex h-full items-center justify-center">{creator.name.slice(0,1).toUpperCase()}</span>}</span>
+                          <span className="truncate">{creator.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                {discoveryCommunities.length > 0 ? (
+                  <div className="min-w-0 rounded-2xl border border-border/60 bg-card/80 p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <div><p className="text-[11px] font-bold text-foreground">Communities in your feed</p><p className="text-[10px] text-muted-foreground">Spaces represented by visible posts</p></div>
+                      <UsersRound size={15} className="text-emerald-700 dark:text-emerald-400" aria-hidden="true" />
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {discoveryCommunities.map((community) => (
+                        <button key={community.id} type="button" onClick={() => setTab("communities")} className="inline-flex min-h-9 max-w-full items-center gap-1.5 rounded-full border border-border/60 bg-muted/40 px-3 text-[11px] font-semibold text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                          <Hash size={12} aria-hidden="true" /><span className="truncate">{community.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </section>
+            ) : null}
           </div>
           {!feedBootstrapped || !initialFeedLoadSettled ? (
             <FeedSkeleton />
@@ -1037,6 +1182,17 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
       </div>
 
       <CommentSheet post={posts.find((post) => post.id === commentingPostId) || routedPost} open={Boolean(commentingPostId)} onClose={() => setCommentingPostId(null)} />
+      {selectedVisibilityReason && visibilityReasonPostId ? (
+        <VisibilityReasonTooltip
+          reason={selectedVisibilityReason}
+          onClose={() => { setSelectedVisibilityReason(null); setVisibilityReasonPostId(null) }}
+          onSeeLess={() => {
+            handleNotInterested(visibilityReasonPostId)
+            setSelectedVisibilityReason(null)
+            setVisibilityReasonPostId(null)
+          }}
+        />
+      ) : null}
       <PostDetailSheet
         post={posts.find((post) => post.id === selectedPostId) || rankedPosts.find((item) => item.post.id === selectedPostId)?.post || routedPost}
         open={Boolean(selectedPostId)}

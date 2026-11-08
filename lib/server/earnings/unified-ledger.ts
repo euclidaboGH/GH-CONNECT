@@ -354,3 +354,41 @@ export function previewWithdrawalFeeAtomic(grossAtomic: number, feeBps = 300): {
   const safeFee = Math.min(fee, Math.max(0, gross - 1))
   return { grossAtomic: gross, feeAtomic: safeFee, netAtomic: gross - safeFee }
 }
+
+
+/** Releases the user's payout reservations that never reached the provider back to Available. */
+export type PiPayoutReservationExplanation = {
+  requestId: string
+  status: "reserved" | "processing" | "uncertain" | "released"
+  grossAtomic: number | string
+  reasonCode: string
+  reason: string
+  unlockCondition: string
+}
+
+export async function cancelUnstartedPayoutRequests(userId: string): Promise<{
+  ok: boolean
+  error?: string
+  released?: number
+  releasedAtomic?: number
+  items?: PiPayoutReservationExplanation[]
+  message?: string
+}> {
+  const result = await rpc<{
+    ok?: boolean
+    error?: string
+    released?: number
+    releasedAtomic?: number
+    items?: PiPayoutReservationExplanation[]
+    message?: string
+  }>("gh_pi_earnings_payout_cancel_unstarted", { p_user_id: String(userId || "").trim() })
+  if (!result) return { ok: false, error: "EARNINGS_LEDGER_UNAVAILABLE" }
+  if (result.ok !== true) return { ok: false, error: String(result.error || "CANCEL_FAILED") }
+  return {
+    ok: true,
+    released: Number(result.released || 0),
+    releasedAtomic: Number(result.releasedAtomic || 0),
+    items: Array.isArray(result.items) ? result.items : [],
+    message: typeof result.message === "string" ? result.message : undefined,
+  }
+}

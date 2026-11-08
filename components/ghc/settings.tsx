@@ -38,6 +38,7 @@ import { useRegionalContext } from "@/contexts/regional-context"
 import { getProductMessage } from "@/lib/i18n/product"
 import { hasPinConfigured, clearPin } from "@/lib/session-security"
 import { IdentityService } from "@/lib/identity/identity-service"
+import { loadNotificationPreferences, saveNotificationPreferences, serializeAccountNotificationPreferences, type NotificationPreferences, type NotificationCategory } from "@/lib/domains/notification-domain"
 import { THEME_PRESETS, type ThemeMode } from "@/lib/theme/themes"
 // Settings subsections are separate chunks so the initial Settings route does
 // not download security, compliance, Pi capability and passkey panels eagerly.
@@ -55,6 +56,7 @@ const PiStakingStatusNote = lazy(() => import("@/components/ghc/pi-supporter-bad
 import { APP_RELEASE_VERSION } from "@/lib/app-release"
 import { getPrivacyHealth } from "@/lib/privacy-health"
 import { matchSettingsSearch } from "@/lib/settings-search"
+import { clampDiscoveryRadiusKm, clampAgeRange } from "@/lib/settings-persistence"
 import { getDevicePerformanceProfile, preferReducedData, setPreferReducedData } from "@/lib/mobile-performance"
 import { getLocaleOptions, normalizeLanguagePreference, translate } from "@/lib/i18n"
 import { getShellMessage, getShellTranslationStatus } from "@/lib/i18n/shell"
@@ -195,11 +197,31 @@ export function SettingsScreen({
   initialSection?: SettingsSection
 }) {
   const { settings, updateSettings, logout, blockedUsers, unblockUser, candidates } = useGHC()
+  const [notificationIdentityId, setNotificationIdentityId] = useState(() => IdentityService.getCurrentUserId())
+  const [notificationPrefs, setNotificationPrefs] = useState<NotificationPreferences>(() => loadNotificationPreferences(notificationIdentityId))
+  const [browserPermission, setBrowserPermission] = useState<NotificationPermission | "unsupported">(() =>
+    typeof window !== "undefined" && "Notification" in window ? Notification.permission : "unsupported"
+  )
   const sessionLock = useSessionLock()
   const regional = useRegionalContext()
   const msg = (key: Parameters<typeof getProductMessage>[0]) => getProductMessage(key, regional.locale)
   const localeOptions = useMemo(() => getLocaleOptions(), [])
   const selectedLocale = normalizeLanguagePreference(settings.language)
+  useEffect(() => IdentityService.subscribe((identity) => setNotificationIdentityId(identity.userId)), [])
+  useEffect(() => {
+    setNotificationPrefs(loadNotificationPreferences(notificationIdentityId))
+    const refreshPermission = () => setBrowserPermission(
+      typeof window !== "undefined" && "Notification" in window ? Notification.permission : "unsupported"
+    )
+    refreshPermission()
+    const onVisible = () => { if (document.visibilityState === "visible") refreshPermission() }
+    window.addEventListener("focus", refreshPermission)
+    document.addEventListener("visibilitychange", onVisible)
+    return () => {
+      window.removeEventListener("focus", refreshPermission)
+      document.removeEventListener("visibilitychange", onVisible)
+    }
+  }, [notificationIdentityId])
   const [navStack, setNavStack] = useState<SettingsSection[]>(() =>
     initialSection && initialSection !== "main" ? ["main", initialSection] : ["main"],
   )
@@ -393,18 +415,23 @@ export function SettingsScreen({
     }
   }, [section, initialSection])
 
+  // Send narrow patches. Spreading the entire render-time settings snapshot here
+  // allowed two quick toggles to overwrite each other's newer values.
   const handleToggle = async (key: string, value: boolean) => {
-    await updateSettings({ ...settings, [key]: value })
+    await updateSettings({ [key]: value } as Partial<typeof settings>)
   }
 
   const handleSelect = async (key: string, value: string | string[] | number | boolean | null) => {
-    await updateSettings({ ...settings, [key]: value })
-    if (key === "language" && typeof value === "string") regional.setPreferredLocale(value)
+    let nextValue = value
+    if (key === "locationRadius" && typeof value === "number") nextValue = clampDiscoveryRadiusKm(value)
+    if (key === "ageMin" && typeof value === "number") nextValue = Math.min(80, Math.max(18, Math.min(Math.round(value), Number(settings.ageMax) || 80)))
+    if (key === "ageMax" && typeof value === "number") nextValue = Math.max(18, Math.min(80, Math.max(Math.round(value), Number(settings.ageMin) || 18)))
+    await updateSettings({ [key]: nextValue } as Partial<typeof settings>)
+    if (key === "language" && typeof nextValue === "string") regional.setPreferredLocale(nextValue)
   }
 
   const setThemeMode = async (mode: ThemeMode) => {
     await updateSettings({
-      ...settings,
       themeMode: mode,
       darkMode: mode === "dark" || (mode === "system" && typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches),
     })
@@ -413,10 +440,7 @@ export function SettingsScreen({
   const setThemePreset = async (id: string) => {
     const preset = THEME_PRESETS.find((t) => t.id === id)
     await updateSettings({
-      ...settings,
       themeId: id,
-      // Clear custom image when picking a built-in look (user can re-upload)
-      ...(id !== "custom" ? {} : {}),
       darkMode: settings.themeMode === "dark" || Boolean(preset?.prefersDark && settings.themeMode !== "light"),
     })
   }
@@ -427,7 +451,6 @@ export function SettingsScreen({
     try {
       const dataUrl = await compressForTheme(file)
       await updateSettings({
-        ...settings,
         themeCustomImage: dataUrl,
         themeId: settings.themeId || "gh-classic",
       })
@@ -1078,42 +1101,49 @@ export function SettingsScreen({
       title: string
       body: string
       defaultOn: boolean
+      categories: NotificationCategory[]
     }[] = [
       {
         key: "notifyMatches",
         title: "New matches",
         body: "When someone matches with you or accepts a connection.",
         defaultOn: true,
+        categories: ["matches", "connections"],
       },
       {
         key: "notifyMessages",
         title: "Messages & requests",
         body: "Direct messages, group mentions, and GHC requests.",
         defaultOn: true,
+        categories: ["messages", "mentions", "wallet"],
       },
       {
         key: "notifyRewards",
         title: "Rewards & claims",
         body: "Pending validation, claimable GHC, and streak reminders.",
         defaultOn: true,
+        categories: ["rewards"],
       },
       {
         key: "notifyMembership",
         title: "Membership & trial",
         body: "Trial ending, renewal, and plan changes.",
         defaultOn: true,
+        categories: ["premium"],
       },
       {
         key: "notifyProfileViews",
         title: "Profile views",
         body: "Occasional digests when people view your profile.",
         defaultOn: false,
+        categories: ["profile_views"],
       },
       {
         key: "notifyMarketing",
         title: "Tips & product updates",
         body: "Optional product news. Never sold to advertisers.",
         defaultOn: false,
+        categories: ["product_updates"],
       },
     ]
     return (
@@ -1132,7 +1162,7 @@ export function SettingsScreen({
         <div className="min-h-0 flex-1 overflow-y-auto p-5 pb-[var(--gh-screen-bottom-inset)] space-y-3">
           <section className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4 dark:border-emerald-900 dark:bg-emerald-950/30">
             <p className="text-[12px] leading-relaxed text-muted-foreground">
-              These control in-app and push categories. Your device must still allow notifications for GreenHaven. Delivery is best-effort when offline.
+              These control your in-app inbox and local browser alerts. Browser alerts require permission and an active app session. Remote push to offline devices is not yet configured.
             </p>
             <button
               type="button"
@@ -1143,8 +1173,8 @@ export function SettingsScreen({
                       new CustomEvent("ghc:toast", {
                         detail: {
                           message: ok
-                            ? "Browser notifications enabled"
-                            : "Browser notifications were not enabled",
+                            ? "Browser alerts enabled"
+                            : "Browser alerts were not enabled",
                           type: ok ? "success" : "info",
                         },
                       }),
@@ -1154,35 +1184,60 @@ export function SettingsScreen({
               }}
               className="mt-3 min-h-10 w-full rounded-xl border border-emerald-500/40 bg-white/80 text-xs font-bold text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-100"
             >
-              Enable browser alerts
+              {browserPermission === "granted" ? "Browser permission granted" : browserPermission === "denied" ? "Permission blocked — change it in browser site settings" : browserPermission === "unsupported" ? "Browser alerts unsupported here" : "Enable browser alerts"}
             </button>
+            <p className="mt-2 text-[11px] text-muted-foreground">In-app choices sync with your account when the server profile store is available. “This device” choices stay in this browser and do not change your other devices.</p>
           </section>
           <section className="rounded-[1.25rem] border border-border/50 bg-card divide-y divide-border/50 overflow-hidden shadow-[var(--gh-card-shadow)]">
             {toggles.map((t) => {
               const raw = settings[t.key]
-              const on = typeof raw === "boolean" ? raw : t.defaultOn
+              const categoryPrefs = t.categories.map((category) => notificationPrefs[category])
+              const inAppOn = categoryPrefs.length ? categoryPrefs.every((prefs) => Boolean(prefs.inApp)) : (typeof raw === "boolean" ? raw : t.defaultOn)
+              const browserOn = categoryPrefs.length ? categoryPrefs.every((prefs) => Boolean(prefs.push)) : false
+              const updateChannel = (channel: "inApp" | "push", enabled: boolean) => {
+                if (channel === "push" && enabled && browserPermission !== "granted") {
+                  void ensureBrowserNotificationPermission().then((ok) => {
+                    setBrowserPermission(typeof window !== "undefined" && "Notification" in window ? Notification.permission : "unsupported")
+                    if (!ok) return
+                    const next = { ...notificationPrefs }
+                    for (const category of t.categories) next[category] = { ...next[category], push: true }
+                    setNotificationPrefs(next)
+                    saveNotificationPreferences(next, notificationIdentityId)
+                  })
+                  return
+                }
+                const next = { ...notificationPrefs }
+                for (const category of t.categories) next[category] = { ...next[category], [channel]: enabled }
+                setNotificationPrefs(next)
+                saveNotificationPreferences(next, notificationIdentityId)
+                if (channel === "inApp") {
+                  void handleSelect(t.key as never, enabled as never)
+                  void fetch("/api/notifications/preferences", {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json", ...IdentityService.getAuthHeaders() },
+                    body: JSON.stringify({ preferences: serializeAccountNotificationPreferences(next) }),
+                  }).then(async (response) => {
+                    const body = await response.json().catch(() => null)
+                    if (!response.ok || body?.ok !== true || body?.durable !== true) {
+                      window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "In-app preference saved on this device; account sync is unavailable", type: "info" } }))
+                    }
+                  }).catch(() => window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "In-app preference saved locally; account sync will retry when online", type: "info" } })))
+                }
+              }
               return (
-                <div key={String(t.key)} className="flex items-center gap-3 px-4 py-3.5">
+                <div key={String(t.key)} className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center">
                   <div className="min-w-0 flex-1">
                     <p className="text-[14px] font-bold text-foreground">{t.title}</p>
                     <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground">{t.body}</p>
                   </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={on}
-                    aria-label={t.title}
-                    onClick={() => void handleSelect(t.key as never, (!on) as never)}
-                    className={`relative h-7 w-12 shrink-0 rounded-full transition ${
-                      on ? "bg-emerald-600" : "bg-muted"
-                    }`}
-                  >
-                    <span
-                      className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition ${
-                        on ? "left-5" : "left-0.5"
-                      }`}
-                    />
-                  </button>
+                  <div className="grid grid-cols-2 gap-3 sm:min-w-[250px]">
+                    <button type="button" role="switch" aria-checked={inAppOn} aria-label={`${t.title} in-app inbox`} onClick={() => updateChannel("inApp", !inAppOn)} className="flex min-h-11 items-center justify-between gap-2 rounded-xl border border-border/60 px-2.5 text-[11px] font-semibold">
+                      <span>In-app</span><span className={`relative h-6 w-10 rounded-full ${inAppOn ? "bg-emerald-600" : "bg-muted"}`}><span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow ${inAppOn ? "left-[18px]" : "left-0.5"}`} /></span>
+                    </button>
+                    <button type="button" role="switch" aria-checked={browserOn} aria-label={`${t.title} on this device`} onClick={() => updateChannel("push", !browserOn)} className="flex min-h-11 items-center justify-between gap-2 rounded-xl border border-border/60 px-2.5 text-[11px] font-semibold">
+                      <span>This device</span><span className={`relative h-6 w-10 rounded-full ${browserOn ? "bg-emerald-600" : "bg-muted"}`}><span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow ${browserOn ? "left-[18px]" : "left-0.5"}`} /></span>
+                    </button>
+                  </div>
                 </div>
               )
             })}
@@ -1516,6 +1571,16 @@ export function SettingsScreen({
     }))
     .filter((group) => group.items.length > 0)
   const settingsResultCount = filteredGroups.reduce((count, group) => count + group.items.length, 0)
+  const enabledNotificationCount = [settings.notifyMatches, settings.notifyMessages, settings.notifyRewards, settings.notifyMembership, settings.notifyProfileViews, settings.notifyMarketing]
+    .filter(Boolean).length
+  const activeTheme = THEME_PRESETS.find((preset) => preset.id === settings.themeId)?.name || "Custom appearance"
+  const privacyHealth = getPrivacyHealth(settings as any)
+  const overviewActions: Array<{ title: string; detail: string; icon: ReactNode; action: () => void }> = [
+    { title: "Privacy & safety", detail: privacyHealth.label, icon: <Shield size={18} />, action: () => goToSection("privacy") },
+    { title: "Notifications", detail: `${enabledNotificationCount} categories enabled`, icon: <Bell size={18} />, action: () => goToSection("notifications") },
+    { title: "Appearance", detail: activeTheme, icon: <Palette size={18} />, action: () => goToSection("appearance") },
+    { title: "Language & discovery", detail: selectedLocale, icon: <User size={18} />, action: () => goToSection("preferences") },
+  ]
 
   return (
     <div className="gh-world-settings flex h-full min-h-0 flex-col bg-background" role="region" aria-label={msg("settingsTitle")}>
@@ -1553,6 +1618,34 @@ export function SettingsScreen({
 
       <div className="min-h-0 flex-1 overflow-y-auto pb-[var(--gh-screen-bottom-inset)]">
         <div className="space-y-5 px-4 py-4">
+          {!settingsQuery.trim() ? (
+            <section aria-labelledby="settings-overview-title" className="space-y-3">
+              <div className="rounded-[1.5rem] border border-border/60 bg-gradient-to-br from-primary/10 via-card to-card p-4 shadow-[var(--gh-card-shadow)]">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary">Your control centre</p>
+                    <h3 id="settings-overview-title" className="mt-1 text-[18px] font-bold tracking-tight">Make GreenHaven work your way</h3>
+                    <p className="mt-1 max-w-[34rem] text-[12px] leading-relaxed text-muted-foreground">Manage account privacy, alerts, appearance and discovery preferences from one place. Sensitive account and payment decisions remain protected by their dedicated server checks.</p>
+                  </div>
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Shield size={21} /></span>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-semibold">
+                  <span className="rounded-full border border-border/70 bg-background/80 px-2.5 py-1">Privacy: {privacyHealth.label}</span>
+                  <span className="rounded-full border border-border/70 bg-background/80 px-2.5 py-1">{enabledNotificationCount}/6 alert categories</span>
+                  <span className="rounded-full border border-border/70 bg-background/80 px-2.5 py-1">{selectedLocale}</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {overviewActions.map((item) => (
+                  <button key={item.title} type="button" onClick={item.action} className="flex min-h-[76px] items-center gap-3 rounded-2xl border border-border/60 bg-card p-3 text-left transition hover:border-primary/40 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-muted text-foreground">{item.icon}</span>
+                    <span className="min-w-0"><span className="block text-[12px] font-bold">{item.title}</span><span className="mt-0.5 block truncate text-[10px] text-muted-foreground">{item.detail}</span></span>
+                    <ChevronRight size={15} className="ml-auto shrink-0 text-muted-foreground" />
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : null}
           <p id="settings-search-hint" className="text-[11px] text-muted-foreground" aria-live="polite">
             {settingsQuery.trim() ? `${settingsResultCount} matching setting${settingsResultCount === 1 ? "" : "s"}` : "Find account controls by feature or task."}
           </p>

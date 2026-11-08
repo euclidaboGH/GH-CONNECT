@@ -21,9 +21,17 @@ import {
 } from "@/lib/server/payments/pi-api"
 import { tryGrantMembershipFromCompletedIntent } from "@/lib/server/membership/entitlement-store"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
+
+const NO_STORE = { "Cache-Control": "private, no-store, max-age=0", Pragma: "no-cache" }
+function reply(body: unknown, init: ResponseInit = {}) {
+  const headers = new Headers(NO_STORE)
+  new Headers(init.headers).forEach((value, key) => headers.set(key, value))
+  return NextResponse.json(body, { ...init, headers })
+}
 
 async function settleVerifiedCreatorTip(intent: {
   id: string; userId: string; amount: number; currency: string; purpose: string;
@@ -76,10 +84,18 @@ async function settleVerifiedCreatorTip(intent: {
 export async function POST(request: Request) {
   try {
     const auth = await resolveAuthenticatedUser(request.headers)
+    if (!auth) return reply({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+    const completionLimit = await checkDurableRateLimit(`pi-payment-complete:${auth.userId}`, 20, 60_000, { onUnavailable: "deny" })
+    if (!completionLimit.ok) {
+      return reply(
+        { ok: false, error: durableRateLimitCode(completionLimit), retryAfterSec: completionLimit.retryAfterSec, retryable: true },
+        { status: durableRateLimitStatus(completionLimit), headers: { "Retry-After": String(completionLimit.retryAfterSec) } },
+      )
+    }
     const parsedBody = await readBoundedJson(request, 8 * 1024)
     if (!parsedBody.ok) {
       const tooLarge = parsedBody.error === "REQUEST_TOO_LARGE"
-      return NextResponse.json(
+      return reply(
         { ok: false, error: tooLarge ? "REQUEST_TOO_LARGE" : "INVALID_REQUEST_BODY" },
         { status: tooLarge ? 413 : 400, headers: { "Cache-Control": "no-store" } },
       )
@@ -90,29 +106,25 @@ export async function POST(request: Request) {
     const intentId = typeof body.intentId === "string" ? body.intentId.trim() : ""
 
     if (!paymentId) {
-      return NextResponse.json({ ok: false, error: "paymentId required" }, { status: 400 })
+      return reply({ ok: false, error: "paymentId required" }, { status: 400 })
     }
     if (!txid) {
-      return NextResponse.json({ ok: false, error: "txid required" }, { status: 400 })
+      return reply({ ok: false, error: "txid required" }, { status: 400 })
     }
     if (!getPiApiKey()) {
-      return NextResponse.json(
+      return reply(
         { ok: false, error: "PI_API_KEY is not configured on the server" },
         { status: 503 }
       )
     }
 
-    // Production-safe: never call Pi /complete without an authenticated owner + durable intent.
-    if (!auth) {
-      return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
-    }
-
+    // Production-safe: only authenticated owners with a durable intent may complete Pi payments.
     let intent = intentId
       ? (await loadPaymentIntent(intentId))
       : (await loadByProviderPaymentId(paymentId))
 
     if (!intent) {
-      return NextResponse.json(
+      return reply(
         {
           ok: false,
           error: "INTENT_REQUIRED",
@@ -123,7 +135,7 @@ export async function POST(request: Request) {
     }
 
     if (intent.userId !== auth.userId) {
-      return NextResponse.json({ ok: false, error: "FORBIDDEN" }, { status: 403 })
+      return reply({ ok: false, error: "FORBIDDEN" }, { status: 403 })
     }
 
     // Idempotent complete — still attempt membership grant (idempotent via purchaseRef)
@@ -162,7 +174,7 @@ export async function POST(request: Request) {
         }
       }
       if (intent.purpose === "membership" && !membershipGrant?.granted) {
-        return NextResponse.json({
+        return reply({
           ok: false, paymentCompleted: true, membershipActivationPending: true, retryable: true,
           error: membershipGrant?.error || "MEMBERSHIP_ACTIVATION_PENDING",
           message: "Pi payment is complete, but membership is not yet confirmed. Retry recovery; do not pay again.",
@@ -171,9 +183,9 @@ export async function POST(request: Request) {
       }
       const tipSettlement = await settleVerifiedCreatorTip(intent, paymentId, intent.txid || txid)
       if (tipSettlement.applicable && !tipSettlement.ok) {
-        return NextResponse.json({ ok: false, error: tipSettlement.error, paymentCompleted: true, settlementPending: true, retryable: true, paymentId }, { status: 503 })
+        return reply({ ok: false, error: tipSettlement.error, paymentCompleted: true, settlementPending: true, retryable: true, paymentId }, { status: 503 })
       }
-      return NextResponse.json({
+      return reply({
         ok: true,
         idempotent: true,
         intent,
@@ -186,7 +198,7 @@ export async function POST(request: Request) {
 
     if (intent) {
       const bound = await bindProviderPayment(intent.id, paymentId, auth?.userId)
-      if (!bound) return NextResponse.json({ ok: false, error: "PAYMENT_INTENT_BIND_UNAVAILABLE", retryable: true }, { status: 503 })
+      if (!bound) return reply({ ok: false, error: "PAYMENT_INTENT_BIND_UNAVAILABLE", retryable: true }, { status: 503 })
       const pending = await transitionIntent(intent.id, "COMPLETION_PENDING", {
         actor: auth.userId,
         detail: "Completion requested",
@@ -194,13 +206,13 @@ export async function POST(request: Request) {
         txid,
       })
       if (!pending || pending.status !== "COMPLETION_PENDING") {
-        return NextResponse.json({ ok: false, error: "PAYMENT_INTENT_DURABILITY_UNAVAILABLE", retryable: true }, { status: 503 })
+        return reply({ ok: false, error: "PAYMENT_INTENT_DURABILITY_UNAVAILABLE", retryable: true }, { status: 503 })
       }
       intent = pending
 
       const lookup = await piGetPayment(paymentId)
       if (!lookup.ok || !lookup.payment) {
-        return NextResponse.json({ ok: false, error: "PI_PAYMENT_LOOKUP_UNAVAILABLE", detail: lookup.error, retryable: true }, { status: 502 })
+        return reply({ ok: false, error: "PI_PAYMENT_LOOKUP_UNAVAILABLE", detail: lookup.error, retryable: true }, { status: 502 })
       }
       if (!amountsMatch(intent.amount, lookup.payment.amount)) {
         await transitionIntent(intent.id, "FAILED", {
@@ -208,7 +220,7 @@ export async function POST(request: Request) {
           detail: "Amount mismatch on complete",
           error: `expected ${intent.amount} got ${lookup.payment.amount}`,
         })
-        return NextResponse.json({ ok: false, error: "amount_mismatch" }, { status: 409 })
+        return reply({ ok: false, error: "amount_mismatch" }, { status: 409 })
       }
       if (intent.purpose === "creator_earning" && intent.metadata?.flow === "creator_tip") {
         const observedTxid = String(lookup.payment.transaction?.txid || "").trim()
@@ -216,7 +228,7 @@ export async function POST(request: Request) {
           (!lookup.payment.status?.transaction_verified && !lookup.payment.transaction?.verified) ||
           (observedTxid && observedTxid !== txid)
         ) {
-          return NextResponse.json({ ok: false, error: "PI_TIP_PAYMENT_NOT_VERIFIED", retryable: true }, { status: 409 })
+          return reply({ ok: false, error: "PI_TIP_PAYMENT_NOT_VERIFIED", retryable: true }, { status: 409 })
         }
       }
     }
@@ -232,7 +244,7 @@ export async function POST(request: Request) {
           txid,
         })
       }
-      return NextResponse.json(
+      return reply(
         {
           ok: false,
           error: "Pi complete failed",
@@ -252,7 +264,7 @@ export async function POST(request: Request) {
         txid,
       })
       if (!completedIntent || completedIntent.status !== "COMPLETED") {
-        return NextResponse.json({ ok: false, error: "PAYMENT_COMPLETED_RECONCILIATION_PENDING", paymentCompleted: true, settlementPending: true, retryable: true, paymentId }, { status: 503 })
+        return reply({ ok: false, error: "PAYMENT_COMPLETED_RECONCILIATION_PENDING", paymentCompleted: true, settlementPending: true, retryable: true, paymentId }, { status: 503 })
       }
       intent = completedIntent
     }
@@ -273,7 +285,7 @@ export async function POST(request: Request) {
     if (completedIntent) {
       const tipSettlement = await settleVerifiedCreatorTip(completedIntent, paymentId, completedIntent.txid || txid)
       if (tipSettlement.applicable && !tipSettlement.ok) {
-        return NextResponse.json({ ok: false, error: tipSettlement.error, paymentCompleted: true, settlementPending: true, retryable: true, paymentId }, { status: 503 })
+        return reply({ ok: false, error: tipSettlement.error, paymentCompleted: true, settlementPending: true, retryable: true, paymentId }, { status: 503 })
       }
     }
     const grantUserId = auth.userId
@@ -320,7 +332,7 @@ export async function POST(request: Request) {
 
     const membershipIntent = completedIntent || intent
     if (membershipIntent?.purpose === "membership" && !membershipGrant?.granted) {
-      return NextResponse.json({
+      return reply({
         ok: false, paymentCompleted: true, membershipActivationPending: true, retryable: true,
         error: membershipGrant?.error || "MEMBERSHIP_ACTIVATION_PENDING",
         message: "Pi payment is complete, but membership is not yet confirmed. Retry recovery; do not pay again.",
@@ -328,7 +340,7 @@ export async function POST(request: Request) {
       }, { status: 503, headers: { "Cache-Control": "no-store" } })
     }
 
-    return NextResponse.json({
+    return reply({
       ok: true,
       payment: done.payment,
       intent: completedIntent || (intent ? getPaymentIntent(intent.id) : null),
@@ -337,7 +349,7 @@ export async function POST(request: Request) {
       membership: membershipGrant,
     })
   } catch (err) {
-    return NextResponse.json(
+    return reply(
       { ok: false, error: err instanceof Error ? err.message : "Complete failed" },
       { status: 500 }
     )

@@ -48,6 +48,8 @@ import {
   submitConnectionFromPicker,
   userFacingConnectError,
 } from "@/lib/domains/adapters/connection-connect-flow"
+import { FilterSummary } from "./filtering/filter-summary"
+import { matchesFilterQuery } from "@/lib/filtering/filter-utils"
 
 const DISCOVERY_CATEGORIES: { id: DiscoveryCategory; label: ExperienceMessageKey }[] = [
   { id: "people", label: "people" }, { id: "friends", label: "friends" },
@@ -161,7 +163,7 @@ export function DiscoveryGridScreen() {
 
   const adapted = useMemo(() => {
     const rawAll = Array.isArray(ghc.candidates) ? (ghc.candidates as RawDiscoveryCandidate[]) : []
-    const filterIntents = selectedIntents.length ? selectedIntents : profileIntents
+    const filterIntents = selectedIntents
     const result = searchDiscoveryObjects(
       {
         category,
@@ -205,12 +207,9 @@ export function DiscoveryGridScreen() {
       if (!id || exclude.has(id) || isSameIdentity(id)) return false
       return true
     })
-    const q = query.trim().toLowerCase()
+    const q = query.trim()
     if (q) {
-      list = list.filter((c) => {
-        const blob = `${c.displayName} ${c.subtitle || ""}`.toLowerCase()
-        return blob.includes(q)
-      })
+      list = list.filter((c) => matchesFilterQuery(q, c.displayName, c.subtitle, c.reasons?.map((reason) => reason.label).join(" ")))
     }
     // Phase gap-fill: only filter by presence when server-backed flags exist on candidates
     const presenceKnown = list.some(
@@ -596,6 +595,18 @@ export function DiscoveryGridScreen() {
         {statusMsg || (loading ? "Loading discovery" : "")}
       </div>
 
+      <FilterSummary
+          className="mx-3 mt-2"
+          items={[
+            ...(query.trim() ? [{ id: "query", label: `Search: ${query.trim()}`, onRemove: () => setQuery("") }] : []),
+            ...(category !== "people" ? [{ id: "category", label: `Category: ${category}`, onRemove: () => setCategory("people") }] : []),
+            ...(selectedIntents.length ? [{ id: "intents", label: `Goals: ${selectedIntents.map((id) => String(id).replace(/_/g, " ")).join(", ")}`, onRemove: () => onIntentsChange([]) }] : []),
+            ...(onlineOnly && adapted.presenceKnown ? [{ id: "online", label: "Online only", onRemove: () => setOnlineOnly(false) }] : []),
+          ]}
+          onClearAll={() => { setQuery(""); setCategory("people"); onIntentsChange([]); setOnlineOnly(false) }}
+          ariaLabel="Active discovery filters"
+        />
+
       {isOffline ? (
         <div
           className="mx-3 mt-2 rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2.5 text-[12px] text-amber-950 shadow-sm dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
@@ -613,32 +624,6 @@ export function DiscoveryGridScreen() {
           selectedIntents={selectedIntents}
           onIntentsChange={(ids) => onIntentsChange(ids as ConnectionIntentId[])}
         />
-      ) : selectedIntents.length > 0 ? (
-        <div className="flex items-center gap-2 overflow-x-auto px-3 pb-1.5">
-          <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Intents
-          </p>
-          <div className="flex flex-wrap gap-1">
-            {selectedIntents.slice(0, 4).map((id) => (
-              <span
-                key={id}
-                className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary"
-              >
-                {String(id).replace(/_/g, " ")}
-              </span>
-            ))}
-            {selectedIntents.length > 4 ? (
-              <span className="text-[10px] text-muted-foreground">+{selectedIntents.length - 4}</span>
-            ) : null}
-          </div>
-          <button
-            type="button"
-            className="ml-auto shrink-0 text-[11px] font-semibold text-primary"
-            onClick={() => setFiltersOpen(true)}
-          >
-            Edit
-          </button>
-        </div>
       ) : null}
 
       <div

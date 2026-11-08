@@ -4,7 +4,7 @@ import assert from "node:assert/strict"
 
 const read = (path) => fs.readFileSync(path, "utf8")
 const comments = read("components/ghc/comment-sheet.tsx")
-const card = read("components/ghc/enhanced-post-card.tsx")
+const card = read("components/ghc/enhanced-post-card.tsx") + "\n" + read("components/ghc/post-action-bar.tsx")
 const pkg = JSON.parse(read("package.json"))
 const lock = JSON.parse(read("package-lock.json"))
 const checks = [

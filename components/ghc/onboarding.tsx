@@ -143,7 +143,7 @@ function BrandHeader({ showBack, onBack }: { showBack?: boolean; onBack?: () => 
             <ChevronLeft size={20} />
           </button>
         )}
-        <BrandLogo size="bar" className="object-left drop-shadow-[0_0_18px_rgba(16,185,129,0.35)]" />
+        <BrandLogo onDark size="bar" className="object-left drop-shadow-[0_0_18px_rgba(16,185,129,0.35)]" />
       </div>
     </div>
   )
@@ -394,11 +394,8 @@ export function Onboarding() {
         <div className="relative z-10 flex flex-col items-center">
           <div className="relative">
             <div className="absolute inset-0 scale-110 rounded-full bg-emerald-400/20 blur-3xl" />
-            <BrandLogo size="hero" priority className="relative drop-shadow-[0_0_40px_rgba(16,185,129,0.45)]" />
+            <BrandLogo onDark size="hero" priority className="relative drop-shadow-[0_0_40px_rgba(16,185,129,0.45)]" />
           </div>
-          <p className="mt-6 text-[11px] font-semibold uppercase tracking-[0.35em] text-emerald-300/80">
-            Connect · Share · Grow
-          </p>
           <div
             className="mt-8 h-8 w-8 animate-spin rounded-full border-2 border-emerald-500/20 border-t-emerald-400"
             role="status"
@@ -446,7 +443,7 @@ export function Onboarding() {
         <div className="relative z-10 flex flex-1 flex-col overflow-y-auto px-6 pb-8 pt-4">
           <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
             <div className="mb-4 flex items-center justify-between">
-              <BrandLogo size="bar" className="object-left opacity-90" />
+              <BrandLogo onDark size="bar" className="object-left opacity-90" />
               <button
                 type="button"
                 onClick={() => setPhase("flow")}

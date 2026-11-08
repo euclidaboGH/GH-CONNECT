@@ -11,7 +11,7 @@ const lock = JSON.parse(readFileSync(join(root, 'package-lock.json'), 'utf8'))
 const release = readFileSync(join(root, 'lib/app-release.ts'), 'utf8')
 const roadmap = readFileSync(join(root, 'docs/PRODUCT-ROADMAP.md'), 'utf8')
 const checks = [
-  ['History uses authenticated same-user GHC wallet endpoint', centre.includes('/api/economy/wallet/${encodeURIComponent(userId)}?limit=200') && route.includes('requireSameUser(auth, userId)')],
+  ['History uses authenticated same-user GHC wallet endpoint', centre.includes('/api/economy/wallet/${encodeURIComponent(userId)}?${params.toString()}') && centre.includes('params.set("from", historyFrom)') && centre.includes('params.set("to", historyTo)') && route.includes('requireSameUser(auth, userId)')],
   ['Ledger request is no-store and credentialed', centre.includes('credentials: "include"') && centre.includes('cache: "no-store"')],
   ['Ledger request has eight-second timeout and cancellation', centre.includes('window.setTimeout(() => controller.abort(), 8_000)') && centre.includes('signal: controller.signal') && centre.includes('controller.abort()')],
   ['Previous account ledger data is cleared before hydration', centre.includes('setServerRewardTransactions(null)')],
@@ -20,7 +20,7 @@ const checks = [
   ['Transaction identity is checked against active account', centre.includes('rowUserId !== userId')],
   ['Transaction status is allow-listed', centre.includes('["pending", "posted", "reversed", "expired", "failed"]')],
   ['History is newest-first', centre.includes('.sort((a, b) => b.createdAt - a.createdAt)')],
-  ['History provides text search and status filters', centre.includes('historyQuery') && centre.includes('historyStatus') && centre.includes('aria-pressed={historyStatus === value}')],
+  ['History provides text, status and inclusive date filters', centre.includes('historyQuery') && centre.includes('historyStatus') && centre.includes('historyFrom') && centre.includes('historyTo') && centre.includes('aria-pressed={historyStatus === value}')],
   ['Server ledger and local supplemental history are distinguished', centre.includes('Server ledger entries are authoritative') && centre.includes('supplemental activity')],
   ['Prior account achievement data is cleared on identity change', centre.includes('setServerAchievements([])')],
   ['Only durable server achievements are presented as unlocked', centre.includes('r.durable === true') && centre.includes('const achievements = serverAchievements.filter') && !centre.includes('services?.achievements?.getUnlockedForProfile?.()')],
@@ -30,7 +30,7 @@ const checks = [
   ['Release metadata and lockfile synchronized', Boolean(pkg.version) && lock.version === pkg.version && lock.packages?.['']?.version === pkg.version && release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],
   ['History contract registered once in prebuild and static verification', (pkg.scripts.prebuild.match(/check-phase8-rewards-history\.mjs/g) || []).length === 1 && (pkg.scripts['verify:static'].match(/check-phase8-rewards-history\.mjs/g) || []).length === 1],
   ['Rewards source release gate registered once in prebuild and static verification', (pkg.scripts.prebuild.match(/check-phase8-rewards-release-gate\.mjs/g) || []).length === 1 && (pkg.scripts['verify:static'].match(/check-phase8-rewards-release-gate\.mjs/g) || []).length === 1],
-  ['Roadmap records Phase 8 source closure and gated external acceptance', roadmap.includes('0.323.0') && roadmap.includes('mission')],
+  ['Roadmap records Priority 3 Rewards source foundation and gated external acceptance', roadmap.includes('| 3 | **Rewards** |') && roadmap.includes('0.323.0') && roadmap.includes('mission')],
 ]
 let failed = 0
 for (const [label, ok] of checks) { console.log(`${ok ? 'PASS' : 'FAIL'} ${label}`); if (!ok) failed++ }

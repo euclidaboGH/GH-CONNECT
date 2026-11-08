@@ -399,6 +399,17 @@ export async function tryGrantMembershipFromCompletedIntent(input: {
     return { granted: false, error: "PRODUCT_MISMATCH", skipped: true }
   }
 
+  // Refuse a paid downgrade before the durable renewal writer. The UI and
+  // activation route also gate this path, but payment-completion hooks must
+  // enforce the same tier ordering independently of browser behavior.
+  const current = await tryGetEntitlementAuthoritative(userId)
+  if (!current.ok) return { granted: false, error: "MEMBERSHIP_STORE_UNAVAILABLE" }
+  const currentActive = current.entitlement.tier !== "free" && current.entitlement.active === true &&
+    (!current.entitlement.expiresAt || current.entitlement.expiresAt > Date.now())
+  if (currentActive && current.entitlement.tier === "vvip" && tier === "vip") {
+    return { granted: false, error: "MEMBERSHIP_DOWNGRADE_NOT_ALLOWED" }
+  }
+
   const catalog = MEMBERSHIP_SERVER_CATALOG[tier]
   const expectedPi = period === "yearly" ? catalog.yearlyPi : period === "eight_months" ? catalog.eightMonthsPi : period === "four_months" ? catalog.fourMonthsPi : catalog.monthlyPi
   if (Math.abs(Number(intent.amount) - expectedPi) > 0.001) {

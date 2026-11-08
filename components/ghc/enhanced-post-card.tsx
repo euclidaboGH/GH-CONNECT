@@ -1,4 +1,5 @@
 "use client"
+import { PostActionBar } from "./post-action-bar"
 import { toClientSafeErrorMessage } from "@/lib/client/safe-api-error"
 
 import { DurableImage } from "./durable-image"
@@ -478,7 +479,7 @@ function EnhancedPostCardInner({
   return (
     <div
       ref={containerRef}
-      data-post-id={post.id} role="article" tabIndex={onOpenPost ? 0 : undefined} aria-busy={curationBusy || undefined} aria-label={post.authorName ? `Post by ${displayAuthor}` : "Post"} className="gh-post-card gh-card-interactive max-w-full cursor-pointer overflow-x-hidden overflow-hidden rounded-[1.25rem] border border-border/50 bg-card text-card-foreground shadow-[var(--gh-card-shadow)] focus-visible:outline-none"
+      data-post-id={post.id} data-sentiment={(() => { const t = upvoteCount + downvoteCount; if (t < 5) return "none"; const r = upvoteCount / t; return r >= 0.7 ? "positive" : r <= 0.35 ? "critical" : "mixed" })()} role="article" tabIndex={onOpenPost ? 0 : undefined} aria-busy={curationBusy || undefined} aria-label={post.authorName ? `Post by ${displayAuthor}` : "Post"} className="gh-post-card gh-card-interactive max-w-full cursor-pointer overflow-x-hidden overflow-hidden rounded-[1.25rem] border border-border/50 bg-card text-card-foreground shadow-[var(--gh-card-shadow)] focus-visible:outline-none"
       onClick={(event) => {
         const target = event.target as HTMLElement | null
         if (target?.closest("button, a, input, textarea, select, video, [role=button], [data-post-no-open]")) return
@@ -495,7 +496,7 @@ function EnhancedPostCardInner({
       {/* Header */}
       <div className="flex items-center justify-between px-3 pb-2 pt-3 sm:px-4 sm:pt-4">
         <div className="flex flex-1 items-center gap-2.5">
-          <button type="button" onClick={() => onOpenProfile?.(post.authorId)} className="relative rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label={`Open ${displayAuthor}'s profile`}>
+          <button type="button" onClick={() => onOpenProfile?.(post.authorId)} className={`relative rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${(post as Post & { authorVerified?: boolean }).authorVerified ? "gh-avatar-halo" : ""}`} aria-label={`Open ${displayAuthor}'s profile`}>
             <LazyImage
               src={resolveAvatarUrl(post.authorPhoto, { seed: post.authorId || post.authorName || "member", size: 96 })}
               alt={displayAuthor}
@@ -560,7 +561,7 @@ function EnhancedPostCardInner({
               if (!showMenu) closeAllActionSheets()
               setShowMenu(!showMenu)
             }}
-            className="flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground active:scale-90"
+            className="flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-90"
             aria-label="Post options"
             aria-expanded={showMenu}
           >
@@ -959,151 +960,52 @@ function EnhancedPostCardInner({
       ) : null}
 
       {showReactions && (
-        <div className="mx-3 mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-2 shadow-lg" role="group" aria-label={curationReactionKind === "positive" ? "Positive curation reactions" : "Negative curation reactions"}>
+        <div className="gh-pab-tray mx-3 mb-2 flex flex-wrap items-center gap-2 rounded-full border border-border/60 bg-card/80 px-3 py-2 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.35)]" role="group" aria-label={curationReactionKind === "positive" ? "Positive curation reactions" : "Negative curation reactions"}>
           <span className="px-1 text-xs font-semibold text-muted-foreground">{curationReactionKind === "positive" ? "Positive reaction" : "Negative reaction"}</span>
           {REACTIONS.filter((reaction) => curationReactionKind === "positive" ? reaction.type !== "sad" && reaction.type !== "like" : reaction.type === "sad").map((reaction) => (
-            <button key={reaction.type} type="button" onClick={() => handleQuickReaction(reaction)} className="flex h-8 min-w-8 items-center justify-center rounded-full bg-muted px-1.5 text-base hover:bg-muted/70" title={reaction.label} aria-label={reaction.label}>{reaction.emoji}</button>
+            <button key={reaction.type} type="button" onClick={() => handleQuickReaction(reaction)} className="flex h-10 min-w-10 items-center justify-center rounded-full bg-muted/70 px-1.5 text-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500" title={reaction.label} aria-label={reaction.label}>{reaction.emoji}</button>
           ))}
-          <button type="button" onClick={() => setShowReactions(false)} className="ml-auto rounded-full px-2 py-1 text-xs text-muted-foreground">Cancel</button>
+          <button type="button" onClick={() => setShowReactions(false)} className="ml-auto min-h-9 rounded-full px-3 text-xs font-semibold text-muted-foreground hover:bg-muted">Cancel</button>
         </div>
       )}
 
-      {/* Primary actions — quality (left) and social (right), never overlapping */}
-      <div className="gh-post-action-context flex items-center gap-2 border-t border-border/35 px-3 pt-2 sm:px-4">
-        <p className="text-[10px] font-semibold text-muted-foreground">Post actions</p>
-        <span className="text-[10px] text-muted-foreground">Votes are quality signals, not GHC issuance</span>
-      </div>
-      <div
-        className="px-2 pb-2.5 pt-1 sm:px-3"
-        role="toolbar"
-        aria-label="Community curation and engagement"
-      >
-        <div className="flex w-full min-w-0 items-center gap-1 overflow-x-auto scrollbar-hide" role="group" aria-label="Community curation and engagement">
-          <div className="flex min-w-0 shrink-0 items-center gap-1" role="group" aria-label="Quality votes">
-            <span className="sr-only">Your vote helps surface useful contributions</span>
-            <label
-              className="flex shrink-0 items-center gap-1 text-[10px] leading-none text-muted-foreground"
-              title="Choose how strongly this vote contributes to curation. Voting does not create GHC."
-            >
-              <span className="sr-only sm:not-sr-only sm:inline">Quality</span>
-              <select
-                aria-label="Curation vote weight percentage; does not issue GHC"
-                value={rewardPercentage}
-                disabled={curationBusy}
-                onChange={(e) => setRewardPercentage(Number(e.target.value))}
-                className="h-9 max-w-[3.25rem] rounded-full border border-border/70 bg-background px-1.5 text-[10px] font-semibold text-foreground outline-none focus:ring-2 focus:ring-emerald-500/30 sm:max-w-[4rem] sm:text-xs"
-              >
-                <option value={0}>0%</option>
-                <option value={25}>25%</option>
-                <option value={50}>50%</option>
-                <option value={75}>75%</option>
-                <option value={100}>100%</option>
-              </select>
-            </label>
-            <button
-              type="button"
-              disabled={curationBusy}
-              aria-label={curationChoice === "upvote" ? "Change vote to upvote" : "Upvote this post"}
-              aria-pressed={curationChoice === "upvote"}
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                if (curationRosterLongPressRef.current) {
-                  curationRosterLongPressRef.current = false
-                  return
-                }
-                setShowReactions(false)
-                void handleCuration("upvote")
-              }}
-              onPointerDown={(e) => { if (e.button === 0) startCurationRosterLongPress("upvotes") }}
-              onPointerUp={() => endCurationRosterLongPress()}
-              onPointerCancel={() => endCurationRosterLongPress(true)}
-              onPointerLeave={() => endCurationRosterLongPress(true)}
-              onContextMenu={(e) => { e.preventDefault(); openRoster("upvotes") }}
-              title="Upvote this post. Your vote is saved only after server confirmation. Long press or right-click to view voters."
-              className={`inline-flex h-11 min-h-11 shrink-0 items-center gap-1 rounded-full px-2 text-[11px] font-bold transition active:scale-[0.97] sm:px-3.5 sm:text-sm ${
-                curationChoice === "upvote"
-                  ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300/80 dark:bg-emerald-900/45 dark:text-emerald-300"
-                  : "bg-emerald-50/80 text-emerald-700/90 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400"
-              }`}
-            >
-                <ThumbsUp size={16} strokeWidth={2.25} aria-hidden className="sm:h-[18px] sm:w-[18px]" />
-              <span className="tabular-nums">{upvoteCount}</span>
-            </button>
-            <button
-              type="button"
-              disabled={curationBusy}
-              aria-label={curationChoice === "downvote" ? "Change vote to downvote" : "Downvote this post"}
-              aria-pressed={curationChoice === "downvote"}
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                if (curationRosterLongPressRef.current) {
-                  curationRosterLongPressRef.current = false
-                  return
-                }
-                setShowReactions(false)
-                void handleCuration("downvote")
-              }}
-              onPointerDown={(e) => { if (e.button === 0) startCurationRosterLongPress("downvotes") }}
-              onPointerUp={() => endCurationRosterLongPress()}
-              onPointerCancel={() => endCurationRosterLongPress(true)}
-              onPointerLeave={() => endCurationRosterLongPress(true)}
-              onContextMenu={(e) => { e.preventDefault(); openRoster("downvotes") }}
-              title="Downvote this post. Your vote is saved only after server confirmation. Long press or right-click to view voters."
-              className={`inline-flex h-11 min-h-11 shrink-0 items-center gap-1 rounded-full px-2 text-[11px] font-bold transition active:scale-[0.97] sm:px-3.5 sm:text-sm ${
-                curationChoice === "downvote"
-                  ? "bg-rose-100 text-rose-700 ring-1 ring-rose-300/80 dark:bg-rose-900/45 dark:text-rose-300"
-                  : "bg-rose-50/70 text-rose-600/90 hover:bg-rose-100 dark:bg-rose-950/30 dark:text-rose-400"
-              }`}
-            >
-              <ThumbsDown size={16} strokeWidth={2.25} aria-hidden className="sm:h-[18px] sm:w-[18px]" />
-              <span className="tabular-nums">{downvoteCount}</span>
-            </button>
-          </div>
-          <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1" role="group" aria-label="Respond">
-          <button
-            type="button"
-            aria-label="Comment"
-            onClick={() => onComment(post.id)}
-            className="inline-flex h-11 min-h-11 min-w-11 shrink-0 items-center justify-center gap-1 rounded-full text-muted-foreground transition hover:bg-muted active:scale-95"
-          >
-            <MessageCircle size={18} aria-hidden className="sm:h-5 sm:w-5" />
-            <span className="tabular-nums text-[11px] font-semibold sm:text-xs">
-              {visibleCommentCount}
-            </span>
-          </button>
-          <button
-            type="button"
-            aria-label={isSaved ? "Unsave" : "Save"}
-            aria-pressed={isSaved}
-            onClick={() => {
-              onSave(post.id)
-              try {
-                window.dispatchEvent(new CustomEvent("ghc:toast", {
-                  detail: { message: isSaved ? "Removed from saved" : "Post saved", type: "success" },
-                }))
-              } catch { /* */ }
-            }}
-            className={`inline-flex h-11 min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full transition active:scale-95 ${
-              isSaved
-                ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
-                : "text-muted-foreground hover:bg-muted"
-            }`}
-          >
-            <Bookmark size={18} fill={isSaved ? "currentColor" : "none"} aria-hidden className="sm:h-5 sm:w-5" />
-          </button>
-          <button
-            type="button"
-            aria-label="Share"
-            onClick={() => onShare(post.id)}
-            className="inline-flex h-11 min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted active:scale-95"
-          >
-            <Share2 size={18} aria-hidden className="sm:h-5 sm:w-5" />
-          </button>
-          </div>
-        </div>
-      </div>
+      {/* Primary actions — see post-action-bar.tsx */}
+      <div className="border-t border-border/35" />
+      <PostActionBar
+        choice={curationChoice}
+        busy={curationBusy}
+        upCount={upvoteCount}
+        downCount={downvoteCount}
+        weight={rewardPercentage}
+        onWeight={setRewardPercentage}
+        onVote={(c) => {
+          if (curationRosterLongPressRef.current) {
+            curationRosterLongPressRef.current = false
+            return
+          }
+          setShowReactions(false)
+          void handleCuration(c)
+        }}
+        pressProps={(kind) => ({
+          onPointerDown: (e) => { if (e.button === 0) startCurationRosterLongPress(kind) },
+          onPointerUp: () => endCurationRosterLongPress(),
+          onPointerCancel: () => endCurationRosterLongPress(true),
+          onPointerLeave: () => endCurationRosterLongPress(true),
+          onContextMenu: (e) => { e.preventDefault(); openRoster(kind) },
+        })}
+        commentCount={visibleCommentCount}
+        isSaved={isSaved}
+        onComment={() => onComment(post.id)}
+        onSave={() => {
+          onSave(post.id)
+          try {
+            window.dispatchEvent(new CustomEvent("ghc:toast", {
+              detail: { message: isSaved ? "Removed from saved" : "Post saved", type: "success" },
+            }))
+          } catch { /* */ }
+        }}
+        onShare={() => onShare(post.id)}
+      />
 
       {/* Public reward / quality strip — GHC amounts only when server-enabled */}
       <PostRewardPanel
@@ -1212,32 +1114,82 @@ export function ContributionHint({ post }: { post: Post }) {
 export function VisibilityReasonTooltip({
   reason,
   onClose,
+  onSeeLess,
 }: {
   reason: { reason: string; category: string }
   onClose: () => void
+  onSeeLess: () => void
 }) {
+  const dialogRef = useRef<HTMLElement | null>(null)
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+  useEffect(() => {
+    const previousActiveElement = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const dialog = dialogRef.current
+    const getFocusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ) || [])
+    getFocusable()[0]?.focus()
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onCloseRef.current()
+        return
+      }
+      if (event.key !== "Tab") return
+      const focusable = getFocusable()
+      if (!focusable.length) {
+        event.preventDefault()
+        return
+      }
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => {
+      window.removeEventListener("keydown", onKeyDown)
+      previousActiveElement?.focus()
+    }
+  }, [])
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-end z-50">
-      <div className="w-full bg-white rounded-t-2xl p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="font-bold text-foreground">Why am I seeing this?</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground/90">
+    <div
+      className="fixed inset-0 z-[220] flex items-end bg-black/50 p-0 sm:items-center sm:justify-center sm:p-4"
+      role="presentation"
+      onClick={onClose}
+    >
+      <section
+        className="w-full max-w-md space-y-4 rounded-t-3xl border border-border bg-card p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl sm:rounded-3xl sm:pb-5"
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="feed-visibility-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-300">Feed transparency</p>
+            <h3 id="feed-visibility-title" className="mt-1 text-base font-bold text-foreground">Why am I seeing this?</h3>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close explanation" className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
             <X size={20} />
           </button>
         </div>
-
-        <div className="space-y-2">
-          <p className="text-sm text-foreground/90">{reason.reason}</p>
-          <div className="flex gap-2">
-            <button className="flex-1 rounded-xl bg-muted px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted/80">
-              See less like this
-            </button>
-            <button className="flex-1 py-2 px-3 bg-blue-100 rounded-lg text-sm font-semibold text-blue-700 hover:bg-blue-200">
-              Learn more
-            </button>
-          </div>
+        <p className="text-sm leading-6 text-foreground/90">{reason.reason}</p>
+        <p className="text-xs leading-5 text-muted-foreground">GreenHaven uses the posts available to your account and signals such as your connections, interests and conversations to order this feed. This explanation describes a relevance signal; it does not change who can view the post.</p>
+        <div className="flex flex-col-reverse gap-2 sm:flex-row">
+          <button type="button" onClick={onClose} className="min-h-11 flex-1 rounded-xl border border-border bg-card px-4 text-sm font-semibold text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">Keep showing me this</button>
+          <button type="button" onClick={onSeeLess} className="min-h-11 flex-1 rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white hover:bg-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">See fewer like this</button>
         </div>
-      </div>
+        <p className="text-[10px] leading-4 text-muted-foreground">Your “see fewer” choice is stored on this device and can be cleared by clearing this device’s site data.</p>
+      </section>
     </div>
   )
 }

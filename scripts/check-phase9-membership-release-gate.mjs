@@ -28,7 +28,7 @@ const checks = [
   ['GHC and Pi remain separate payment rails', /GHC and Pi remain separate rails and ledgers/i.test(worklog) && /GHC and Pi pricing\/settlement authorities remain separate/i.test(truth)],
   ['72-hour grace is continuity-only and does not grant access', /not\*\* preserve premium access/i.test(phase) && /no grace access/i.test(phase)],
   ['Production acceptance remains explicitly pending', /not production approval/i.test(phase) && /production approval remains pending/i.test(truth)],
-  ['Phase 9 source is complete with acceptance open; Phase 10 is active', roadmap.includes('| 9 | Membership | Source implementation complete') && roadmap.includes(`| 10 | Settings and platform performance | Active: ${pkg.version}`)],
+  ['Membership source is complete with acceptance open; Feed and Wallet occupy priorities 1 and 2', roadmap.includes('| 4 | **Membership** |') && roadmap.includes('| 1 | **Feed** |') && roadmap.includes('Source implementation completed in 0.330.19;') && roadmap.includes('| 2 | **Wallet** |') && roadmap.includes('Source implementation completed in 0.330.20;')],
 ]
 let failed = 0
 for (const [label, ok] of checks) { console.log(`${ok ? 'PASS' : 'FAIL'} ${label}`); if (!ok) failed++ }

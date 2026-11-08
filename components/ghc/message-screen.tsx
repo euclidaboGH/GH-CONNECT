@@ -27,11 +27,13 @@ import { navigateTo } from "@/lib/navigation/navigate"
 import { isDurableMessagingEnabled } from "@/lib/messaging/durable-flag"
 import { apiTouchConversationPresence, apiEnsureConversationMember } from "@/lib/messaging/server-messaging-sync"
 import { buildRelationshipOutcome } from "@/lib/relationship-outcomes"
+import { FilterSummary } from "./filtering/filter-summary"
+import { matchesFilterQuery } from "@/lib/filtering/filter-utils"
 
 const MESSAGE_WINDOW = 40
 const WINDOW_STEP = 24
 
-type InboxFilter = "all" | "dms" | "unread" | "requests" | "communities"
+type InboxFilter = "all" | "dms" | "unread" | "requests" | "communities" | "archived"
 type PeerPresence = { userId: string; online: boolean; lastSeenAt: number | null; isTyping: boolean }
 
 function formatLastSeen(lastSeenAt: number | null | undefined): string {
@@ -78,17 +80,17 @@ export function MessageScreen() {
     following?: Array<Record<string, unknown> | string>
   }
   const ghc = {
-    pinConversation: async (id: string) => {
-      await messaging.pinConversation?.(id)
-      try { window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "Conversation pinned", type: "success" } })) } catch { /* */ }
+    pinConversation: async (id: string, pinned: boolean) => {
+      if (pinned) await messaging.pinConversation?.(id)
+      else await messaging.unpinConversation?.(id)
     },
-    archiveConversation: async (id: string) => {
-      await messaging.archiveConversation?.(id)
-      try { window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "Conversation archived", type: "success" } })) } catch { /* */ }
+    archiveConversation: async (id: string, archived: boolean) => {
+      if (archived) await messaging.archiveConversation?.(id)
+      else await messaging.unarchiveConversation?.(id)
     },
-    muteConversation: async (id: string) => {
-      await messaging.muteConversation?.(id)
-      try { window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "Conversation muted", type: "success" } })) } catch { /* */ }
+    muteConversation: async (id: string, muted: boolean) => {
+      if (muted) await messaging.muteConversation?.(id)
+      else await messaging.unmuteConversation?.(id)
     },
     matches: Array.isArray(matches) ? matches : [],
     friends: Array.isArray(friends) ? friends : [],
@@ -232,8 +234,8 @@ export function MessageScreen() {
       const detail = (e as CustomEvent).detail
       const tab = typeof detail === "string" ? detail : detail?.tab
       if (typeof tab === "string" && tab !== "messages") {
+        // Keep the conversation-scoped draft in state/storage when leaving Messages.
         setSelectedId(null)
-        setDraft("")
         setThreadContext(null)
         setWindowSize(MESSAGE_WINDOW)
       }
@@ -282,8 +284,7 @@ export function MessageScreen() {
       })
     }
     const onReconcile = () => {
-      // After realtime reconnect / online: drop ephemeral draft UI only (server remains authority)
-      setDraft("")
+      // Reconnect must never discard an unsent, conversation-scoped draft.
       setWindowSize(MESSAGE_WINDOW)
       markedRef.current = null
     }
@@ -364,6 +365,11 @@ export function MessageScreen() {
     [conversations],
   )
 
+  const archivedCount = useMemo(
+    () => conversations.filter((c) => c && Boolean(c.isArchived)).length,
+    [conversations],
+  )
+
   const relationshipOutcome = useMemo(
     () => buildRelationshipOutcome({
       unreadCount,
@@ -413,7 +419,7 @@ export function MessageScreen() {
       /* best-effort enrichment */
     }
 
-    let rows = conversations.filter((c) => c && !c.isArchived).map((c) => {
+    let rows = conversations.filter(Boolean).map((c) => {
       if (isCommunityConversation(c)) return c
       const peerId = String(c.participantId || (c as { otherUserId?: string }).otherUserId || "").trim()
       if (!peerId) return c
@@ -433,6 +439,11 @@ export function MessageScreen() {
         participantPhoto: needsPhoto && hit.photo ? hit.photo : c.participantPhoto,
       }
     })
+    if (filter === "archived") {
+      rows = rows.filter((c) => Boolean(c.isArchived))
+    } else {
+      rows = rows.filter((c) => !c.isArchived)
+    }
     if (filter === "unread") {
       rows = rows.filter((c) => Boolean(c.unread) || (c.unreadCount || 0) > 0)
     } else if (filter === "requests") {
@@ -443,11 +454,7 @@ export function MessageScreen() {
       rows = rows.filter((c) => !isCommunityConversation(c))
     }
     if (q) {
-      rows = rows.filter((c) => {
-        const name = String(c.participantName || c.groupName || "").toLowerCase()
-        const last = String(c.lastMessage || "").toLowerCase()
-        return name.includes(q) || last.includes(q)
-      })
+      rows = rows.filter((c) => matchesFilterQuery(q, c.participantName, c.groupName, c.lastMessage))
     }
     return rows.slice().sort((a, b) => {
       const pin = Number(Boolean(b.isPinned)) - Number(Boolean(a.isPinned))
@@ -565,8 +572,9 @@ export function MessageScreen() {
     stopTyping()
     startTransition(() => {
       setSelectedId(id)
+      // The selectedId effect restores this conversation's own draft. Do not
+      // delete the previous thread's draft when switching conversations.
       setDraft("")
-      try { window.localStorage.removeItem(`ghc.message-draft.${selectedId}`) } catch { /* */ }
       setReplyToId(null)
       setReplyPreview(null)
       setWindowSize(MESSAGE_WINDOW)
@@ -592,7 +600,6 @@ export function MessageScreen() {
     stopTyping()
     startTransition(() => {
       setSelectedId(null)
-      setDraft("")
       setReplyToId(null)
       setReplyPreview(null)
       setWindowSize(MESSAGE_WINDOW)
@@ -944,6 +951,7 @@ export function MessageScreen() {
     { id: "unread", label: msg("unread"), count: unreadCount },
     { id: "requests", label: msg("requests"), count: requestCount },
     { id: "communities", label: msg("communities") },
+    { id: "archived", label: "Archived", count: archivedCount },
   ]
 
 
@@ -1021,7 +1029,7 @@ export function MessageScreen() {
           role="tablist"
           aria-label="Inbox filters"
           onKeyDown={(e) => {
-            const order: InboxFilter[] = ["all", "dms", "unread", "requests", "communities"]
+            const order: InboxFilter[] = ["all", "dms", "unread", "requests", "communities", "archived"]
             if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return
             e.preventDefault()
             const idx = order.indexOf(filter)
@@ -1038,6 +1046,9 @@ export function MessageScreen() {
             <button
               key={f.id}
               type="button"
+              role="tab"
+              aria-selected={filter === f.id}
+              aria-pressed={filter === f.id}
               onClick={() => setFilter(f.id)}
               className={`flex flex-1 items-center justify-center gap-1 rounded-full py-2 text-[11px] font-bold transition active:scale-[0.98] ${
                 filter === f.id
@@ -1055,6 +1066,16 @@ export function MessageScreen() {
             </button>
           ))}
         </div>
+
+        <FilterSummary
+          className="mt-2"
+          items={[
+            ...(filter !== "all" ? [{ id: "inbox", label: `Inbox: ${filter}`, onRemove: () => setFilter("all") }] : []),
+            ...(query.trim() ? [{ id: "query", label: `Search: ${query.trim()}`, onRemove: () => setQuery("") }] : []),
+          ]}
+          onClearAll={() => { setFilter("all"); setQuery("") }}
+          ariaLabel="Active message filters"
+        />
       </header>
 
       <div
@@ -1090,7 +1111,13 @@ export function MessageScreen() {
           <p className="px-3 py-1.5 text-center text-[11px] font-medium text-muted-foreground">Refreshing inbox…</p>
         ) : null}
         {list.length === 0 ? (
-          filter === "unread" ? (
+          filter === "archived" ? (
+            <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+              <p className="text-[14px] font-bold">No archived conversations</p>
+              <p className="mt-1 max-w-xs text-[12px] text-muted-foreground">Conversations you archive will stay here until you restore them.</p>
+              <button type="button" onClick={() => setFilter("all")} className="mt-3 rounded-full border border-border bg-card px-4 py-2 text-[12px] font-bold text-foreground shadow-sm">Back to inbox</button>
+            </div>
+          ) : filter === "unread" ? (
             <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
               <p className="text-[14px] font-bold">All caught up</p>
               <p className="mt-1 text-[12px] text-muted-foreground">No unread conversations.</p>

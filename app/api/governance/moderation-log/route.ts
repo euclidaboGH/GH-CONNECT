@@ -1,66 +1,43 @@
-/**
- * POST /api/governance/moderation-log
- * Optional durable mirror when GHC_GOVERNANCE_SERVER=1.
- * Without DB wiring, returns durable:false (honest).
- */
 import { NextRequest, NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+import { GovernanceStoreError, insertModerationEntry, listModerationEntries, requireCommunityModerator } from "@/lib/server/community/governance-store"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
-
-export async function POST(req: NextRequest) {
-  if (process.env.GHC_GOVERNANCE_SERVER !== "1") {
-    return NextResponse.json({
-      ok: true,
-      durable: false,
-      durability: "session",
-      message: "Governance server mode off — client session log remains authoritative for this process only.",
-    })
-  }
-
+const ACTIONS = new Set(["pin", "unpin", "hide", "unhide", "report", "lifecycle", "role_change", "remove_member", "ban_member", "unban_member", "announcement", "event", "resource"])
+const TARGETS = new Set(["post", "member", "community", "report", "announcement", "event", "resource"])
+const id = (v: unknown, max = 128) => typeof v === "string" && v.trim().length > 0 && v.trim().length <= max ? v.trim() : ""
+function fail(error: unknown) {
+  if (error instanceof GovernanceStoreError) return NextResponse.json({ ok: false, error: error.code }, { status: error.status })
+  return NextResponse.json({ ok: false, error: "GOVERNANCE_STORE_UNAVAILABLE" }, { status: 503 })
+}
+export async function GET(req: NextRequest) {
   const auth = await resolveAuthenticatedUser(req.headers)
-  if (!auth) {
-    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
-  }
-
+  if (!auth) return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+  const communityId = id(req.nextUrl.searchParams.get("communityId"))
+  if (!communityId) return NextResponse.json({ ok: false, error: "INVALID_COMMUNITY" }, { status: 400 })
   try {
-    const parsed = await readBoundedJson(req, 12 * 1024)
-    if (!parsed.ok) {
-      const status = parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400
-      return NextResponse.json({ ok: false, error: parsed.error }, { status })
-    }
-    const candidate = parsed.value.entry
-    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
-      return NextResponse.json({ ok: false, error: "invalid_entry" }, { status: 400 })
-    }
-
-    // JSON is untrusted input: narrow the unknown value before accessing fields.
-    const entry = candidate as Record<string, unknown>
-    const communityId = typeof entry.communityId === "string" ? entry.communityId.trim() : ""
-    const action = typeof entry.action === "string" ? entry.action.trim() : ""
-    const entryId = typeof entry.id === "string" ? entry.id.trim() : ""
-    if (!communityId || communityId.length > 128 || !action || action.length > 80 || entryId.length > 128) {
-      return NextResponse.json({ ok: false, error: "invalid_entry" }, { status: 400 })
-    }
-
-    // Durable table write requires applied migration 20261022010017_community_governance_log_proposal.sql
-    // Until operator applies migration + wires Supabase insert, we do not claim durable:true.
-    const dbConfigured = Boolean(
-      process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
-    )
-
-    return NextResponse.json({
-      ok: true,
-      durable: false,
-      durability: dbConfigured ? "server_pending_schema" : "session",
-      message: dbConfigured
-        ? "Server received log entry. Persist after governance migration is applied."
-        : "No DB credentials — not durable.",
-      entryId: entryId || null,
-    })
-  } catch {
-    return NextResponse.json({ ok: false, error: "server_error" }, { status: 500 })
-  }
+    await requireCommunityModerator(communityId, auth)
+    const entries = await listModerationEntries(communityId)
+    return NextResponse.json({ ok: true, durable: true, durability: "server", entries })
+  } catch (error) { return fail(error) }
+}
+export async function POST(req: NextRequest) {
+  const auth = await resolveAuthenticatedUser(req.headers)
+  if (!auth) return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+  const parsed = await readBoundedJson(req, 12 * 1024)
+  if (!parsed.ok) return NextResponse.json({ ok: false, error: parsed.error }, { status: parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400 })
+  const candidate = parsed.value.entry
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return NextResponse.json({ ok: false, error: "INVALID_ENTRY" }, { status: 400 })
+  const entry = candidate as Record<string, unknown>
+  const communityId = id(entry.communityId), action = id(entry.action, 80), targetType = id(entry.targetType, 40), targetId = id(entry.targetId)
+  const entryId = id(entry.id, 128) || `mlog_${crypto.randomUUID()}`
+  if (!communityId || !ACTIONS.has(action) || !TARGETS.has(targetType) || !targetId) return NextResponse.json({ ok: false, error: "INVALID_ENTRY" }, { status: 400 })
+  try {
+    await requireCommunityModerator(communityId, auth)
+    const metadata = entry.metadata && typeof entry.metadata === "object" && !Array.isArray(entry.metadata) ? entry.metadata as Record<string, unknown> : {}
+    await insertModerationEntry({ id: entryId, communityId, actorId: auth.userId, action, targetType, targetId, metadata })
+    return NextResponse.json({ ok: true, durable: true, durability: "server", entryId }, { status: 201 })
+  } catch (error) { return fail(error) }
 }

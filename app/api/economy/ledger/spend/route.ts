@@ -21,6 +21,7 @@ import {
 import { requireRecentStepUp } from "@/lib/server/identity/step-up-store"
 import { attachLedgerCorrelation, buildCorrelationEnvelope } from "@/lib/server/economy/correlation"
 import { loadOrder } from "@/lib/server/marketplace/order-store"
+import { parseGhcSpendRpcResult } from "@/lib/server/economy/spend-rpc-contract.mjs"
 
 // These catalog sinks must remain unavailable until a durable effect record and
 // its consumer are deployed atomically. A ledger debit alone is not a boost.
@@ -47,9 +48,12 @@ async function rpcSpend(input: {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Cache-Control": "no-store",
           apikey: env.supabaseServiceRoleKey,
           Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
         },
+        cache: "no-store",
+        signal: AbortSignal.timeout(10_000),
         body: JSON.stringify({
           p_user_id: input.userId,
           p_amount: input.amount,
@@ -60,17 +64,10 @@ async function rpcSpend(input: {
       }
     )
     const data = await res.json().catch(() => null)
-    if (!res.ok || !data) {
-      return { ok: false, error: "SPEND_RPC_FAILED" }
-    }
-    if (data.ok === false) {
-      return { ok: false, error: String(data.error || "SPEND_FAILED") }
-    }
-    return {
-      ok: true,
-      idempotent: Boolean(data.idempotent),
-      tx: data.tx || { id: data.transactionId, referenceId: data.referenceId },
-    }
+    if (!res.ok) return { ok: false, error: "SPEND_RPC_FAILED" }
+    const result = parseGhcSpendRpcResult(data, input)
+    if (!result.ok) return { ok: false, error: result.error }
+    return { ok: true, idempotent: result.idempotent, tx: result.tx }
   } catch {
     return { ok: false, error: "SPEND_RPC_FAILED" }
   }

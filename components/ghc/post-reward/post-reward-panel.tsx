@@ -14,6 +14,35 @@ function formatGhc(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return "—"
   return `${value < 0 ? "−" : ""}${Math.abs(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} GHC`
 }
+/** Approval gauge (SVG ring). pct null = no votes yet. */
+function ApprovalRing({ pct, size = 36, stroke = 4, label = false }: { pct: number | null; size?: number; stroke?: number; label?: boolean }) {
+  const r = (size - stroke) / 2
+  const c = 2 * Math.PI * r
+  const tone = pct == null ? "text-muted-foreground/40" : pct >= 70 ? "text-emerald-500" : pct >= 40 ? "text-amber-500" : "text-rose-500"
+  return (
+    <span className="relative inline-flex shrink-0 items-center justify-center" style={{ width: size, height: size }} role="img" aria-label={pct == null ? "No votes yet" : `${pct}% approval`}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90" aria-hidden>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor" strokeWidth={stroke} className="text-muted/70" />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinecap="round"
+          strokeDasharray={c} strokeDashoffset={c * (1 - (pct ?? 0) / 100)} className={`${tone} transition-[stroke-dashoffset] duration-700`} />
+      </svg>
+      {label ? <span className="absolute text-[11px] font-black tabular-nums text-foreground">{pct == null ? "—" : `${pct}%`}</span> : null}
+    </span>
+  )
+}
+function insightFor(up: number, down: number): { title: string; body: string } {
+  const t = up + down
+  if (t === 0) return { title: "No votes yet", body: "Quality votes from the community will appear here as they arrive." }
+  const r = up / t
+  if (t < 5) return { title: "Early signals", body: `${t} vote${t === 1 ? "" : "s"} so far — too few to call a trend.` }
+  if (r >= 0.85) return { title: "Strongly positive", body: "The community is rating this post as clearly useful." }
+  if (r >= 0.7) return { title: "Well received", body: "Most voters found this valuable." }
+  if (r >= 0.4) return { title: "Mixed reception", body: "Opinions are divided — more votes will clarify the signal." }
+  return { title: "Critical reception", body: "Most voters flagged quality concerns. Consider editing or following up." }
+}
+function Shimmer({ className = "" }: { className?: string }) {
+  return <span aria-hidden className={`gh-shimmer block rounded-lg bg-muted ${className}`} />
+}
 function safeCount(value: unknown): number {
   const n = Number(value)
   return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0
@@ -173,6 +202,8 @@ export function PostRewardPanel({
   const downImpact = hasRewardState ? reward?.downvoteImpact : null
   const netImpact = hasRewardState ? reward?.netImpact : null
   const statusLabel = status === "accruing" ? "ACCRUING" : status === "finalized" ? "FINALIZED" : status === "distributed" ? "SETTLED" : status === "voided" ? "VOIDED" : "NOT ACTIVE"
+  const approval = up + down > 0 ? Math.round((up / (up + down)) * 100) : null
+  const insight = insightFor(up, down)
   const split = useMemo(() => {
     const a = Number(author)
     const c = Number(curation)
@@ -191,9 +222,9 @@ export function PostRewardPanel({
           aria-haspopup="dialog"
           className="group flex min-h-[3.65rem] w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-emerald-500/[0.045] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500/60"
         >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"><Activity size={18} aria-hidden /></span>
+          {up + down > 0 ? <ApprovalRing pct={approval} size={38} /> : <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"><Activity size={18} aria-hidden /></span>}
           <span className="min-w-0 flex-1">
-            <span className="block text-xs font-bold text-foreground">Post performance</span>
+            <span className="block text-xs font-bold text-foreground">Post performance{approval != null ? <span className="ml-1.5 font-semibold text-muted-foreground">· {approval}% approval</span> : null}</span>
             <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-medium text-muted-foreground">
               <span className="inline-flex items-center gap-1"><Eye size={11} aria-hidden /> {viewCount == null ? "— views" : `${viewCount.toLocaleString()} views`}</span>
               <span className="inline-flex items-center gap-1"><ThumbsUp size={11} aria-hidden /> {up.toLocaleString()}</span>
@@ -217,6 +248,15 @@ export function PostRewardPanel({
               <button ref={closeButtonRef} type="button" onClick={() => setOpen(false)} className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground hover:bg-muted/75" aria-label="Close post performance"><X size={18} /></button>
             </header>
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
+              <div className="flex items-center gap-4 rounded-2xl border border-border/70 bg-gradient-to-br from-card via-card to-emerald-500/[.06] p-4">
+                <ApprovalRing pct={approval} size={84} stroke={8} label />
+                <div className="min-w-0">
+                  <p className="text-[9px] font-bold uppercase tracking-[.15em] text-muted-foreground">Community sentiment</p>
+                  <p className="mt-0.5 text-base font-black tracking-tight text-foreground">{insight.title}</p>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">{insight.body}</p>
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <StatTile label="Views" value={viewCount == null ? "—" : viewCount.toLocaleString()} detail={serverViews == null ? (views == null ? "Not available" : "Feed count · not verified") : "Server-confirmed"} />
                 <StatTile label="Upvotes" value={up.toLocaleString()} detail="Positive quality signals" tone="positive" />
@@ -242,7 +282,7 @@ export function PostRewardPanel({
               {qualifiedViews != null ? <p className="text-[10px] text-muted-foreground">Qualified views: {qualifiedViews.toLocaleString()} · met GreenHaven’s dwell-time threshold.</p> : null}
               {reward?.topContributors?.length ? <div className="rounded-2xl border border-border/70 p-3"><p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Top curation contributors</p>{reward.topContributors.slice(0, 3).map((person) => <div key={person.username} className="flex items-center justify-between py-1.5 text-xs"><span>@{person.username}</span><span className="font-semibold tabular-nums">{formatGhc(person.amount)}</span></div>)}</div> : null}
               {loadError ? <p role="status" className="rounded-xl border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-[10px] text-amber-800 dark:text-amber-200">Analytics could not be refreshed. Showing only the latest available figures; retry when connected.</p> : null}
-              {loading ? <p role="status" className="text-center text-[10px] text-muted-foreground">Refreshing secure server analytics…</p> : null}
+              {loading ? <div role="status" aria-label="Refreshing secure server analytics" className="space-y-2"><Shimmer className="h-3 w-2/3" /><Shimmer className="h-3 w-1/2" /><span className="sr-only">Refreshing secure server analytics…</span></div> : null}
             </div>
             <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-border/70 px-4 py-3 pb-[max(.75rem,env(safe-area-inset-bottom))] sm:px-5">
               <p className="text-[9px] text-muted-foreground">Private creator view · server-authoritative rewards</p>
@@ -257,7 +297,7 @@ export function PostRewardPanel({
 
 function StatTile({ label, value, detail, tone = "neutral" }: { label: string; value: string; detail: string; tone?: "neutral" | "positive" | "negative" }) {
   const color = tone === "positive" ? "text-emerald-700 dark:text-emerald-300" : tone === "negative" ? "text-rose-700 dark:text-rose-300" : "text-foreground"
-  return <div className="min-w-0 rounded-xl border border-border/60 bg-background/75 px-3 py-3"><p className="truncate text-[9px] font-semibold text-muted-foreground">{label}</p><p className={`mt-1 text-lg font-extrabold tabular-nums ${color}`}>{value}</p><p className="mt-0.5 text-[9px] leading-4 text-muted-foreground">{detail}</p></div>
+  return <div className={`min-w-0 rounded-xl border border-border/60 bg-background/75 px-3 py-3 border-l-[3px] ${tone === "positive" ? "border-l-emerald-500" : tone === "negative" ? "border-l-rose-500" : "border-l-border"}`}><p className="truncate text-[9px] font-semibold text-muted-foreground">{label}</p><p className={`mt-1 text-lg font-extrabold tabular-nums ${color}`}>{value}</p><p className="mt-0.5 text-[9px] leading-4 text-muted-foreground">{detail}</p></div>
 }
 function RewardLine({ label, amount, percent, icon }: { label: string; amount: number | null | undefined; percent?: number; icon: "creator" | "curator" }) {
   return <div className="flex items-center justify-between gap-3"><div className="min-w-0"><p className="text-[11px] font-semibold">{label}</p><p className="text-[9px] text-muted-foreground">{percent == null ? "Awaiting confirmed allocation" : `${percent}% of reported reward total`}</p></div><p className={`shrink-0 text-xs font-extrabold tabular-nums ${icon === "creator" ? "text-emerald-700 dark:text-emerald-300" : "text-sky-700 dark:text-sky-300"}`}>{formatGhc(amount)}</p></div>

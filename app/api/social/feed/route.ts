@@ -153,8 +153,6 @@ export async function GET(request: Request) {
     p_before_ms: hasCursor ? beforeMs : null,
     p_before_id: hasCursor ? beforeIdRaw : null,
   })
-  const stableCursor = result.ok
-
   if (!result.ok) {
     return NextResponse.json(
       {
@@ -167,8 +165,17 @@ export async function GET(request: Request) {
     )
   }
 
-  const payload = result.data as { ok?: boolean; posts?: unknown[] }
-  const rawPagePosts = Array.isArray(payload?.posts) ? payload.posts : []
+  // A successful HTTP/RPC transport is not sufficient: PostgREST can return a
+  // valid JSON business-error envelope. Never turn that envelope into a durable
+  // empty feed, which would mislead the client and permanently stop pagination.
+  const payload = result.data as { ok?: boolean; posts?: unknown[] } | null
+  if (!payload || payload.ok !== true || !Array.isArray(payload.posts)) {
+    return NextResponse.json(
+      { ok: false, error: "FEED_PAYLOAD_INVALID" },
+      { status: 503, headers: { "Cache-Control": "no-store" } },
+    )
+  }
+  const rawPagePosts = payload.posts
   let posts = rawPagePosts
 
   // Re-check canonical visibility before any post payload reaches the client.
@@ -239,12 +246,12 @@ export async function GET(request: Request) {
   // Advance using the last raw server row, not the last visible/mute-filtered row,
   // so a page containing hidden or muted posts cannot cause pagination to loop.
   const last = rawPagePosts.length ? (rawPagePosts[rawPagePosts.length - 1] as { id?: string; createdAt?: number }) : null
-  const nextCursor = last?.id && Number.isFinite(Number(last?.createdAt))
+  const nextCursor = rawPagePosts.length === limit && last?.id && Number.isFinite(Number(last?.createdAt))
     ? { before: Number(last.createdAt), beforeId: String(last.id) }
     : null
 
   return NextResponse.json(
-    { ok: true, durable: true, posts, mutedFiltered: muted.size, nextCursor, stableCursor },
+    { ok: true, durable: true, posts, mutedFiltered: muted.size, nextCursor, stableCursor: true },
     { headers: { "Cache-Control": "no-store" } }
   )
 }

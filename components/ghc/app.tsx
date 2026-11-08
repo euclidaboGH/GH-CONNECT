@@ -4,9 +4,10 @@ import { incomingRequestBadgeCount } from "@/lib/domains/adapters/connection-con
 import { IdentityService } from "@/lib/identity/identity-service"
 import { captureReferralCodeFromLocation, flushPendingReferralAttribution } from "@/lib/referral/capture-ref"
 import { notificationSystem, NOTIFICATIONS_CHANGED_EVENT } from "@/lib/notifications"
+import { hydrateAccountNotificationPreferences } from "@/lib/domains/notification-domain"
 import { APP_RELEASE_VERSION, APP_RELEASE_SUMMARY } from "@/lib/app-release"
 
-import { useState, useCallback, useMemo, memo, useEffect, lazy, Suspense, startTransition, type ReactNode, type UIEvent } from "react"
+import { useState, useCallback, useMemo, memo, useEffect, lazy, Suspense, startTransition, useRef, type ReactNode, type UIEvent } from "react"
 import { useGHCShell, useGHCProfile, useGHCDiscovery, useGHCMessaging } from "@/contexts/ghc-context"
 import type { Candidate } from "@/lib/ghc-types"
 import { usePiAuth } from "@/contexts/pi-auth-context"
@@ -102,8 +103,8 @@ function TabScreenFallback({ label }: { label: string }) {
     >
       <div className="mx-auto flex w-full max-w-[var(--gh-content-max,28rem)] flex-col gap-3">
         <div className="flex items-center gap-2.5">
-          <div className="gh-brand-loading-blink flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-400/30 bg-card/90 p-1.5" aria-hidden="true">
-            <img src="/gh-connect-logo.png" alt="" className="h-full w-full object-contain" width={36} height={36} />
+          <div className="gh-brand-loading-blink flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-50/80 p-1.5 dark:bg-emerald-950/35" aria-hidden="true">
+            <img src="/greenhaven-mark.png" alt="" className="h-full w-full object-contain" width={36} height={30} />
           </div>
           <div className="flex-1 space-y-1.5">
             <div className="h-3 w-2/5 gh-skeleton rounded bg-muted" />
@@ -328,6 +329,7 @@ export function GHConnectApp() {
   const { candidates, following, matches, swipe, followUser, reportUser, blockUser } = useGHCDiscovery()
   const { conversations } = useGHCMessaging()
   const [peerProfile, setPeerProfile] = useState<Candidate | null>(null)
+  const publicProfileRequestRef = useRef(0)
   const { onboardingStatus: piOnboardingStatus, authLifecycle } = usePiAuth()
 
   // After session is server-verified, soft-refresh primary sections once so login is not stale.
@@ -406,6 +408,18 @@ export function GHConnectApp() {
     if (!uid) return
     void flushPendingReferralAttribution(() => IdentityService.getAuthHeaders?.() || {})
   }, [profile?.id])
+
+  useEffect(() => {
+    if (!ready) return
+    const syncPreferences = (identity = IdentityService.getIdentity()) => {
+      if (identity.verificationState !== "server_verified") return
+      const userId = String(identity.userId || "").trim()
+      if (!userId || userId === "current-user" || userId === "anonymous") return
+      void hydrateAccountNotificationPreferences(userId)
+    }
+    syncPreferences()
+    return IdentityService.subscribe((identity) => syncPreferences(identity))
+  }, [ready])
 
   useEffect(() => {
     void refreshSectionAttention()
@@ -521,19 +535,23 @@ export function GHConnectApp() {
       const detail = (event as CustomEvent<{ userId?: unknown; id?: unknown }>).detail
       const userId = String(detail?.userId || detail?.id || "").trim()
       if (!userId) return
+      const requestId = ++publicProfileRequestRef.current
       if (userId === String(profile?.id || "")) {
+        setPeerProfile(null)
         startTransition(() => setTab("profile"))
         return
       }
       const local = (Array.isArray(candidates) ? candidates : []).find((item) => String(item.id) === userId)
-      if (local) {
-        setPeerProfile(local)
-        return
-      }
-      // Profiles opened from Wallet/Activity/Notifications/Messaging must not depend
-      // on the current discovery result set. Hydrate the canonical public projection.
+      // Keep a real discovery result visible immediately, then enrich it from the
+      // canonical privacy-projected profile API. Demo/sample identities remain local.
+      if (local) setPeerProfile(local)
+      if (local?.isSample) return
       void socialGetProfile(userId).then((result) => {
+        if (requestId !== publicProfileRequestRef.current) return
         if (!result.ok || !result.profile) {
+          // The canonical public projection is the privacy authority. Never leave
+          // a cached discovery card open when that authority denies the profile.
+          setPeerProfile(null)
           addToast(result.error === "PROFILE_PRIVATE" ? "This profile is private." : "This profile is not available.", "info")
           return
         }
@@ -541,13 +559,18 @@ export function GHConnectApp() {
         const photos = Array.isArray(row.photos) ? row.photos.map(String).filter(Boolean) : []
         const city = String(row.city || "").trim()
         const country = String(row.country || "").trim()
+        const professional = row.professional && typeof row.professional === "object" && !Array.isArray(row.professional)
+          ? row.professional as Candidate["professional"] : undefined
+        const business = row.business && typeof row.business === "object" && !Array.isArray(row.business)
+          ? row.business as Candidate["business"] : undefined
         const hydrated: Candidate = {
+          ...(local || {}),
           id: userId,
-          name: String(row.displayName || row.username || "Member"),
-          age: Math.max(18, Number(row.age) || 18),
-          location: [city, country].filter(Boolean).join(", ") || "Global",
+          name: String(row.displayName || row.username || local?.name || "Member"),
+          age: Math.max(18, Number(row.age) || local?.age || 18),
+          location: [city, country].filter(Boolean).join(", ") || local?.location || "Global",
           bio: String(row.bio || ""),
-          photo: photos[0] || "",
+          photo: photos[0] || local?.photo || "",
           photos,
           coverPhoto: row.coverPhoto ? String(row.coverPhoto) : null,
           interests: Array.isArray(row.interests) ? row.interests.map(String).filter(Boolean) : [],
@@ -558,39 +581,60 @@ export function GHConnectApp() {
           profession: row.profession ? String(row.profession) : undefined,
           education: row.education ? String(row.education) : undefined,
           primaryMode: row.primaryMode ? String(row.primaryMode) : undefined,
+          profileMode: row.profileMode === "professional" || row.profileMode === "business" || row.profileMode === "social" ? row.profileMode : undefined,
+          professional,
+          business,
+          skills: Array.isArray(row.skills) ? row.skills.map(String).filter(Boolean).slice(0, 40) : [],
           joinedAt: typeof row.createdAt === "number" || typeof row.createdAt === "string" ? row.createdAt : undefined,
           isSample: false,
         }
         setPeerProfile(hydrated)
-      }).catch(() => addToast("This profile could not be loaded right now.", "error"))
+      }).catch(() => {
+        if (requestId === publicProfileRequestRef.current) {
+          setPeerProfile(null)
+          addToast("This profile could not be verified right now. Please try again.", "error")
+        }
+      })
     }
     window.addEventListener("ghc:open-profile", openProfile as EventListener)
     return () => window.removeEventListener("ghc:open-profile", openProfile as EventListener)
   }, [candidates, profile?.id, setTab, addToast])
 
-  // Deep links: primary tabs and canonical overlay destinations. Keep unrelated
-  // query parameters/hash intact (e.g. referral attribution and shared content).
-  // Overlay dispatch is deferred one task so the shell's event listeners have mounted.
+  // Deep links: primary tabs, canonical overlays and shareable public profiles.
+  // Preserve unrelated query parameters/hash (e.g. referral attribution).
   useEffect(() => {
     if (!ready || typeof window === "undefined") return
-    let overlayTimer: number | undefined
+    const timers: number[] = []
     try {
       const url = new URL(window.location.href)
       const requested = url.searchParams.get("tab")
-      if (!requested) return
-      const destination = resolveDestination(requested)
-      if (destination && isPrimaryTab(destination)) {
-        startTransition(() => setTab(destination))
-      } else if (destination) {
-        overlayTimer = window.setTimeout(() => { navigateTo(destination) }, 0)
+      const hadProfileParam = url.searchParams.has("profile")
+      const requestedProfile = (url.searchParams.get("profile") || "").trim()
+      if (requested) {
+        const destination = resolveDestination(requested)
+        // Invalid destinations are discarded; malformed URLs must not interrupt app startup.
+        if (destination && isPrimaryTab(destination)) {
+          startTransition(() => setTab(destination))
+        } else if (destination) {
+          timers.push(window.setTimeout(() => { navigateTo(destination) }, 0))
+        }
+        url.searchParams.delete("tab")
       }
-      // Invalid destinations are discarded rather than left to repeatedly reopen.
-      url.searchParams.delete("tab")
-      window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`)
+      if (requestedProfile && requestedProfile.length <= 160 && !/[\u0000-\u001f\u007f]/.test(requestedProfile)) {
+        timers.push(window.setTimeout(() => {
+          window.dispatchEvent(new CustomEvent("ghc:open-profile", { detail: { userId: requestedProfile } }))
+        }, 0))
+        url.searchParams.delete("profile")
+      } else if (url.searchParams.has("profile")) {
+        url.searchParams.delete("profile")
+      }
+      if (requested || hadProfileParam) {
+        window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`)
+      }
     } catch {
       /* malformed URLs must not interrupt app startup */
     }
-    return () => { if (overlayTimer !== undefined) window.clearTimeout(overlayTimer) }
+    return () => timers.forEach((timer) => window.clearTimeout(timer))
   }, [ready, setTab])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsInitialSection, setSettingsInitialSection] = useState<
@@ -1016,7 +1060,7 @@ export function GHConnectApp() {
         <div className="relative z-10 flex flex-col items-center">
           <div className="relative">
             <div className="absolute inset-0 scale-110 rounded-full bg-emerald-400/20 blur-3xl" />
-            <BrandLogo size="hero" priority className="relative drop-shadow-[0_0_40px_rgba(16,185,129,0.45)]" />
+            <BrandLogo onDark size="hero" priority className="relative drop-shadow-[0_0_40px_rgba(16,185,129,0.45)]" />
           </div>
           <div className="mt-8 h-8 w-8 animate-spin rounded-full border-2 border-emerald-500/20 border-t-emerald-400" role="status" aria-label="Loading" />
           <p className="mt-5 text-sm font-semibold tracking-wide text-emerald-300/90">Welcome</p>
@@ -1086,7 +1130,7 @@ export function GHConnectApp() {
           <div className="relative z-10 flex flex-col items-center">
             <div className="relative">
               <div className="absolute inset-0 scale-110 rounded-full bg-emerald-400/20 blur-3xl" />
-              <BrandLogo size="hero" priority className="relative drop-shadow-[0_0_40px_rgba(16,185,129,0.45)]" />
+              <BrandLogo onDark size="hero" priority className="relative drop-shadow-[0_0_40px_rgba(16,185,129,0.45)]" />
             </div>
             <div className="mt-8 h-8 w-8 animate-spin rounded-full border-2 border-emerald-500/20 border-t-emerald-400" role="status" aria-label="Loading" />
             <p className="mt-5 text-sm font-semibold tracking-wide text-emerald-300/90">Welcome</p>
@@ -1566,21 +1610,22 @@ export function GHConnectApp() {
           <ProfilePreviewPageLazy
             candidate={peerProfile}
             userInterests={Array.isArray(profile?.interests) ? profile.interests : []}
-            onBack={() => setPeerProfile(null)}
+            onBack={() => { publicProfileRequestRef.current += 1; setPeerProfile(null) }}
             onMessage={() => {
               const target = peerProfile
               void startConversation(target.id, target.name, target.photo).then(() => {
+                publicProfileRequestRef.current += 1
                 setPeerProfile(null)
                 startTransition(() => setTab("messages"))
               }).catch(() => addToast("Could not open this conversation. Please try again.", "error"))
             }}
             onLike={() => { void swipe(peerProfile.id, "like").catch(() => addToast("Could not send interest. Please try again.", "error")) }}
-            onPass={() => { void swipe(peerProfile.id, "pass").then(() => setPeerProfile(null)).catch(() => addToast("Could not update this preference.", "error")) }}
+            onPass={() => { void swipe(peerProfile.id, "pass").then(() => { publicProfileRequestRef.current += 1; setPeerProfile(null) }).catch(() => addToast("Could not update this preference.", "error")) }}
             onFollow={() => {
               const wasFollowing = following.includes(peerProfile.id)
               void followUser(peerProfile.id).then(() => addToast(wasFollowing ? `Unfollowed ${peerProfile.name}` : `Following ${peerProfile.name}`, "success")).catch(() => addToast("Could not update this follow.", "error"))
             }}
-            onBlock={() => { void blockUser(peerProfile.id).then(() => { setPeerProfile(null); addToast("Member blocked", "success") }).catch(() => addToast("Could not block this member.", "error")) }}
+            onBlock={() => { void blockUser(peerProfile.id).then(() => { publicProfileRequestRef.current += 1; setPeerProfile(null); addToast("Member blocked", "success") }).catch(() => addToast("Could not block this member.", "error")) }}
             onReport={(reason) => { void reportUser(peerProfile.id, reason).then(() => addToast("Report submitted", "success")).catch(() => addToast("Could not submit report.", "error")) }}
             isFollowing={following.includes(peerProfile.id)}
             isMatched={matches.some((item) => item.userId === peerProfile.id || item.id === peerProfile.id)}

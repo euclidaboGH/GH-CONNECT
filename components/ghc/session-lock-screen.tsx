@@ -195,7 +195,7 @@ function PinSheet({
         <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/30">
           {mode === "setup" ? <ShieldCheck size={28} /> : <Lock size={28} />}
         </div>
-        <BrandLogo size="bar" className="mb-4 opacity-90" />
+        <BrandLogo onDark size="bar" className="mb-4 opacity-90" />
         <h1 className="text-xl font-bold tracking-tight text-white">{title}</h1>
         <p className="mt-2 max-w-xs text-[13px] leading-relaxed text-white/50">{subtitle}</p>
         {mode === "setup" && phase === "confirm" ? (

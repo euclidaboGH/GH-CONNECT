@@ -10,6 +10,7 @@ import { communityNotificationLabel, isCommunityNotification } from "@/lib/domai
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { useGHC } from "@/contexts/ghc-context"
+import { IdentityService } from "@/lib/identity/identity-service"
 import { useSectionRefresh } from "@/hooks/use-section-refresh"
 import { onCloseTransientUI, dispatchCloseTransientUI } from "@/lib/transient-ui"
 import {
@@ -54,6 +55,9 @@ import {
 } from "@/lib/notification-channels"
 import { buildAttentionSignals, resolvePrimaryAttention, type AttentionSignal } from "@/lib/unified-attention"
 import { AttentionCommandCard } from "@/components/ghc/attention-command-card"
+import { FilterSummary } from "@/components/ghc/filtering/filter-summary"
+import { isPriorityNotification, sortNotificationsByPriority, assessNotificationPriority } from "@/lib/notification-priority"
+import { resolveNotificationActions } from "@/lib/notification-actions"
 
 const ICON: Partial<Record<NotificationType, React.ReactNode>> = {
   like: <Heart size={15} className="text-rose-500" />,
@@ -132,13 +136,14 @@ export function NotificationBell({
   const t = (key: Parameters<typeof socialText>[0], values?: Record<string, string | number>) => socialText(key, regional.preferredLocale, values)
   const liveNow = useLiveNow(30_000)
   const [open, setOpen] = useState(false)
+  const [identityUserId, setIdentityUserId] = useState(() => IdentityService.getCurrentUserId())
   const [items, setItems] = useState<Notification[]>([])
   const [unread, setUnread] = useState<number>(0)
   const [bucket, setBucket] = useState<NotificationCenterBucket>("all")
   const [readFilter, setReadFilter] = useState<"all" | "unread" | "priority">(() => {
     if (typeof window === "undefined") return "priority"
     try {
-      const saved = window.sessionStorage.getItem("ghc.notif.focus")
+      const saved = window.sessionStorage.getItem(`ghc.notif.focus:${encodeURIComponent(identityUserId)}`)
       if (saved === "priority" || saved === "unread" || saved === "all") return saved
     } catch { /* */ }
     return "priority"
@@ -146,11 +151,16 @@ export function NotificationBell({
   const [isOffline, setIsOffline] = useState(false)
   const [listLoading, setListLoading] = useState(false)
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
+  const [failedActionId, setFailedActionId] = useState<string | null>(null)
   const [durableOk, setDurableOk] = useState<boolean | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [threadKey, setThreadKey] = useState<string | null>(null)
   const refreshInFlightRef = useRef(false)
   const refreshQueuedRef = useRef(false)
+  const refreshGenerationRef = useRef(0)
+  const activeRefreshControllerRef = useRef<AbortController | null>(null)
+  const dialogRef = useRef<HTMLDivElement | null>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
   const ghc = useGHC() as { blockedUsers?: string[]; mutedUsers?: string[] }
   const blockedKey = Array.isArray(ghc.blockedUsers) ? ghc.blockedUsers.join("|") : ""
   const mutedKey = Array.isArray(ghc.mutedUsers) ? ghc.mutedUsers.join("|") : ""
@@ -191,21 +201,25 @@ export function NotificationBell({
       return
     }
     refreshInFlightRef.current = true
+    const requestIdentity = identityUserId
+    const generation = ++refreshGenerationRef.current
+    const controller = new AbortController()
+    activeRefreshControllerRef.current = controller
     void (async () => {
       setListLoading(true)
       try {
         const [unifiedRes, economyRes, socialRes, announcementsRes] = await Promise.all([
           fetch("/api/notifications?limit=80", {
-            credentials: "include", cache: "no-store", headers: { Accept: "application/json" },
+            credentials: "include", cache: "no-store", headers: { Accept: "application/json" }, signal: controller.signal,
           }).catch(() => null),
           fetch("/api/economy/notifications?limit=60", {
-            credentials: "include", cache: "no-store", headers: { Accept: "application/json" },
+            credentials: "include", cache: "no-store", headers: { Accept: "application/json" }, signal: controller.signal,
           }).catch(() => null),
           fetch("/api/social/notifications?limit=80", {
-            credentials: "include", cache: "no-store", headers: { Accept: "application/json" },
+            credentials: "include", cache: "no-store", headers: { Accept: "application/json" }, signal: controller.signal,
           }).catch(() => null),
           fetch("/api/system/announcements?limit=25", {
-            credentials: "include", cache: "no-store", headers: { Accept: "application/json" },
+            credentials: "include", cache: "no-store", headers: { Accept: "application/json" }, signal: controller.signal,
           }).catch(() => null),
         ])
         const [unifiedData, economyData, socialData, announcementsData] = await Promise.all([
@@ -219,6 +233,10 @@ export function NotificationBell({
           { ok?: boolean; durable?: boolean; notifications?: Array<{ id?: string; type?: string; title?: string; body?: string; createdAt?: string | number; readAt?: string | null; actorUserId?: string; sourceId?: string; sourceType?: string; metadata?: Record<string, unknown>; correlationId?: string | null; entityType?: string; entityId?: string; requestId?: string }> },
           { ok?: boolean; announcements?: Array<{ id?: string; title?: string; body?: string; severity?: string; actionPath?: string | null; publishedAt?: number; read?: boolean }>; unreadCount?: number },
         ]
+
+        // A response belongs only to the identity that initiated it. Account switches
+        // abort the request and invalidate this generation before any state is written.
+        if (generation !== refreshGenerationRef.current || requestIdentity !== IdentityService.getCurrentUserId()) return
 
         const unifiedRows = unifiedRes?.ok && unifiedData.ok && Array.isArray(unifiedData.notifications)
           ? unifiedData.notifications : []
@@ -420,15 +438,54 @@ export function NotificationBell({
         setDurableOk(false)
         /* Local-only notifications remain visible if a server store is unavailable. */
       } finally {
-        refreshInFlightRef.current = false
-        setListLoading(false)
-        if (refreshQueuedRef.current) {
-          refreshQueuedRef.current = false
-          window.setTimeout(() => refresh(), 0)
+        // A superseded request must not unlock or clear the loading state of a
+        // newer account's refresh.
+        if (generation === refreshGenerationRef.current) {
+          refreshInFlightRef.current = false
+          activeRefreshControllerRef.current = null
+          setListLoading(false)
+          if (refreshQueuedRef.current) {
+            refreshQueuedRef.current = false
+            window.setTimeout(() => refresh(), 0)
+          }
         }
       }
     })()
-  }, [blockedUsers, mutedUsers])
+  }, [blockedUsers, mutedUsers, identityUserId])
+
+  useEffect(() => {
+    return IdentityService.subscribe((identity) => {
+      setIdentityUserId(identity.userId)
+    })
+  }, [])
+
+  useEffect(() => {
+    try {
+      const saved = window.sessionStorage.getItem(`ghc.notif.focus:${encodeURIComponent(identityUserId)}`)
+      setReadFilter(saved === "all" || saved === "unread" || saved === "priority" ? saved : "priority")
+    } catch { setReadFilter("priority") }
+  }, [identityUserId])
+
+  useEffect(() => {
+    refreshGenerationRef.current += 1
+    activeRefreshControllerRef.current?.abort()
+    activeRefreshControllerRef.current = null
+    refreshInFlightRef.current = false
+    refreshQueuedRef.current = false
+    setItems([])
+    setUnread(0)
+    setDurableOk(null)
+    setListLoading(false)
+    setFailedActionId(null)
+    setStatusMsg(null)
+    setExpandedId(null)
+    setThreadKey(null)
+    return () => {
+      refreshGenerationRef.current += 1
+      activeRefreshControllerRef.current?.abort()
+      activeRefreshControllerRef.current = null
+    }
+  }, [identityUserId])
 
   // One refresh policy for the notification surface: focus, foreground, online and
   // product mutation events are coalesced by the shared section coordinator.
@@ -476,17 +533,38 @@ export function NotificationBell({
   }, [])
 
   useEffect(() => {
+    if (open) {
+      previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+      const frame = window.requestAnimationFrame(() => {
+        const first = dialogRef.current?.querySelector<HTMLElement>(
+          '[data-dialog-initial-focus], button:not([disabled]):not([data-dialog-dismiss]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        )
+        first?.focus()
+      })
+      return () => window.cancelAnimationFrame(frame)
+    }
+    previousFocusRef.current?.focus?.()
+    return
+  }, [open])
+
+  useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault()
         setOpen(false)
-        try {
-          dispatchCloseTransientUI({ reason: "notification-escape" })
-        } catch {
-          /* */
-        }
+        try { dispatchCloseTransientUI({ reason: "notification-escape" }) } catch { /* */ }
+        return
       }
+      if (e.key !== "Tab" || !dialogRef.current) return
+      const focusable = (Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]):not([data-dialog-dismiss]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )) as HTMLElement[]).filter((element) => element.offsetParent !== null)
+      if (!focusable.length) { e.preventDefault(); return }
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
@@ -510,12 +588,7 @@ export function NotificationBell({
     if (readFilter === "unread") return bucketed.filter((n) => !n.read)
     if (readFilter === "priority") {
       // Phase 4: priority = high-signal unread (money, messages, social requests, orders).
-      const priorityTypes = new Set([
-        "message", "friend_request", "connection_request", "connection_accept", "friend_accept",
-        "marketplace_order", "order", "payment", "ghc_received", "withdrawal", "payout",
-        "reward", "system", "mention", "comment_reply", "security",
-      ])
-      return bucketed.filter((n) => !n.read && priorityTypes.has(n.type))
+      return sortNotificationsByPriority(bucketed.filter(isPriorityNotification))
     }
     return bucketed
   }, [items, bucket, readFilter])
@@ -555,6 +628,7 @@ export function NotificationBell({
   }
 
   const markOneRead = (n: Notification) => {
+    setFailedActionId(null)
     try {
       notificationSystem.markAsRead?.(n.id)
     } catch {
@@ -589,7 +663,16 @@ export function NotificationBell({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "mark_read", ids: [n.id] }),
         }).catch(() => null),
-      ]).then(() => window.dispatchEvent(new CustomEvent("ghc:notifications-read")))
+      ]).then((responses) => {
+        const failed = responses.some((response) => !response || !response.ok)
+        if (failed) {
+          setItems((prev) => prev.map((item) => item.id === n.id ? { ...item, read: false } : item))
+          if (!n.read) setUnread((count) => count + 1)
+          setFailedActionId(n.id)
+          setStatusMsg("Could not save this read state. Please retry.")
+        }
+        window.dispatchEvent(new CustomEvent("ghc:notifications-read"))
+      })
     } else if (notificationData.durableAnnouncement && notificationData.announcementId) {
       void fetch("/api/system/announcements", {
         method: "POST",
@@ -597,16 +680,42 @@ export function NotificationBell({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: notificationData.announcementId }),
       })
-        .then(() => window.dispatchEvent(new CustomEvent("ghc:notifications-read")))
-        .catch(() => null)
+        .then((response) => {
+          if (!response?.ok) {
+            setItems((prev) => prev.map((item) => item.id === n.id ? { ...item, read: false } : item))
+            if (!n.read) setUnread((count) => count + 1)
+            setFailedActionId(n.id)
+            setStatusMsg("Could not save this read state. Please retry.")
+          }
+          window.dispatchEvent(new CustomEvent("ghc:notifications-read"))
+        })
+        .catch(() => {
+          setItems((prev) => prev.map((item) => item.id === n.id ? { ...item, read: false } : item))
+          if (!n.read) setUnread((count) => count + 1)
+          setFailedActionId(n.id)
+          setStatusMsg("Could not save this read state. Please retry.")
+        })
     } else if (notificationData.durableEconomy && n.id) {
       void fetch(`/api/economy/notifications/${encodeURIComponent(n.id)}/read`, {
         method: "POST",
         credentials: "include",
         headers: { Accept: "application/json" },
       })
-        .then(() => window.dispatchEvent(new CustomEvent("ghc:notifications-read")))
-        .catch(() => null)
+        .then((response) => {
+          if (!response?.ok) {
+            setItems((prev) => prev.map((item) => item.id === n.id ? { ...item, read: false } : item))
+            if (!n.read) setUnread((count) => count + 1)
+            setFailedActionId(n.id)
+            setStatusMsg("Could not save this read state. Please retry.")
+          }
+          window.dispatchEvent(new CustomEvent("ghc:notifications-read"))
+        })
+        .catch(() => {
+          setItems((prev) => prev.map((item) => item.id === n.id ? { ...item, read: false } : item))
+          if (!n.read) setUnread((count) => count + 1)
+          setFailedActionId(n.id)
+          setStatusMsg("Could not save this read state. Please retry.")
+        })
     }
   }
 
@@ -641,19 +750,15 @@ export function NotificationBell({
     } catch {
       /* */
     }
-    // Soft-dismiss durable rows: mark read so they do not revive unread on refresh
-    try {
-      markOneRead(n)
-    } catch {
-      /* */
-    }
+    // Dismiss is device-local: preserve the server-side read state and use the
+    // account-scoped deleted marker to keep this item hidden on this device.
     setItems((prev) => prev.filter((x) => x.id !== n.id))
     setUnread((u) => Math.max(0, u - (n.read ? 0 : 1)))
     if (expandedId === n.id) {
       setExpandedId(null)
       setThreadKey(null)
     }
-    setStatusMsg("Notification deleted")
+    setStatusMsg("Notification hidden on this device")
     window.setTimeout(() => setStatusMsg(null), 2000)
     window.setTimeout(() => refresh(), 300)
   }
@@ -664,7 +769,6 @@ export function NotificationBell({
     setUnread(0)
     try {
       window.dispatchEvent(new CustomEvent("ghc:notifications-changed", { detail: { unread: 0 } }))
-      window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "All notifications marked read", type: "success" } }))
     } catch { /* */ }
     const results = await Promise.all([
       fetch("/api/social/notifications", {
@@ -686,6 +790,12 @@ export function NotificationBell({
     const failed = results.some((response) => !response || !response.ok)
     window.dispatchEvent(new CustomEvent("ghc:notifications-read"))
     setStatusMsg(failed ? "Some alerts could not be marked read. Please retry." : "Marked all as read")
+    if (!failed) {
+      window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "All notifications marked read", type: "success" } }))
+    } else {
+      // Reconcile optimistic local state with durable stores after partial failure.
+      refresh()
+    }
     window.setTimeout(() => setStatusMsg(null), 2500)
     // refresh() queues behind an active poll and runs again after that poll settles.
     refresh()
@@ -713,8 +823,8 @@ export function NotificationBell({
 
       {open && typeof document !== "undefined"
         ? createPortal(
-        <div className="gh-world-notifications fixed inset-0 z-[200] isolate" role="dialog" aria-modal="true" aria-label={t("notifications")}>
-          <button type="button" className="absolute inset-0 bg-black/55 backdrop-blur-[2px]" aria-label={t("closeNotifications")} onClick={closePanel} />
+        <div ref={dialogRef} className="gh-world-notifications fixed inset-0 z-[200] isolate" role="dialog" aria-modal="true" aria-label={t("notifications")}>
+          <button type="button" data-dialog-dismiss="true" className="absolute inset-0 bg-black/55 backdrop-blur-[2px]" aria-label={t("closeNotifications")} onClick={closePanel} />
           <div className="absolute inset-0 flex flex-col bg-background sm:inset-x-auto sm:left-1/2 sm:top-0 sm:h-full sm:w-full sm:max-w-[28rem] sm:-translate-x-1/2 sm:border-x sm:border-border sm:shadow-2xl">
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border/50 bg-background/95 px-4 py-3.5 backdrop-blur-xl">
               <div>
@@ -748,6 +858,7 @@ export function NotificationBell({
                   onClick={closePanel}
                   className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-muted"
                   aria-label={t("closeNotifications")}
+                  data-dialog-initial-focus="true"
                 >
                   <X size={18} />
                 </button>
@@ -792,7 +903,7 @@ export function NotificationBell({
                       aria-selected={active}
                       onClick={() => {
                         setReadFilter(mode.id)
-                        try { window.sessionStorage.setItem("ghc.notif.focus", mode.id) } catch { /* */ }
+                        try { window.sessionStorage.setItem(`ghc.notif.focus:${encodeURIComponent(identityUserId)}`, mode.id) } catch { /* */ }
                       }}
                       className={`min-h-9 flex-1 rounded-xl px-2 text-[12px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                         active
@@ -806,6 +917,16 @@ export function NotificationBell({
                 })}
               </div>
             </div>
+
+            <FilterSummary
+              className="mt-2"
+              items={[
+                ...(bucket !== "all" ? [{ id: "bucket", label: `Category: ${bucket}`, onRemove: () => setBucket("all") }] : []),
+                ...(readFilter !== "priority" ? [{ id: "focus", label: `Focus: ${readFilter}`, onRemove: () => { setReadFilter("priority"); try { window.sessionStorage.setItem(`ghc.notif.focus:${encodeURIComponent(identityUserId)}`, "priority") } catch { /* */ } } }] : []),
+              ]}
+              onClearAll={() => { setBucket("all"); setReadFilter("priority"); try { window.sessionStorage.setItem(`ghc.notif.focus:${encodeURIComponent(identityUserId)}`, "priority") } catch { /* */ } }}
+              ariaLabel="Active notification filters"
+            />
 
             {/* Category chips with per-bucket unread counts */}
             <div
@@ -899,7 +1020,7 @@ export function NotificationBell({
                       type="button"
                       onClick={() => {
                         setReadFilter("all")
-                        try { window.sessionStorage.setItem("ghc.notif.focus", "all") } catch { /* */ }
+                        try { window.sessionStorage.setItem(`ghc.notif.focus:${encodeURIComponent(identityUserId)}`, "all") } catch { /* */ }
                       }}
                       className="mt-4 rounded-full bg-emerald-600 px-4 py-2 text-[12px] font-bold text-white shadow-sm"
                     >
@@ -941,21 +1062,36 @@ export function NotificationBell({
                             {expanded.message}
                           </p>
                           <p className="mt-2 text-[11px] text-muted-foreground">{regional.formatRelativeTime(expanded.timestamp, liveNow)}</p>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              onClick={() => openTarget(expanded)}
-                              className="rounded-full bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white"
-                            >
-                              Open
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => onDelete(expanded)}
-                              className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-[11px] font-semibold text-muted-foreground hover:bg-muted"
-                            >
-                              <Trash2 size={12} /> Delete
-                            </button>
+                          {(() => {
+                            const priority = assessNotificationPriority(expanded)
+                            return priority.band === "critical" || priority.band === "high" ? (
+                              <p className="mt-2 inline-flex rounded-full bg-amber-500/10 px-2 py-1 text-[10px] font-bold text-amber-800 dark:text-amber-200" aria-label={`Priority: ${priority.band}`}>
+                                {priority.band === "critical" ? "Urgent" : "Needs attention"} · {priority.reason}
+                              </p>
+                            ) : null
+                          })()}
+                          <div className="mt-3 flex flex-wrap gap-2" aria-label="Notification actions">
+                            {resolveNotificationActions(expanded, { retryAvailable: failedActionId === expanded.id }).map((action) => (
+                              <button
+                                key={action.id}
+                                type="button"
+                                aria-label={action.description}
+                                onClick={() => {
+                                  if (action.id === "open") openTarget(expanded)
+                                  else if (action.id === "mark_read") markOneRead(expanded)
+                                  else if (action.id === "retry") markOneRead(expanded)
+                                  else onDelete(expanded)
+                                }}
+                                className={action.emphasis === "primary"
+                                  ? "rounded-full bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white"
+                                  : action.emphasis === "danger"
+                                    ? "inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-[11px] font-semibold text-muted-foreground hover:bg-muted"
+                                    : "rounded-full border border-border px-3 py-1.5 text-[11px] font-semibold text-foreground hover:bg-muted"}
+                              >
+                                {action.id === "dismiss" ? <Trash2 size={12} /> : null}
+                                {action.label}
+                              </button>
+                            ))}
                           </div>
                         </div>
                       </div>

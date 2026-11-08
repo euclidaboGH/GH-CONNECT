@@ -22,7 +22,7 @@ const checks = [
   ['daily claim uses official GHC coin with lightning effects and compact non-modal popover', /<GhcCoinIcon size=\{34\}/.test(prompt) && /gh-daily-lightning-fab-bolt-1/.test(prompt) && /aria-modal="false"/.test(prompt) && /gh-daily-claim-popover/.test(css)],
   ['daily claim does not auto-open a blocking popup on page entry', !prompt.includes('autoPromptedKeyRef') && !prompt.includes('setOpen(true)\n  }, [userId, status?.claimable')],
   ['claim FAB has pointer-events isolated so feed content remains interactive', /pointer-events-none fixed z-\[150\]/.test(prompt) && /pointer-events-auto/.test(prompt)],
-  ['loading fallback uses GreenHaven logo blink', /gh-brand-loading-blink/.test(app) && /gh-connect-logo\.png/.test(app) && /gh-brand-loading-blink/.test(css)],
+  ['loading fallback uses GreenHaven logo blink', /gh-brand-loading-blink/.test(app) && /greenhaven-mark\.png/.test(app) && /gh-brand-loading-blink/.test(css)],
   ['brand blink respects reduced-motion preferences', /prefers-reduced-motion: reduce/.test(css)],
   ['wallet invokes durable matured-claim reconciliation before authoritative refresh', /api\/economy\/rewards\/claim-matured/.test(wallet) && wallet.indexOf('claim-matured') < wallet.indexOf('await refreshWalletAuthority()')],
   ['mature reconciliation authenticates the user and requires durable database', /resolveAuthenticatedUser\(request\.headers\)/.test(route) && /isDatabaseConfigured\(\)/.test(route)],

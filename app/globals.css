@@ -3324,3 +3324,68 @@ header img[alt="GreenHaven"],
   max-height: 1.75rem;
   width: auto;
 }
+
+/* ───────── Post action bar polish (post-action-bar.tsx) ───────── */
+.gh-pab-btn { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.gh-pab-btn:active:not(:disabled) { transform: scale(0.96); }
+.gh-pab-btn:disabled { opacity: 0.85; cursor: progress; }
+@keyframes gh-pab-pop { 0% { transform: scale(0.7); } 55% { transform: scale(1.25); } 100% { transform: scale(1); } }
+@keyframes gh-pab-burst { 0% { opacity: 0; transform: translate(-50%, 6px) scale(0.8); } 25% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -22px) scale(1.2); } }
+@keyframes gh-pab-save { 0% { clip-path: inset(100% 0 0 0); transform: scale(0.8); } 60% { clip-path: inset(0 0 0 0); transform: scale(1.18); } 100% { transform: scale(1); } }
+@keyframes gh-pab-panel { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@keyframes gh-pab-tray { from { opacity: 0; transform: translateY(8px) scale(0.96); } to { opacity: 1; transform: none; } }
+.gh-pab-pop { animation: gh-pab-pop 320ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+.gh-pab-burst { animation: gh-pab-burst 800ms ease-out forwards; }
+.gh-pab-save { animation: gh-pab-save 380ms ease-out; }
+.gh-pab-panel { animation: gh-pab-panel 160ms ease-out; }
+.gh-pab-tray { animation: gh-pab-tray 180ms ease-out; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.gh-pab-tray > button:not(:last-child) { transition: transform 140ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+.gh-pab-tray > button:not(:last-child):hover, .gh-pab-tray > button:not(:last-child):focus-visible { transform: translateY(-3px) scale(1.18); }
+.gh-pab-tray > button:not(:last-child):active { transform: scale(0.94); }
+.gh-post-card { transition: box-shadow 160ms ease, border-color 160ms ease; }
+.gh-post-card:hover { border-color: color-mix(in srgb, var(--gh-green, #059669) 28%, transparent); }
+@media (prefers-reduced-motion: reduce) {
+  .gh-pab-pop, .gh-pab-burst, .gh-pab-save, .gh-pab-panel, .gh-pab-tray { animation: none !important; }
+  .gh-pab-btn:active:not(:disabled), .gh-pab-tray > button:hover { transform: none !important; }
+}
+@media (forced-colors: active) {
+  .gh-pab-btn[aria-pressed="true"] { outline: 2px solid Highlight; }
+}
+
+
+/* ===== Post card / curation polish — round 2 ===== */
+.gh-post-card { position: relative; }
+/* A · sentiment accent edge */
+.gh-post-card[data-sentiment="positive"]::before,
+.gh-post-card[data-sentiment="mixed"]::before,
+.gh-post-card[data-sentiment="critical"]::before {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; z-index: 1; pointer-events: none; opacity: .85;
+}
+.gh-post-card[data-sentiment="positive"]::before { background: linear-gradient(90deg, #10b981, #2dd4bf, transparent 85%); }
+.gh-post-card[data-sentiment="mixed"]::before { background: linear-gradient(90deg, #f59e0b, #fbbf24, transparent 85%); }
+.gh-post-card[data-sentiment="critical"]::before { background: linear-gradient(90deg, #f43f5e, #fb923c, transparent 85%); }
+/* B · verified avatar halo */
+.gh-avatar-halo { padding: 2px; background: conic-gradient(from 210deg, #10b981, #2dd4bf, #38bdf8, #10b981); }
+/* E · glass action dock */
+[data-pab-dock] {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--card) 55%, transparent), color-mix(in srgb, var(--card) 90%, transparent));
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  border-top: 1px solid color-mix(in srgb, var(--border) 35%, transparent);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .35);
+}
+.dark [data-pab-dock] { box-shadow: inset 0 1px 0 rgb(255 255 255 / .05); }
+.gh-pab-btn { transition: transform 140ms cubic-bezier(.34,1.56,.64,1), background-color 160ms, color 160ms, box-shadow 160ms; }
+.gh-pab-btn:hover:not(:disabled) { transform: translateY(-1px); }
+.gh-pab-btn:focus-visible { box-shadow: 0 0 0 4px rgb(124 58 237 / .18); }
+/* J · shimmer */
+@keyframes gh-shimmer { 0% { background-position: -200% 0 } 100% { background-position: 200% 0 } }
+.gh-shimmer { background-image: linear-gradient(90deg, transparent, rgb(255 255 255 / .45), transparent); background-size: 200% 100%; animation: gh-shimmer 1.4s linear infinite; }
+.dark .gh-shimmer { background-image: linear-gradient(90deg, transparent, rgb(255 255 255 / .08), transparent); }
+@media (prefers-reduced-motion: reduce) {
+  .gh-shimmer { animation: none; }
+  .gh-pab-btn:hover:not(:disabled) { transform: none; }
+}
+@media (forced-colors: active) {
+  .gh-post-card::before { display: none; }
+  .gh-avatar-halo { background: Highlight; }
+}

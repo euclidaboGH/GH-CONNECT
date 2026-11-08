@@ -49,6 +49,8 @@ export function reconcileFeedPosts(
 
   return Array.from(merged.values()).sort((a, b) => {
     const timeDelta = (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0)
-    return timeDelta || String(a.id).localeCompare(String(b.id))
+    // Match gh_post_list_feed_v3: created_at DESC, id DESC.
+    // This tie-break must match SQL because the last row becomes the next cursor.
+    return timeDelta || String(b.id).localeCompare(String(a.id))
   })
 }

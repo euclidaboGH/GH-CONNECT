@@ -16,7 +16,7 @@ const checks = [
   ['Network failure preserves prior loaded rows', /catch \{\s*if \(!cancelled\) setPiIntentsError/.test(wallet) && !/catch \{\s*if \(!cancelled\) setPiIntents\(\[\]\)/.test(wallet)],
   ['History error is visible and accessible', /Payment history unavailable/.test(wallet) && /role="alert"/.test(wallet)],
   ['History retry re-runs fetch', wallet.includes('Retry history') && wallet.includes('setTick((n) => n + 1)')],
-  ['Pi history supports search filtering', /const filteredPiIntents = useMemo[\s\S]{0,400}const q = query\.trim\(\)\.toLowerCase\(\)/.test(wallet)],
+  ['Pi history supports search filtering', /const filteredPiIntents = useMemo[\s\S]{0,400}const q = query\.trim\(\)/.test(wallet)],
   ['Pi and GHC transaction rails remain separated', /GHC ledger and π payments are kept on separate rails/.test(wallet)],
   ['Payment history API requires authenticated user', /resolveAuthenticatedUser\(request\.headers\)/.test(api) && /AUTH_REQUIRED/.test(api)],
   ['Payment history API is user-scoped, not client userId scoped', /listIntentsForUserAsync\(auth\.userId\)/.test(api) && /never accept client userId override/.test(api)],

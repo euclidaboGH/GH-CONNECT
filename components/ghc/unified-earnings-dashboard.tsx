@@ -746,7 +746,10 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
               <li key={String(e.id || e.unique_ref || idx)} className="flex items-start justify-between gap-2 text-[12px]">
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium text-foreground">{e.entry_type || e.source_kind || "entry"}</p>
-                  <p className="truncate text-[10px] text-muted-foreground">{e.unique_ref || e.reason || ""}</p>
+                  <p className="truncate text-[10px] text-muted-foreground" title={String(e.reason || e.unique_ref || "")}>
+                    {e.reason || e.unique_ref || ""}
+                    {e.unique_ref && e.reason ? ` · ${e.unique_ref}` : ""}
+                  </p>
                 </div>
                 <div className="shrink-0 text-right">
                   <p className="font-semibold tabular-nums text-foreground">

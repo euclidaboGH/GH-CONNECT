@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync } from 'node:fs'
-const post = readFileSync('components/ghc/enhanced-post-card.tsx','utf8')
+const post = readFileSync('components/ghc/enhanced-post-card.tsx','utf8') + '\n' + readFileSync('components/ghc/post-action-bar.tsx','utf8')
 const comments = readFileSync('components/ghc/comment-sheet.tsx','utf8')
 const community = readFileSync('components/ghc/premium-community-hub.tsx','utf8')
 const client = readFileSync('lib/social/client.ts','utf8')

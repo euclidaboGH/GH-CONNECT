@@ -4,6 +4,7 @@
  * Does not replace session graph — dual-writes when DB available.
  */
 import { NextResponse } from "next/server"
+import { humanizeRelationshipError, sanitizeTargetUserId } from "@/lib/server/social/relationship-integrity"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { normalizeIntents } from "@/lib/connection-intents"

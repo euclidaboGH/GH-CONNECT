@@ -21,13 +21,17 @@ export const searchUtils = {
     return candidates.filter((c) => c.age >= minAge && c.age <= maxAge)
   },
 
-  // Filter candidates by location radius (simplified)
-  filterByLocation: (candidates: Candidate[], location: string, radius: number): Candidate[] => {
-    // In a real app, this would use geolocation
-    // For now, we'll do simple string matching
-    return candidates.filter((c) => {
-      const distance = calculateDistance(location, c.location)
-      return distance <= radius
+  // Text-only location matching is intentionally not presented as a radius.
+  // A real distance filter requires trusted coordinates and a geospatial index.
+  filterByLocation: (candidates: Candidate[], location: string, _radius: number): Candidate[] => {
+    const target = normalizeLocation(location)
+    if (!target) return candidates
+    const targetParts = splitLocationParts(target)
+    return candidates.filter((candidate) => {
+      const candidateLocation = normalizeLocation(candidate.location)
+      if (!candidateLocation) return false
+      const candidateParts = splitLocationParts(candidateLocation)
+      return candidateParts.some((part) => targetParts.includes(part))
     })
   },
 
@@ -97,11 +101,15 @@ export const searchUtils = {
   },
 }
 
-// Helper function to calculate simple distance (in a real app, use actual geolocation)
-function calculateDistance(loc1: string, loc2: string): number {
-  // Simplified: return 0 if same, else random distance
-  if (loc1.toLowerCase() === loc2.toLowerCase()) return 0
-  return Math.floor(Math.random() * 50)
+// Normalize city/country labels without manufacturing geographic distance.
+function normalizeLocation(value: unknown): string {
+  return typeof value === "string"
+    ? value.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim()
+    : ""
+}
+
+function splitLocationParts(value: string): string[] {
+  return value.split(/[,;|]/).map((part) => part.trim()).filter(Boolean)
 }
 
 // Advanced filtering with multiple criteria
@@ -109,6 +117,7 @@ export interface FilterCriteria {
   ageMin?: number
   ageMax?: number
   location?: string
+  /** Legacy field: text-only location labels cannot enforce a geographic radius. */
   radius?: number
   interests?: string[]
   verified?: boolean

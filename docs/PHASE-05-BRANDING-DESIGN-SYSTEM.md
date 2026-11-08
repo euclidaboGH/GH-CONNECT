@@ -8,7 +8,9 @@
 
 ## Brand integrity (non-negotiable)
 
-- The official GreenHaven product mark remains `public/gh-connect-logo.png`.
+**Historical asset note:** The logo paths and asset-preservation statements below describe the earlier brand at the time this legacy phase was authored. Release 0.330.17 supersedes those logo assets with the owner-approved transparent GreenHaven artwork recorded in `docs/UPGRADE-WORKLOG-0.330.17.md`. The GHC coin remains a separate, unchanged asset.
+
+- At the time of this historical phase, the GreenHaven product mark was `public/gh-connect-logo.png`.
 - The official GHC coin mark remains `public/ghc-coin-logo.png`, with the existing approved 64px and 32px derivatives retained.
 - This phase does not redraw, recolor, crop, regenerate, replace, or apply a solid plate behind either mark. Asset paths are centralized through `brandAssets`; source checks pin expected SHA-256 digests so accidental replacements are caught.
 - The fallback GHC glyph is an image-load fallback only; it is not an alternative product logo.

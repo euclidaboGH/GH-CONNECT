@@ -8,7 +8,8 @@ const checks=[
  ['requests UI',s.includes('No message requests')],
  ['draft persistence key',s.includes('ghc.message-draft.${selectedId}')],
  ['draft restore',s.includes('localStorage.getItem(`ghc.message-draft.${selectedId}`)')],
- ['draft clear after send',s.includes('localStorage.removeItem(`ghc.message-draft.${selectedId}`)')],
+ ['draft clears when the composer is empty after a confirmed send',s.includes('else window.localStorage.removeItem(key)')],
+ ['draft is preserved during thread switching',!s.includes('localStorage.removeItem(`ghc.message-draft.${selectedId}`)')],
  ['community inbox retained',s.includes('filter === "communities"')],
  ['offline recovery retained',s.includes('ghc:messaging-reconcile')],
 ]

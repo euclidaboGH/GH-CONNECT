@@ -7,7 +7,6 @@ import {
   Crown,
   Loader2,
   Sparkles,
-  X,
   ChevronRight,
   Filter,
   Users,
@@ -181,21 +180,36 @@ const NEXT_UPGRADES_FOR_FREE: EntitlementKey[] = [
 ]
 
 const TIER_ORDER: MembershipTierId[] = ["free", "vip", "vvip"]
+const TIER_RANK: Record<MembershipTierId, number> = { free: 0, vip: 1, vvip: 2 }
 
-const COMPARE_ROWS: { key: string; label: string; free: string; vip: string; vvip: string }[] = [
-  { key: "price_m", label: "1 paid month + 1 bonus (GHC)", free: "0", vip: "150", vvip: "300" },
-  { key: "price_y", label: "12 paid months + 1 bonus · 20% off (GHC)", free: "0", vip: "1,440", vvip: "2,880" },
-  { key: "badge", label: "Profile badge", free: "—", vip: "VIP", vvip: "VVIP Elite" },
-  { key: "filters", label: "Discovery filters", free: "Standard", vip: "Advanced", vvip: "Priority + spotlight" },
-  { key: "match", label: "Matching tools", free: "Standard", vip: "Enhanced", vvip: "Advanced + exclusive" },
-  { key: "boosts", label: "Daily profile/post boosts", free: "0", vip: "3", vvip: "10" },
-  { key: "media", label: "Photo limit", free: "6", vip: "12", vvip: "24" },
-  { key: "ghc", label: "Activity earn multiplier", free: "×1", vip: "×1.5", vvip: "×2" },
-  { key: "fee", label: "Platform fee discount", free: "—", vip: "10%", vvip: "20%" },
-  { key: "support", label: "Support", free: "Standard", vip: "Priority chat", vvip: "Priority + agent" },
-  { key: "events", label: "Exclusive spaces", free: "—", vip: "VIP rooms", vvip: "VVIP experiences" },
-  { key: "missions", label: "Reward track", free: "Standard", vip: "VIP missions", vvip: "Elite missions" },
-]
+function buildMembershipCompareRows(period: PaidMembershipMonths) {
+  const free = MEMBERSHIP_PLANS.free
+  const vip = MEMBERSHIP_PLANS.vip
+  const vvip = MEMBERSHIP_PLANS.vvip
+  const has = (tier: MembershipTierId, key: EntitlementKey) => MEMBERSHIP_PLANS[tier].entitlements.includes(key)
+  const yesNo = (tier: MembershipTierId, key: EntitlementKey) => has(tier, key) ? "Included" : "—"
+  const price = (tier: "vip" | "vvip") => {
+    const ghc = getMembershipGhcPrice(tier, period)
+    const pi = getMembershipPiPrice(tier, period)
+    return `${ghc.chargeGhc.toLocaleString()} GHC · ${pi.chargePi.toLocaleString()} π`
+  }
+  return [
+    { key: "price", category: "Plan & value", label: `${period} paid month${period === 1 ? "" : "s"} + 1 bonus month`, free: "Free", vip: price("vip"), vvip: price("vvip") },
+    { key: "badge", category: "Profile", label: "Profile membership badge", free: "None", vip: yesNo("vip", "badge_vip"), vvip: yesNo("vvip", "badge_vvip") },
+    { key: "filters", category: "Discovery & matching", label: "Advanced discovery filters", free: "Standard", vip: yesNo("vip", "discovery_advanced_filters"), vvip: "Included + priority" },
+    { key: "matching", category: "Discovery & matching", label: "Matching controls", free: "Standard", vip: yesNo("vip", "matching_enhanced_controls"), vvip: "Advanced" },
+    { key: "boosts", category: "Growth & earnings", label: "Daily boosts", free: String(free.dailyBoosts), vip: String(vip.dailyBoosts), vvip: String(vvip.dailyBoosts) },
+    { key: "media", category: "Profile", label: "Profile photo limit", free: String(free.mediaMaxPhotos), vip: String(vip.mediaMaxPhotos), vvip: String(vvip.mediaMaxPhotos) },
+    { key: "stories", category: "Profile", label: "Story media limit", free: `${free.mediaMaxStoryMb} MB`, vip: `${vip.mediaMaxStoryMb} MB`, vvip: `${vvip.mediaMaxStoryMb} MB` },
+    { key: "earn", category: "Growth & earnings", label: "Activity earning multiplier", free: "×1 · standard cap", vip: `×${vip.ghcDailyEarnMultiplier} · capped`, vvip: `×${vvip.ghcDailyEarnMultiplier} · capped` },
+    { key: "fee", category: "Wallet & commerce", label: "Platform fee discount", free: "—", vip: `${vip.platformFeeDiscountPct}%`, vvip: `${vvip.platformFeeDiscountPct}%` },
+    { key: "community", category: "Communities", label: "Premium community tools", free: "Core access", vip: yesNo("vip", "community_premium_tools"), vvip: "Advanced" },
+    { key: "marketplace", category: "Wallet & commerce", label: "Marketplace tools", free: "Standard", vip: yesNo("vip", "marketplace_enhanced_visibility"), vvip: "Advanced" },
+    { key: "creator", category: "Creator & business", label: "Creator / business tools", free: "Standard", vip: "—", vvip: yesNo("vvip", "creator_business_tools") },
+    { key: "analytics", category: "Creator & business", label: "Advanced analytics", free: "—", vip: "—", vvip: yesNo("vvip", "analytics_advanced") },
+    { key: "support", category: "Support", label: "Priority support", free: "Standard", vip: yesNo("vip", "priority_support"), vvip: yesNo("vvip", "priority_support") },
+  ]
+}
 
 function openEntitlementLink(
   link?: { kind: "tab"; id: string } | { kind: "settings"; section: string }
@@ -215,7 +229,7 @@ function openEntitlementLink(
 }
 
 function formatUntil(ts?: number) {
-  if (!ts) return "Active · renew anytime"
+  if (!ts) return "Active · no scheduled expiry"
   try {
     return `Active until ${new Date(ts).toLocaleDateString(undefined, {
       month: "short",
@@ -273,6 +287,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
     previousExpiresAt?: string
   }>>([])
   const [membershipLifecycleState, setMembershipLifecycleState] = useState<"loading" | "ready" | "unavailable">("loading")
+  const [showAllMembershipActivity, setShowAllMembershipActivity] = useState(false)
   const lifecycleRequestRef = useRef<AbortController | null>(null)
   const lifecycleRequestSequenceRef = useRef(0)
   const [refreshing, setRefreshing] = useState(false)
@@ -303,6 +318,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
       lifecycleRequestRef.current?.abort()
       lifecycleRequestRef.current = null
       setMembershipLifecycle([])
+      setShowAllMembershipActivity(false)
       setMembershipLifecycleState(active === false ? "unavailable" : "loading")
       if (active !== false) {
         void refreshMembershipFromServer()
@@ -334,6 +350,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
 
   const [faqOpen, setFaqOpen] = useState<string | null>(null)
   const [view, setView] = useState<"cards" | "compare">("cards")
+  const [compareCategory, setCompareCategory] = useState("All")
   const [isOffline, setIsOffline] = useState(false)
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
   const [recoverHint, setRecoverHint] = useState(false)
@@ -344,6 +361,10 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
   // entitlement may display VIP/VVIP. Local domain state is cache, never authority.
   const currentTier = (serverStatus?.tier || "free") as MembershipTierId
   const membershipAuthorityReady = serverStatusState === "ready" && serverStatus !== null
+  const compareRows = buildMembershipCompareRows(period)
+  const compareCategories = ["All", ...Array.from(new Set(compareRows.map((row) => row.category)))]
+  const visibleCompareRows = compareCategory === "All" ? compareRows : compareRows.filter((row) => row.category === compareCategory)
+  const canPurchaseTier = (tier: MembershipTierId) => membershipAuthorityReady && tier !== "free" && TIER_RANK[tier] > TIER_RANK[currentTier]
   // Display authority: paid status is never inferred from local cache.
   const authoritativeStatus = membershipAuthorityReady ? serverStatus : null
   const mapEntitlementToStatus = (
@@ -366,15 +387,16 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
       userId,
       tier,
       active: e.active,
+      startedAt: Number.isFinite(Number(e.startedAt)) && Number(e.startedAt) > 0 ? Number(e.startedAt) : undefined,
       expiresAt: expiresAt,
       billingPeriod:
         e.billingPeriod === "yearly" || e.billingPeriod === "monthly" || e.billingPeriod === "four_months" || e.billingPeriod === "eight_months"
           ? e.billingPeriod
           : undefined,
       source:
-        e.source === "ghc" || e.source === "admin"
+        e.source === "ghc" || e.source === "pi" || e.source === "external" || e.source === "admin" || e.source === "trial"
           ? (e.source as MembershipStatus["source"])
-          : e.source === "pi" || e.source === "external" || e.source === "verified_payment"
+          : e.source === "verified_payment"
             ? "external"
             : "default",
       lastPurchaseTxId: e.purchaseRef ? String(e.purchaseRef) : undefined,
@@ -512,8 +534,10 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
   const handleRefreshMembership = async () => {
     if (refreshing) return
     setRefreshing(true)
+    let refreshed = false
     try {
       const next = await refreshMembershipFromServer()
+      refreshed = next !== null
       if (next) {
         addToast(
           next.tier === "free"
@@ -526,11 +550,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
       }
     } finally {
       setRefreshing(false)
-      setStatusMsg(
-        serverStatusState === "unavailable"
-          ? "Membership status unavailable"
-          : "Status refreshed"
-      )
+      setStatusMsg(refreshed ? "Status refreshed" : "Membership status unavailable")
       window.setTimeout(() => setStatusMsg(null), 1500)
     }
   }
@@ -788,7 +808,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
         className="gh-premium-membership-content min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-3 py-3 scrollbar-hide [-webkit-overflow-scrolling:touch] touch-pan-y"
         style={{ paddingBottom: "var(--gh-screen-bottom-inset)" }}
       >
-      {(recoverHint || (membershipAuthorityReady && currentTier === "free")) ? (
+      {recoverHint ? (
         <div className="mx-3 mt-2 rounded-[1.25rem] border border-border/60 bg-card px-3.5 py-2.5 shadow-sm">
           <p className="text-[11px] leading-snug text-muted-foreground">
             Paid with Pi but still on Free? Recovery reads server payment history and restores
@@ -837,8 +857,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
             ) : null}
           </div>
           <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-            Membership is separate from verification and GHC balance.{" "}
-            <strong className="text-foreground">Verification ≠ VIP</strong>. Benefits come from entitlements.
+            Membership is separate from identity verification, reputation and wallet balances. <strong className="text-foreground">Verification ≠ VIP.</strong> Paid access is determined by server-confirmed entitlements, not a profile badge or local cache.
           </p>
         </div>
 
@@ -872,10 +891,10 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
           ) : membershipLifecycleState === "unavailable" ? (
             <p className="mt-3 text-[11px] text-muted-foreground">Membership activity is temporarily unavailable. Your access status is checked separately.</p>
           ) : membershipLifecycle.length === 0 ? (
-            <p className="mt-3 text-[11px] text-muted-foreground">No membership changes have been recorded yet.</p>
+            <p className="mt-3 text-[11px] text-muted-foreground">No verified membership changes are available for this account yet.</p>
           ) : (
             <ol className="mt-3 space-y-2.5">
-              {membershipLifecycle.slice(0, 5).map((item, index) => (
+              {membershipLifecycle.slice(0, showAllMembershipActivity ? 20 : 5).map((item, index) => (
                 <li key={item.id || `${item.eventType}-${item.createdAt}-${index}`} className="flex items-start gap-2.5">
                   <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-black text-foreground">{index + 1}</span>
                   <span className="min-w-0 flex-1">
@@ -888,12 +907,22 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
               ))}
             </ol>
           )}
+          {membershipLifecycleState === "ready" && membershipLifecycle.length > 5 ? (
+            <button
+              type="button"
+              onClick={() => setShowAllMembershipActivity((value) => !value)}
+              className="mt-3 min-h-9 rounded-full border border-border px-3 text-[11px] font-bold text-foreground hover:bg-muted/60"
+              aria-expanded={showAllMembershipActivity}
+            >
+              {showAllMembershipActivity ? "Show recent activity" : `View all ${membershipLifecycle.length} events`}
+            </button>
+          ) : null}
         </section>
 
         {membershipAuthorityReady ? (
           <div className="mb-3 rounded-[1.25rem] border border-border/60 bg-card px-3.5 py-3 shadow-sm">
             <p className="text-[10px] font-black uppercase tracking-[0.12em] text-muted-foreground">Membership path</p>
-            <p className="mt-1 text-[13px] font-bold text-foreground">{currentTier === "free" ? "Start with VIP when you need more reach and tools" : currentTier === "vip" ? "VIP is active — move to VVIP only when advanced tools matter" : "VVIP is active — your highest membership tier"}</p>
+            <p className="mt-1 text-[13px] font-bold text-foreground">{currentTier === "free" ? "Stay Free or choose tools you genuinely need" : currentTier === "vip" ? "VIP is active — compare VVIP only if its additional tools matter" : "VVIP is active — your highest membership tier"}</p>
             <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{currentTier === "free" ? "Stay Free for core social access. Upgrade for specific benefits, not because GreenHaven requires payment to participate." : currentTier === "vip" ? "Use your current benefits first. VVIP is intended for people who need the broader creator, business, matching and analytics toolkit." : "Your account already has the broadest membership entitlement set. Membership does not buy reputation, verification or guaranteed rewards."}</p>
           </div>
         ) : null}
@@ -961,11 +990,21 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
                   <p className="mt-1 text-[12px] font-semibold text-muted-foreground">
                     {authoritativeStatus.source === "trial" || (authoritativeStatus as { lifecycle?: string }).lifecycle === "trial"
                       ? `Welcome trial · ends ${formatUntil(authoritativeStatus.expiresAt)}`
-                      : `Membership expires ${formatUntil(authoritativeStatus.expiresAt)}`}
+                      : `Membership ${formatUntil(authoritativeStatus.expiresAt)}`}
                   </p>
                 ) : (
-                  <p className="mt-1 text-[12px] text-muted-foreground">Standard access · upgrade anytime</p>
+                  <p className="mt-1 text-[12px] text-muted-foreground">{currentTier === "free" ? "Free access · upgrade anytime" : "Complimentary membership · no scheduled expiry"}</p>
                 )}
+                {authoritativeStatus?.startedAt && currentTier !== "free" ? (
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    Member since {new Date(authoritativeStatus.startedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                  </p>
+                ) : null}
+                {authoritativeStatus?.expiresAt && currentTier !== "free" ? (
+                  <p className="mt-1 text-[11px] font-semibold text-foreground">
+                    {Math.max(0, Math.ceil((authoritativeStatus.expiresAt - Date.now()) / 86_400_000))} days remaining · no automatic renewal
+                  </p>
+                ) : null}
                 {(authoritativeStatus?.billingPeriod || authoritativeStatus?.source) && currentTier !== "free" ? (
                   <p className="mt-0.5 text-[11px] text-muted-foreground">
                     {authoritativeStatus?.billingPeriod === "yearly"
@@ -978,10 +1017,11 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
                             ? "1 paid month + 1 bonus month"
                             : null}
                     {authoritativeStatus?.billingPeriod && authoritativeStatus?.source ? " · " : null}
-                    {(authoritativeStatus as { source?: string } | null)?.source === "pi" ||
-                    (authoritativeStatus as { source?: string } | null)?.source === "external"
+                    {(authoritativeStatus as { source?: string } | null)?.source === "pi"
                       ? "Paid with π"
-                      : (authoritativeStatus as { source?: string } | null)?.source === "ghc"
+                      : (authoritativeStatus as { source?: string } | null)?.source === "external"
+                        ? "External payment"
+                        : (authoritativeStatus as { source?: string } | null)?.source === "ghc"
                         ? "Paid with GHC"
                         : (authoritativeStatus as { source?: string } | null)?.source === "admin"
                           ? "Granted by admin"
@@ -994,12 +1034,13 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
               <button
                 type="button"
                 onClick={() => {
-                  const el = document.getElementById(`membership-plan-${currentTier}`)
-                  el?.scrollIntoView({ behavior: "smooth", block: "center" })
+                  if (currentTier === "vvip") setView("compare")
+                  const target = currentTier === "vip" ? "membership-plan-vvip" : currentTier === "vvip" ? "membership-compare-title" : "membership-plan-vip"
+                  document.getElementById(target)?.scrollIntoView({ behavior: "smooth", block: "center" })
                 }}
                 className="shrink-0 rounded-full bg-foreground px-3.5 py-2 text-[12px] font-bold text-background"
               >
-                {currentTier === "free" ? "Your plan" : "Renew"}
+                {currentTier === "free" ? "Explore plans" : currentTier === "vip" ? "Explore VVIP" : "Compare benefits"}
               </button>
             </div>
             <div className="px-4 pb-4 pt-3">
@@ -1007,36 +1048,29 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
                 Your benefits
               </p>
               <ul className="space-y-1.5">
-                {(currentTier === "free"
-                  ? [
-                      "Full social access · feed, messages, communities",
-                      "Earn GHC through activity (standard daily cap)",
-                      "GreenHaven ID · QR · profile",
-                      "Upgrade anytime for discovery priority & boosts",
-                    ]
-                  : currentTier === "vip"
-                    ? [
-                        "Higher daily GHC earning limit (1.5×)",
-                        "Enhanced profile visibility in discovery",
-                        "VIP badge on your profile",
-                        "More discovery exposure & advanced filters",
-                        "Post & profile boosts",
-                        "Priority support",
-                      ]
-                    : [
-                        "Highest daily GHC earning limit (2×)",
-                        "Maximum discovery priority",
-                        "VVIP badge & premium profile presentation",
-                        "Advanced matching & analytics",
-                        "Creator / business tools",
-                        "Exclusive experiences & elevated storage",
-                      ]
-                ).map((line) => (
-                  <li key={line} className="flex items-start gap-2 text-[12px] font-medium text-foreground">
+                <li className="flex items-start gap-2 text-[12px] font-medium text-foreground">
+                  <Check size={14} className="mt-0.5 shrink-0 text-emerald-600" strokeWidth={2.5} />
+                  <span>{MEMBERSHIP_PLANS[currentTier].mediaMaxPhotos} profile photos · {MEMBERSHIP_PLANS[currentTier].mediaMaxStoryMb} MB story media</span>
+                </li>
+                <li className="flex items-start gap-2 text-[12px] font-medium text-foreground">
+                  <Check size={14} className="mt-0.5 shrink-0 text-emerald-600" strokeWidth={2.5} />
+                  <span>{MEMBERSHIP_PLANS[currentTier].dailyBoosts} daily boosts · ×{MEMBERSHIP_PLANS[currentTier].ghcDailyEarnMultiplier} activity earning multiplier (subject to caps)</span>
+                </li>
+                {MEMBERSHIP_PLANS[currentTier].platformFeeDiscountPct > 0 ? (
+                  <li className="flex items-start gap-2 text-[12px] font-medium text-foreground">
                     <Check size={14} className="mt-0.5 shrink-0 text-emerald-600" strokeWidth={2.5} />
-                    <span>{line}</span>
+                    <span>{MEMBERSHIP_PLANS[currentTier].platformFeeDiscountPct}% platform fee discount where eligible</span>
                   </li>
-                ))}
+                ) : null}
+                {MEMBERSHIP_PLANS[currentTier].entitlements.slice(0, 8).map((key) => {
+                  const meta = ENTITLEMENT_META[key]
+                  return (
+                    <li key={key} className="flex items-start gap-2 text-[12px] font-medium text-foreground">
+                      <EntitlementIcon name={meta?.icon} />
+                      <span>{meta?.label || key}</span>
+                    </li>
+                  )
+                })}
               </ul>
               <p className="mt-3 text-center text-[10px] font-semibold text-muted-foreground">
                 Free → VIP → VVIP · compare plans below
@@ -1045,12 +1079,12 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
           </div>
         )}
 
-                <p className="mb-2 px-0.5 text-[12px] font-bold text-foreground">
+                <p id="membership-compare-title" className="mb-2 px-0.5 text-[12px] font-bold text-foreground">
           Compare Free → VIP → VVIP
         </p>
 
         {/* Subscription duration and transparent discount policy */}
-        <div className="mb-2 grid grid-cols-2 gap-1 rounded-[1.25rem] border border-border/60 bg-card p-1 shadow-sm sm:grid-cols-4" role="group" aria-label="Subscription duration">
+        <div className="mb-2 grid grid-cols-2 gap-1 rounded-[1.25rem] border border-border/60 bg-card p-1 shadow-sm sm:grid-cols-4" role="group" aria-label="Prepaid membership term duration">
           {([
             { months: 1 as const, label: "1 month", discount: "No discount" },
             { months: 4 as const, label: "4 months", discount: "5% off" },
@@ -1096,8 +1130,17 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
         </div>
 
         {view === "compare" ? (
-          <div className="mb-8 overflow-x-auto rounded-[1.25rem] border border-border/60 bg-card shadow-[var(--gh-card-shadow)]">
+          <div className="mb-8">
+          <div className="mb-2 flex gap-1.5 overflow-x-auto pb-1" role="group" aria-label="Filter comparison categories">
+            {compareCategories.map((category) => (
+              <button key={category} type="button" onClick={() => setCompareCategory(category)} aria-pressed={compareCategory === category} className={`shrink-0 rounded-full border px-3 py-2 text-[11px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${compareCategory === category ? "border-emerald-600 bg-emerald-600 text-white" : "border-border bg-card text-muted-foreground hover:bg-muted"}`}>
+                {category}
+              </button>
+            ))}
+          </div>
+          <div className="overflow-x-auto rounded-[1.25rem] border border-border/60 bg-card shadow-[var(--gh-card-shadow)]">
             <table className="w-full min-w-[320px] border-collapse text-left text-[11px]">
+              <caption className="sr-only">Comparison of Free, VIP and VVIP membership benefits and selected-term prices</caption>
               <thead className="sticky top-0 z-10 bg-card">
                 <tr className="border-b border-border">
                   <th className="sticky left-0 bg-card px-2 py-2.5 font-bold text-muted-foreground">
@@ -1119,7 +1162,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
                 </tr>
               </thead>
               <tbody>
-                {COMPARE_ROWS.map((row) => (
+                {visibleCompareRows.map((row) => (
                   <tr key={row.key} className="border-b border-border/60">
                     <td className="sticky left-0 bg-card px-2 py-2 font-medium text-muted-foreground">
                       {row.label}
@@ -1132,8 +1175,9 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
               </tbody>
             </table>
             <p className="border-t border-border px-3 py-2 text-[10px] text-muted-foreground">
-              Scroll horizontally on small screens. Entitlements below open the real product area.
+              {visibleCompareRows.length} of {compareRows.length} comparison rows · scroll horizontally on small screens.
             </p>
+          </div>
           </div>
         ) : (
           /* Full-width vertical stack — every plan scrolls with the page (no clipped horizontal cards) */
@@ -1266,12 +1310,6 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
                         </li>
                       )
                     })}
-                    {plan.entitlements.length > 5 && (
-                      <li className="flex items-start gap-2 text-[14px] text-muted-foreground">
-                        <X size={14} className="mt-0.5 shrink-0 text-muted-foreground/40" />
-                        No paid boosts or priority placement
-                      </li>
-                    )}
                     {plan.entitlements.length > 5 ? (
                       <li>
                         <button
@@ -1293,17 +1331,21 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
                   </ul>
 
                   {tier !== "free" && !isCurrent && (
-                    <button
-                      type="button"
-                      onClick={() => setConfirmTier(tier)}
-                      className="mt-4 w-full rounded-full bg-[var(--gh-green)] py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-105 active:scale-[0.99]"
-                    >
-                      Review {plan.label}
-                    </button>
+                    <div className="mt-4">
+                      <button
+                        type="button"
+                        disabled={!canPurchaseTier(tier) || isOffline}
+                        onClick={() => setConfirmTier(tier)}
+                        className="w-full rounded-full bg-[var(--gh-green)] py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-105 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {!membershipAuthorityReady ? "Confirm account status first" : TIER_RANK[tier] < TIER_RANK[currentTier] ? `${plan.label} is below your current tier` : isOffline ? "Connect to continue" : `Review ${plan.label}`}
+                      </button>
+                      {TIER_RANK[tier] < TIER_RANK[currentTier] ? <p className="mt-1.5 text-center text-[10px] text-muted-foreground">Your active {MEMBERSHIP_PLANS[currentTier].label} plan already includes a higher tier of access.</p> : null}
+                    </div>
                   )}
                   {isCurrent && (
                     <p className="mt-3 text-center text-[11px] font-semibold text-emerald-700">
-                      {formatUntil(authoritativeStatus?.expiresAt)}
+                      {authoritativeStatus?.expiresAt ? `Prepaid access ${formatUntil(authoritativeStatus.expiresAt)}` : "Complimentary access · no scheduled expiry"}
                     </p>
                   )}
                 </article>
@@ -1378,17 +1420,23 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
               Confirm {MEMBERSHIP_PLANS[confirmTier].label}
             </h3>
             <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              {period}-month subscription · one bonus month
+              {period} paid month{period === 1 ? "" : "s"} · one bonus month · prepaid term
             </p>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              You will spend{" "}
-              <strong className="text-foreground">
-                {getMembershipGhcPrice(confirmTier, period).chargeGhc}{" "}
-                GHC
-              </strong>{" "}
-              from your wallet for {period} paid month{period === 1 ? "" : "s"}, plus one free bonus month (a total of {period + 1} months of access). Benefits activate via the entitlement system.
-              This does not change verification or reputation.
+              Review the two separate payment prices below, then choose one payment method. This is a one-time prepaid purchase for {period} paid month{period === 1 ? "" : "s"} plus one bonus month ({period + 1} months of access). The Pi amount is a separate catalog price, not a conversion of GHC. Benefits activate only after the server verifies payment and confirms the entitlement. This does not change verification or reputation.
             </p>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="rounded-xl border border-border bg-muted/40 px-3 py-2">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">GHC price</p>
+                <p className="mt-1 text-lg font-black text-foreground">{getMembershipGhcPrice(confirmTier, period).chargeGhc.toLocaleString()} GHC</p>
+                <p className="text-[10px] text-muted-foreground">List {getMembershipGhcPrice(confirmTier, period).listPriceGhc.toLocaleString()} · save {getMembershipGhcPrice(confirmTier, period).discountGhc.toLocaleString()} ({getMembershipGhcPrice(confirmTier, period).discountPct}%)</p>
+              </div>
+              <div className="rounded-xl border border-border bg-muted/40 px-3 py-2">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Pi price</p>
+                <p className="mt-1 text-lg font-black text-foreground">{getMembershipPiPrice(confirmTier, period).chargePi.toLocaleString()} π</p>
+                <p className="text-[10px] text-muted-foreground">List {getMembershipPiPrice(confirmTier, period).listPricePi.toLocaleString()} · save {getMembershipPiPrice(confirmTier, period).discountPi.toLocaleString()} π</p>
+              </div>
+            </div>
             <ul className="mt-3 max-h-32 space-y-1 overflow-y-auto rounded-xl bg-muted/50 px-3 py-2">
               {MEMBERSHIP_PLANS[confirmTier].entitlements.slice(0, 6).map((key) => (
                 <li key={key} className="flex items-center gap-2 text-[11px] text-foreground">
@@ -1397,9 +1445,11 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
                 </li>
               ))}
             </ul>
-            <p className="mt-2 text-[11px] text-muted-foreground">
-              You can stay on Free anytime. No auto-charge of external currency is implied.
-            </p>
+            <div className="mt-3 rounded-xl border border-border/70 bg-muted/40 px-3 py-2.5">
+              <p className="text-[11px] font-bold text-foreground">Your prepaid term</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">{period} paid month{period === 1 ? "" : "s"} + 1 bonus month = {period + 1} months of access. No automatic renewal or future charge is scheduled.</p>
+              <p className="mt-1 text-[10px] text-muted-foreground">The server confirms your membership after the payment provider or GHC ledger verifies the purchase. If payment completes but access does not appear, recover or refresh — do not pay again.</p>
+            </div>
             <p className="mt-3 text-[11px] font-semibold text-muted-foreground">Payment methods</p>
             <div className="mt-2 flex flex-col gap-2">
               {isPiPaymentsAvailable() ? (
@@ -1412,7 +1462,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
                   {busy?.tier === confirmTier && busy?.method === "pi" ? (
                     <Loader2 size={16} className="animate-spin" aria-hidden />
                   ) : null}
-                  Pay with π
+                  Pay with π · {getMembershipPiPrice(confirmTier, period).chargePi.toLocaleString()} π
                 </button>
               ) : (
                 <p className="rounded-xl bg-muted/50 px-3 py-2 text-[11px] text-muted-foreground">
@@ -1428,7 +1478,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
                 {busy?.tier === confirmTier && busy?.method === "ghc" ? (
                   <Loader2 size={16} className="animate-spin" aria-hidden />
                 ) : null}
-                Pay with GHC
+                Pay with GHC · {getMembershipGhcPrice(confirmTier, period).chargeGhc.toLocaleString()} GHC
               </button>
               <button
                 type="button"
