@@ -40,36 +40,47 @@ export function AuthLoadingScreen() {
             </svg>
           </div>
         ) : (
-          <div
-            className="mb-4 h-9 w-9 animate-spin rounded-full border-2 border-emerald-500/25 border-t-emerald-400"
-            role="status"
-            aria-label="Connecting to Pi"
-          />
+          <div className="mb-6 w-44" role="status" aria-label="Loading GreenHaven">
+            <style>{`
+              @keyframes gh-line-slide{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}
+              @keyframes gh-line-pulse{0%,100%{opacity:.35}50%{opacity:1}}
+              @media (prefers-reduced-motion: reduce){.gh-line-bar,.gh-line-dot{animation:none!important}}
+            `}</style>
+            <div className="relative h-[3px] w-full overflow-hidden rounded-full bg-white/10">
+              <div
+                className="gh-line-bar absolute inset-y-0 left-0 w-2/5 rounded-full bg-gradient-to-r from-transparent via-emerald-400 to-transparent"
+                style={{ animation: "gh-line-slide 1.4s ease-in-out infinite" }}
+              />
+            </div>
+            <div className="mt-2.5 flex justify-center gap-1.5" aria-hidden>
+              {[0, 1, 2].map((i) => (
+                <span
+                  key={i}
+                  className="gh-line-dot h-1 w-6 rounded-full bg-emerald-400/70"
+                  style={{ animation: `gh-line-pulse 1.2s ease-in-out ${i * 0.2}s infinite` }}
+                />
+              ))}
+            </div>
+          </div>
         )}
 
-        <h1 className="text-lg font-bold tracking-tight text-white">
-          {hasError
-            ? authMessage &&
-              /server unavailable|api offline|redeploy|identity service/i.test(
-                authMessage
-              )
-              ? "Server temporarily unavailable"
-              : "Couldn’t connect to Pi"
-            : "Connecting to Pi Network"}
-        </h1>
-        <p
-          className={`mt-2 max-w-xs text-[13px] leading-relaxed ${
-            hasError ? "text-rose-300/90" : "text-white/50"
-          }`}
-        >
-          {authMessage}
-        </p>
+        {hasError ? (
+          <>
+            <h1 className="text-lg font-bold tracking-tight text-white">
+              {authMessage &&
+              /server unavailable|api offline|redeploy|identity service/i.test(authMessage)
+                ? "Server temporarily unavailable"
+                : "Couldn’t sign you in"}
+            </h1>
+            <p className="mt-2 max-w-xs text-[13px] leading-relaxed text-rose-300/90">{authMessage}</p>
+          </>
+        ) : (
+          <p className="text-[13px] font-medium tracking-wide text-white/55">Getting things ready…</p>
+        )}
 
-        <div className="mt-6 flex w-full flex-col items-center gap-3">
-          {/* Pi Sign-in (OAuth) — works in ordinary browsers; Pi Browser SDK remains primary when available */}
-          <SignInWithPiButton />
-
-          {hasError ? (
+        {hasError ? (
+          <div className="mt-6 flex w-full flex-col items-center gap-3">
+            <SignInWithPiButton />
             <>
               <button
                 type="button"
@@ -97,12 +108,8 @@ export function AuthLoadingScreen() {
                 </p>
               )}
             </>
-          ) : (
-            <p className="text-[11px] text-white/35">
-              Usually a few seconds… or use Sign in with Pi
-            </p>
-          )}
-        </div>
+          </div>
+        ) : null}
       </div>
     </div>
   )

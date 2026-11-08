@@ -19,6 +19,15 @@ export type WithdrawalsHealthComponent = {
   latencyMs?: number
 }
 
+export type WithdrawalsPayoutGate = {
+  variable: string
+  /** What the code requires, e.g. exactly "true" or a minimum length. Secrets show a rule, never a value. */
+  required: string
+  ok: boolean
+  state: "ok" | "missing" | "empty" | "wrong_value" | "wrong_format"
+  hint: string
+}
+
 export type WithdrawalsHealthReport = {
   ok: boolean
   service: "ghc-withdrawals-health"
@@ -44,6 +53,10 @@ export type WithdrawalsHealthReport = {
     note: "Per-user withdrawable balance and authorization must be checked via authenticated /api/economy/earnings/withdrawable after Pi wallet authorization."
   }
   components: WithdrawalsHealthComponent[]
+  /** Exact per-variable result of the gates the withdrawal request + payout worker enforce. Values are never exposed. */
+  payoutGates: WithdrawalsPayoutGate[]
+  /** First gate that will block a withdrawal right now, or null when all pass. */
+  firstBlockingGate: string | null
   flags: Record<string, boolean>
   configPresence: Record<string, boolean>
 }
@@ -652,6 +665,61 @@ function rollupStatus(components: WithdrawalsHealthComponent[]): "ready" | "degr
   return "ready"
 }
 
+function flagGate(variable: string, expected: string): WithdrawalsPayoutGate {
+  const raw = process.env[variable]
+  if (raw === undefined) {
+    return { variable, required: `exactly "${expected}"`, ok: false, state: "missing", hint: `Not set in this deployment. Add ${variable}=${expected} for this environment (Preview), then redeploy.` }
+  }
+  if (raw.trim() === "") {
+    return { variable, required: `exactly "${expected}"`, ok: false, state: "empty", hint: `Set but empty. Enter the value ${expected}.` }
+  }
+  if (raw === expected) return { variable, required: `exactly "${expected}"`, ok: true, state: "ok", hint: "OK" }
+  const cleaned = raw.trim().replace(/^["']|["']$/g, "").toLowerCase()
+  return {
+    variable,
+    required: `exactly "${expected}"`,
+    ok: false,
+    state: "wrong_value",
+    hint:
+      cleaned === expected
+        ? `Looks like "${expected}" but has different case, spaces or quote marks. Retype it as plain ${expected}.`
+        : `Set, but the value is not "${expected}" (the code compares the exact text).`,
+  }
+}
+
+function secretGate(variable: string, minLen: number, ...alts: string[]): WithdrawalsPayoutGate {
+  const names = [variable, ...alts]
+  const best = names.map((n) => String(process.env[n] ?? "").trim()).sort((a, b) => b.length - a.length)[0] ?? ""
+  if (!names.some((n) => process.env[n] !== undefined)) {
+    return { variable, required: `secret, ${minLen}+ characters`, ok: false, state: "missing", hint: `Not set in this deployment. Create a random secret of ${minLen}+ characters.` }
+  }
+  if (best.length === 0) return { variable, required: `secret, ${minLen}+ characters`, ok: false, state: "empty", hint: "Set but empty." }
+  if (best.length < minLen) return { variable, required: `secret, ${minLen}+ characters`, ok: false, state: "wrong_format", hint: `Too short (needs ${minLen}+ characters).` }
+  return { variable, required: `secret, ${minLen}+ characters`, ok: true, state: "ok", hint: "OK" }
+}
+
+function evaluatePayoutGates(): WithdrawalsPayoutGate[] {
+  const seed = String(process.env.PI_WALLET_PRIVATE_SEED ?? "").trim()
+  const seedGate: WithdrawalsPayoutGate = process.env.PI_WALLET_PRIVATE_SEED === undefined
+    ? { variable: "PI_WALLET_PRIVATE_SEED", required: "S + 55 chars (A-Z, 2-7)", ok: false, state: "missing", hint: "Not set. Needed by the payout worker (testnet wallet secret)." }
+    : /^S[A-Z2-7]{55}$/.test(seed)
+      ? { variable: "PI_WALLET_PRIVATE_SEED", required: "S + 55 chars (A-Z, 2-7)", ok: true, state: "ok", hint: "OK" }
+      : { variable: "PI_WALLET_PRIVATE_SEED", required: "S + 55 chars (A-Z, 2-7)", ok: false, state: "wrong_format", hint: "Set but not a valid secret seed format (check for spaces, lowercase or a truncated paste)." }
+  const apiKeyOk = Boolean(String(process.env.PI_API_KEY || process.env.PI_SERVER_API_KEY || "").trim())
+  return [
+    flagGate("PI_NETWORK", "testnet"),
+    flagGate("PI_EARNINGS_PAYOUT_REQUESTS_ENABLED", "true"),
+    flagGate("PI_EARNINGS_PAYOUT_EXECUTION_ENABLED", "true"),
+    flagGate("PI_A2U_ENABLED", "true"),
+    flagGate("PI_A2U_TESTNET_ONLY", "true"),
+    flagGate("PI_ENV", "production"),
+    secretGate("GH_PIN_PROOF_SECRET", 32),
+    secretGate("PI_EARNINGS_EXECUTOR_KEY", 16, "GHC_A2U_ADMIN_KEY"),
+    { variable: "PI_API_KEY", required: "present", ok: apiKeyOk, state: apiKeyOk ? "ok" : "missing", hint: apiKeyOk ? "OK" : "Not set." },
+    seedGate,
+  ]
+}
+
 export async function evaluateWithdrawalsHealth(opts?: {
   hostname?: string | null
 }): Promise<WithdrawalsHealthReport> {
@@ -682,6 +750,7 @@ export async function evaluateWithdrawalsHealth(opts?: {
   ]
 
   const status = rollupStatus(components)
+  const payoutGates = evaluatePayoutGates()
 
   return {
     ok: status !== "not_ready",
@@ -702,6 +771,8 @@ export async function evaluateWithdrawalsHealth(opts?: {
       note: "Per-user withdrawable balance and authorization must be checked via authenticated /api/economy/earnings/withdrawable after Pi wallet authorization.",
     },
     components,
+    payoutGates,
+    firstBlockingGate: payoutGates.find((g) => !g.ok)?.variable ?? null,
     flags: staticAssessment.flags,
     configPresence: staticAssessment.configPresence,
   }

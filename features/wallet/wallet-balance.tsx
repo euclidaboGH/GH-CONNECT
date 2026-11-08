@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
-import { Eye, EyeOff, Loader2 } from "lucide-react"
+import { Eye, EyeOff, Loader2, RefreshCw } from "lucide-react"
 import { GhcCoinIcon } from "@/components/ghc/ghc-coin-icon"
 import { ASSET_POLICY } from "@/lib/asset-separation"
 import { formatGhc } from "./wallet-format"
@@ -271,14 +271,29 @@ export function WalletBalanceCard({
             </span>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onToggleVisible}
-          className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border/70 bg-card/90 text-muted-foreground shadow-sm transition hover:bg-muted"
-          aria-label={balanceVisible ? "Hide balances" : "Show balances"}
-        >
-          {balanceVisible ? <EyeOff size={17} /> : <Eye size={17} />}
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {piSelected ? (
+            <button
+              type="button"
+              onClick={() => void refreshPi()}
+              disabled={piLoading}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border/70 bg-card/90 text-muted-foreground shadow-sm transition hover:bg-muted active:scale-95 disabled:opacity-60"
+              aria-label="Refresh Pi balance"
+              aria-busy={piLoading}
+            >
+              <RefreshCw size={16} className={piLoading ? "animate-spin" : ""} />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={onToggleVisible}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border/70 bg-card/90 text-muted-foreground shadow-sm transition hover:bg-muted active:scale-95"
+            aria-label={balanceVisible ? "Hide balances" : "Show balances"}
+            aria-pressed={!balanceVisible}
+          >
+            {balanceVisible ? <EyeOff size={17} /> : <Eye size={17} />}
+          </button>
+        </div>
       </div>
 
       {/* Premium active-asset hero. The selected rail is displayed alone; PI and GHC are never combined. */}
@@ -297,10 +312,30 @@ export function WalletBalanceCard({
             ? piSnapshot
               ? maskPi(piSnapshot.available)
               : piLoading
-                ? "Checking…"
+                ? <span className="inline-block h-9 w-40 animate-pulse rounded-xl bg-white/20 align-middle" aria-label="Loading balance" />
                 : "Unavailable"
             : ghcVerified ? mask(balance) : "Unavailable"}
         </p>
+        {piSelected && piSnapshot ? (
+          <p className="mt-3">
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold ${
+                piSnapshot.authorizationActive && piSnapshot.eligible && piSnapshot.withdrawable > 0
+                  ? "bg-emerald-400/20 text-emerald-100"
+                  : "bg-amber-300/20 text-amber-100"
+              }`}
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
+              {!piSnapshot.piWalletLinked
+                ? "Link Pi identity to withdraw"
+                : !piSnapshot.authorizationActive
+                  ? "Authorize payouts to withdraw"
+                  : piSnapshot.eligible && piSnapshot.withdrawable > 0
+                    ? "Ready to withdraw"
+                    : "Not eligible to withdraw yet"}
+            </span>
+          </p>
+        ) : null}
         <p className="mt-2 text-[10px] text-white/65">
           {piSelected
             ? piLoading
@@ -342,7 +377,7 @@ export function WalletBalanceCard({
           type="button"
           aria-pressed={piSelected}
           onClick={() => onSelectRail?.("pi")}
-          className={`relative flex min-h-[7.25rem] flex-col gap-2 rounded-[1.2rem] px-3 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-600 focus-visible:ring-offset-2 ${
+          className={`relative flex min-h-[6.75rem] flex-col gap-2 rounded-[1.2rem] px-3 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-600 focus-visible:ring-offset-2 ${
             piSelected
               ? "bg-violet-100/90 shadow-[0_14px_30px_-18px_rgba(124,58,237,0.55)] ring-1 ring-violet-400/40 dark:bg-violet-950/60"
               : "border border-border/55 bg-card/72 shadow-sm hover:bg-card"
@@ -392,7 +427,7 @@ export function WalletBalanceCard({
           type="button"
           aria-pressed={!piSelected}
           onClick={() => onSelectRail?.("ghc")}
-          className={`relative flex min-h-[7.25rem] flex-col gap-2 rounded-[1.2rem] px-3 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 ${
+          className={`relative flex min-h-[6.75rem] flex-col gap-2 rounded-[1.2rem] px-3 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 ${
             !piSelected
               ? "bg-emerald-100/90 shadow-[0_14px_30px_-18px_rgba(5,150,105,0.55)] ring-1 ring-emerald-400/40 dark:bg-emerald-950/60"
               : "border border-border/55 bg-card/72 shadow-sm hover:bg-card"
