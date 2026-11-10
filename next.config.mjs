@@ -21,6 +21,13 @@ const nextConfig = {
   // Tree-shake icon imports — large win with lucide-react
   experimental: {
     optimizePackageImports: ["lucide-react", "date-fns", "class-variance-authority", "clsx"],
+    // Vercel's 2-core / 8-GB build container was killing the Next.js build
+    // worker with SIGKILL after all 289 prebuild checks passed. Keep the
+    // production build serial and enable Next's webpack memory optimizations
+    // rather than weakening type/lint checks or increasing the heap beyond
+    // the container's available memory.
+    cpus: 1,
+    webpackMemoryOptimizations: true,
   },
   compiler: {
     // Drop noisy console.log in production; keep error/warn for diagnostics

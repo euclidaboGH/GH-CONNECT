@@ -2,6 +2,14 @@
 
 **Canonical implementation context. Read this before every new build prompt or engineering task. This document supersedes historical prompts, worklogs and archives for current implementation decisions.**
 
+## Run #262 — Vercel build-memory remediation (2026-11-10)
+
+- Vercel build logs for commit `0ab1f482f4c24060cce3d844a79154a29a61bcba` confirm the 289/289 prebuild checks completed successfully. The production build then died during `Creating an optimized production build ...` with `Next.js build worker exited with code: null and signal: SIGKILL`; Vercel's build-system report explicitly detected an Out Of Memory (OOM) event. `BUILD_UTILS_SPAWN_1` is only the wrapper error, not the root cause.
+- `next.config.mjs` now bounds Next.js build concurrency to one CPU worker and enables `experimental.webpackMemoryOptimizations`, targeting the observed 2-core / 8-GB build-container memory pressure.
+- TypeScript and ESLint build gates remain enabled (`ignoreBuildErrors: false`, `ignoreDuringBuilds: false`). The Node engine remains `^24.15.0`; no type/lint bypass, heap overcommit, database migration, or financial behavior change was introduced.
+- `scripts/check-run262-build-memory-budget.mjs` verifies the memory settings and protects the strict build gates; it is included in the prebuild manifest and static verification.
+- Required follow-up: rerun the preview build on Vercel and inspect the complete build log. The local environment is Node `22.16.0` and cannot run the required Node 24.15.0 dependency-backed production build; the npm/Node download host is unreachable here. Do not mark production approved until Node 24 typecheck, lint and build all pass.
+
 ## Run #261 — Current source authority (2026-11-10)
 
 - Run #258: Testnet Marketplace order-list RPC fixed after reproducing SQLSTATE 42703; applied migration `20261110110002_marketplace_orders_list_rpc_alias_fix.sql` (generated history version `20261110102610`). Synthetic read-only postflight returned an empty order list and confirmed service_role-only ACL. No order or financial data changed.
