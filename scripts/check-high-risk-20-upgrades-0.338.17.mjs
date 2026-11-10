@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 20 biggest upgrades / 20 high-risk controls — 0.338.17
+ * 20 biggest upgrades / 20 high-risk controls — 0.338.18
  */
 import fs from 'node:fs'
 
@@ -58,7 +58,7 @@ ok('QR svg local-only annotation', !qr || /generated locally/.test(qr))
 ok('sticky max withdraw still present', /stickyMaxRef/.test(withdraw))
 ok('cart wallet separation module retained', /SURFACE_CART/.test(cartSep))
 ok('reservation policy quote false', /RESERVE_ON_QUOTE = false/.test(resPol))
-ok('package version 0.338.17', pkg.version === '0.338.17')
+ok('package version 0.338.18', pkg.version === '0.338.18')
 
 console.log(`\nHigh-risk 20 upgrades: ${pass}/${pass + fail}`)
 process.exit(fail ? 1 : 0)

@@ -260,9 +260,11 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
     const controller = new AbortController()
     const timeout = window.setTimeout(() => controller.abort(), 8_000)
 
-    // Refresh withdrawable on open, but do NOT clear the previous snapshot to 0/null.
-    // Clearing caused Max · 0.00 π mid-session and looked like funds were reserved/lost.
-    // Quote and withdrawal APIs remain the authority; this is display-only hydration.
+    // Clear prior sheet/account snapshot before hydration so a previous account cannot
+    // leak into this open. PiWithdrawSheet keeps a sticky max so Max · 0.00 π does not
+    // flash while this read-only snapshot reloads. Quote/withdraw APIs stay authoritative.
+    setPiWithdrawAvailable(null)
+    setPiWithdrawUser(null)
 
     ;(async () => {
       try {

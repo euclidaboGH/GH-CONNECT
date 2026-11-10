@@ -141,7 +141,7 @@ function ListingCard({
     <button
       type="button"
       onClick={() => onOpen(listing.id)}
-      className="gh-card-interactive group flex w-full flex-col overflow-hidden rounded-[1.25rem] border border-border/50 bg-card text-left shadow-[var(--gh-card-shadow)] transition duration-200 hover:-translate-y-0.5 hover:border-emerald-300/80 hover:shadow-[var(--gh-card-shadow-lg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 active:scale-[0.99] motion-reduce:transform-none dark:hover:border-emerald-900"
+      className="gh-card-interactive group flex w-full flex-col overflow-hidden [content-visibility:auto] [contain-intrinsic-size:240px] rounded-[1.25rem] border border-border/50 bg-card text-left shadow-[var(--gh-card-shadow)] transition duration-200 hover:-translate-y-0.5 hover:border-emerald-300/80 hover:shadow-[var(--gh-card-shadow-lg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 active:scale-[0.99] motion-reduce:transform-none dark:hover:border-emerald-900"
       aria-label={`${listing.title}, ${formatPrice(listing)}`}
     >
       <div className="relative aspect-[4/3] w-full bg-muted/50">

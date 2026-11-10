@@ -482,7 +482,7 @@ function EnhancedPostCardInner({
   return (
     <div
       ref={containerRef}
-      data-post-id={post.id} data-sentiment={(() => { const t = upvoteCount + downvoteCount; if (t < 5) return "none"; const r = upvoteCount / t; return r >= 0.7 ? "positive" : r <= 0.35 ? "critical" : "mixed" })()} role="article" tabIndex={onOpenPost ? 0 : undefined} aria-busy={curationBusy || undefined} aria-label={post.authorName ? `Post by ${displayAuthor}` : "Post"} className="gh-post-card gh-card-interactive max-w-full cursor-pointer overflow-x-hidden overflow-hidden rounded-[1.25rem] border border-border/50 bg-card text-card-foreground shadow-[var(--gh-card-shadow)] focus-visible:outline-none"
+      style={{ contentVisibility: "auto", containIntrinsicSize: "320px" }} data-post-id={post.id} data-sentiment={(() => { const t = upvoteCount + downvoteCount; if (t < 5) return "none"; const r = upvoteCount / t; return r >= 0.7 ? "positive" : r <= 0.35 ? "critical" : "mixed" })()} role="article" tabIndex={onOpenPost ? 0 : undefined} aria-busy={curationBusy || undefined} aria-label={post.authorName ? `Post by ${displayAuthor}` : "Post"} className="gh-post-card gh-card-interactive max-w-full cursor-pointer overflow-x-hidden overflow-hidden rounded-[1.25rem] border border-border/50 bg-card text-card-foreground shadow-[var(--gh-card-shadow)] focus-visible:outline-none"
       onClick={(event) => {
         const target = event.target as HTMLElement | null
         if (target?.closest("button, a, input, textarea, select, video, [role=button], [data-post-no-open]")) return
