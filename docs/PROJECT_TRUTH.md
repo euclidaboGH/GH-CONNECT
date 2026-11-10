@@ -2,7 +2,7 @@
 
 The Vercel runtime error cluster showed the durable Marketplace order-list RPC failing. A direct Testnet SQL probe reproduced PostgreSQL `42703`: the old RPC ordered its JSON aggregation by `x.created_at`, but its projected timestamp alias was the quoted `createdAt`. Added `20261110110002_marketplace_orders_list_rpc_alias_fix.sql` and applied it only to Testnet. Supabase recorded generated migration history version `20261110102610`. The replacement uses the existing order getter, orders by the real source timestamp, limits results to 200, pins `search_path`, and preserves service-role-only execution. A synthetic non-user lookup returned `[]`; ACL postflight confirmed anon/authenticated denied and service_role allowed. PostgREST schema cache reloaded at 10:26 UTC. No marketplace order, stock, payment, ledger, balance or payout row was changed.
 
-Testnet withdrawal recovery postflight also confirms `gh_withdrawal_pin_recovery_get` and `gh_pi_earnings_payout_get_owned` exist with service-role-only grants; synthetic probes returned the expected not-configured / not-found outcomes. The historical Vercel PGRST202 occurred before the PIN recovery migration and schema reload. Authenticated Vercel runtime verification remains outstanding because the current deployed `testnet` source is still 0.338.20; the 0.338.24 archive has not been pushed or deployed. Migrations 194–195 remain REVIEW_REQUIRED. Production remains NOT APPROVED.
+Testnet withdrawal recovery postflight also confirms `gh_withdrawal_pin_recovery_get` and `gh_pi_earnings_payout_get_owned` exist with service-role-only grants; synthetic probes returned the expected not-configured / not-found outcomes. The historical Vercel PGRST202 occurred before the PIN recovery migration and schema reload. Authenticated Vercel runtime verification remains outstanding because the current deployed `testnet` source is still 0.338.20; the 0.338.25 archive has not been pushed or deployed. Migrations 194–195 remain REVIEW_REQUIRED. Production remains NOT APPROVED.
 
 ## Run #257 — Economy and Marketplace reconciliation (2026-11-10)
 
@@ -28,7 +28,7 @@ The earnings payout worker no longer directly selects from `gh_pi_earnings_payou
 
 ## 0.330.49 — Phase 3 wallet, rewards and membership concurrency hardening (2026-11-08)
 
-**Current source version:** `0.338.24`
+**Current source version:** `0.338.25`
 
 This increment closes several Phase 3 financial-reliability gaps. Pi withdrawal reservation recovery now reports per-request reasons and unlock conditions, and only releases a Pi Testnet reservation when it is still `reserved`, has no provider payment/txid, has no execution start/lease and has zero execution attempts. Processing/uncertain requests remain protected until an authoritative provider result; timeouts do not forfeit earned funds. Wallet ledger history prioritizes human-readable reasons over opaque references, and the withdrawal request response no longer contradicts its own execution gate. GHC membership purchase now serializes entitlement preflight and debit per account and prevents duplicate active same-tier charges or active VVIP downgrades during concurrent requests. Reward claim replay by either pending-row ID or rewardId alias resolves to the one posted credit. Pi payment recovery now looks up and validates the provider object before binding its ID, checks payer identity/network/direction/amount, and requires a verified transaction and txid before completion; recovery is durably rate limited and no-store. The new SQL migration `20261108110001_phase3_wallet_rewards_membership_concurrency_recovery.sql` is REVIEW_REQUIRED and unapplied. Its 43-check source contract passes; existing targeted Phase 3 ledger, request guard, membership, payout lifecycle/settlement/execution, wallet recovery and cross-feature reconciliation contracts pass. Live PostgreSQL concurrency, authenticated Pi Testnet payment/entitlement recovery, actual 3π reservation reconciliation, Node 24.15.0 dependency-backed typecheck/lint/build and browser/device acceptance remain outstanding. Production remains NOT APPROVED.
 
@@ -197,8 +197,8 @@ The release retains the 0.330.0 Settings/media/navigation work and corrects stal
 
 ## Current authoritative metadata
 
-- Package and lockfile version: `0.338.24` (verified against `package.json` and the lockfile root).
-- Current project archive: `GREENHAVEN-0.338.24-RUN258-MARKETPLACE-RPC-REPAIR.zip`.
+- Package and lockfile version: `0.338.25` (verified against `package.json` and the lockfile root).
+- Current project archive: `GREENHAVEN-0.338.25-RUN259-RELEASE-HYGIENE-REPAIR.zip`.
 - Runtime: Node `24.15.0` / package engine `^24.15.0`; this audit environment only supplied Node 22.16.0, so dependency-backed typecheck/build remain unverified.
 - Canonical Supabase migrations: **207** SQL files.
 - Duplicate migration numeric prefixes: **0** (source-level manifest check required for release).
