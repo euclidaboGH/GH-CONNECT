@@ -42,7 +42,7 @@ const checks = [
   ['hidden bottom navigation is inert and aria-hidden', /aria-hidden={bottomNavHidden \|\| showCreateHub}\s+inert={bottomNavHidden \|\| showCreateHub}/.test(app)],
   ['active bottom navigation destination remains announced', app.includes('aria-current={isActive ? "page" : undefined}')],
   ['bottom navigation controls preserve touch target and safe-area gutters', css.includes('.gh-bottom-nav button') && css.includes('safe-area-inset-left') && css.includes('safe-area-inset-right')],
-  ['new independent UI audit is registered in build and static verification', ['prebuild','verify:static'].every((key) => pkg.scripts[key]?.includes('check-ui-navigation-responsive-audit-20261109.mjs'))],
+  ['new independent UI audit is registered in build and static verification', ['prebuild:checks','verify:static'].every((key) => pkg.scripts[key]?.includes('check-ui-navigation-responsive-audit-20261109.mjs'))],
 ]
 let failures = 0
 for (const [label, ok] of checks) {

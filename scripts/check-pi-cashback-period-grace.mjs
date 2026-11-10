@@ -16,7 +16,7 @@ const checks = [
   ['new close remains service-role only', /REVOKE ALL ON FUNCTION public\.gh_pi_cashback_period_close\(text,timestamptz,timestamptz,text\)[\s\S]*?FROM PUBLIC, anon, authenticated/.test(migration) && /GRANT EXECUTE ON FUNCTION public\.gh_pi_cashback_period_close\(text,timestamptz,timestamptz,text\)[\s\S]*?TO service_role/.test(migration)],
   ['period close still creates entitlement records, not blockchain payouts', /does NOT initiate or authorize A2U payments/i.test(ledger) && /not a payout/i.test(migration)],
   ['migration is classified for explicit review and never auto-applied', /20261029010003_pi_cashback_period_reconciliation_grace\.sql/.test(inventory) && /REVIEW_REQUIRED/.test(inventory)],
-  ['contract runs in prebuild and full static verification', packageJson.scripts.prebuild.includes('check-pi-cashback-period-grace.mjs') && suite.includes('check-pi-cashback-period-grace.mjs')],
+  ['contract runs in prebuild and full static verification', packageJson.scripts['prebuild:checks'].includes('check-pi-cashback-period-grace.mjs') && suite.includes('check-pi-cashback-period-grace.mjs')],
 ]
 let failed = 0
 for (const [name, pass] of checks) { console.log(`${pass ? 'PASS' : 'FAIL'} ${name}`); if (!pass) failed++ }

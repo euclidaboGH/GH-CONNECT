@@ -30,7 +30,7 @@ const checks = [
   ['Mission policy explicitly states achievements do not issue GHC or Pi', rewards.includes('mission completion does not issue GHC or Pi')],
   ['GHC rewards and Pi cashback remain separate journeys', rewards.includes('Two different rewards') && rewards.includes('<PiCashbackSummary />')],
   ['Rewards display does not gain client-side financial issuance authority', !/ledger\.insert|mintGhc|transferGhc|settleReward\s*\(/i.test(rewards)],
-  ['Priority 3 contract is registered exactly once in prebuild and static verification', (pkg.scripts.prebuild.match(/check-priority3-rewards-wallet-pin\.mjs/g) || []).length === 1 && (pkg.scripts['verify:static'].match(/check-priority3-rewards-wallet-pin\.mjs/g) || []).length === 1],
+  ['Priority 3 contract is registered exactly once in prebuild and static verification', (pkg.scripts['prebuild:checks'].match(/check-priority3-rewards-wallet-pin\.mjs/g) || []).length === 1 && (pkg.scripts['verify:static'].match(/check-priority3-rewards-wallet-pin\.mjs/g) || []).length === 1],
 ]
 let failed = 0
 for (const [label, ok] of checks) { console.log(`${ok ? 'PASS' : 'FAIL'} ${label}`); if (!ok) failed++ }

@@ -32,7 +32,7 @@ test('filter contract parses ISO dates and bounded ranges', /parseIsoDate/.test(
 test('filter utils normalize text and count active filters', /normalizeFilterText/.test(filterUtils) && /countActiveFilters/.test(filterUtils))
 test('active filter summary is accessible copy', /describeActiveFilterSummary/.test(filterUtils))
 test('package and app release versions agree', release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`))
-test('phase 9 settings-filters checker is registered in prebuild', Boolean(pkg.scripts?.prebuild?.includes('check-phase9-settings-filters.mjs')))
+test('phase 9 settings-filters checker is registered in prebuild', Boolean(pkg.scripts?.['prebuild:checks']?.includes('check-phase9-settings-filters.mjs')))
 test('phase 9 programme doc exists', existsSync(join(root, 'docs/PHASE-9-SETTINGS-FILTERS-2026-11-08.md')))
 
 const failed = checks.filter((x) => !x).length

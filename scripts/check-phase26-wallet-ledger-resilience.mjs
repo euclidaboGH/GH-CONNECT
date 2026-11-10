@@ -51,7 +51,7 @@ const checks = [
   ['GHC balances are labelled confirmed only for server-sourced snapshots', /ghcVerified/.test(balance) && /source === "server"/.test(screen)],
   ['Pi and GHC remain distinct rails in the redesigned wallet', /PI and GHC are never added together/.test(balance) && /Pi · separate from GHC/.test(balance)],
   ['current build context explicitly supersedes historical prompts/worklogs', /CURRENT BUILD CONTEXT/.test(context) && /historical/.test(context.toLowerCase())],
-  ['phase gate is registered in prebuild and verify:static', (pkg.scripts.prebuild || '').includes('check-phase26-wallet-ledger-resilience.mjs') && (pkg.scripts['verify:static'] || '').includes('check-phase26-wallet-ledger-resilience.mjs')],
+  ['phase gate is registered in prebuild and verify:static', (pkg.scripts['prebuild:checks'] || '').includes('check-phase26-wallet-ledger-resilience.mjs') && (pkg.scripts['verify:static'] || '').includes('check-phase26-wallet-ledger-resilience.mjs')],
   ['package and lockfile versions match', pkg.version === lock.version && pkg.version === lock.packages?.['']?.version],
   ['wallet release gate remains registered', (pkg.scripts['verify:static'] || '').includes('check-wallet-phase5-release-gate.mjs')],
   ['migration source manifest contains every canonical migration', existsSync(join(root, 'MIGRATION-SOURCE-MANIFEST.csv')) && read('MIGRATION-SOURCE-MANIFEST.csv').trim().split(/\r?\n/).length === Number((read('VERIFIED_MANIFEST.txt').match(/^canonical_migrations=(\d+)$/m) || [])[1]) + 1],

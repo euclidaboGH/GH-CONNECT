@@ -35,7 +35,7 @@ test('revoke-others requires step-up policy', /requireRecentStepUp|step-up/.test
 test('logout clears cookie and attempts step-up revocation', /buildClearSessionCookieHeader/.test(logout) && /revokeStepUpsForSession/.test(logout))
 test('dev user: tokens are rejected in production', /REJECTED_DEV_TOKEN_IN_PRODUCTION/.test(auth))
 test('package and app release versions agree', release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`))
-test('phase 4 checker is registered in prebuild', pkg.scripts?.prebuild?.includes('check-phase4-identity-authentication.mjs'))
+test('phase 4 checker is registered in prebuild', pkg.scripts?.['prebuild:checks']?.includes('check-phase4-identity-authentication.mjs'))
 test('phase 4 programme doc exists', existsSync(join(root, 'docs/PHASE-4-IDENTITY-AUTHENTICATION-2026-11-08.md')))
 
 const failed = checks.filter((x) => !x).length

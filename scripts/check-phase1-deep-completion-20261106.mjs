@@ -26,7 +26,7 @@ const checks = [
   ['community board displays an honest empty state after a successful empty response', /No discussions yet\. Start the conversation/.test(hub)],
   ['community card save mutation is guarded against duplicate concurrent toggles', /saveBusy[\s\S]*?setSaveBusy\(true\)[\s\S]*?finally\(\(\) => setSaveBusy\(false\)\)/.test(canonicalCard)],
   ['community board parent callback returns an explicit success result', /handleBoardPost = async \([\s\S]*?\): Promise<boolean>[\s\S]*?return true/.test(communityScreen)],
-  ['deep completion regression gate is registered in prebuild and static verification', (pkg.scripts.prebuild || '').includes('check-phase1-deep-completion-20261106.mjs') && (pkg.scripts['verify:static'] || '').includes('check-phase1-deep-completion-20261106.mjs')],
+  ['deep completion regression gate is registered in prebuild and static verification', (pkg.scripts['prebuild:checks'] || '').includes('check-phase1-deep-completion-20261106.mjs') && (pkg.scripts['verify:static'] || '').includes('check-phase1-deep-completion-20261106.mjs')],
 ]
 let passed = 0
 for (const [name, ok] of checks) {

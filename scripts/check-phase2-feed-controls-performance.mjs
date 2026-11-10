@@ -41,7 +41,7 @@ const checks = [
   ['responsive screenshot harness detects document overflow and app-shell width', screenshots.includes('documentWidth > dimensions.viewportWidth + 2') && screenshots.includes('box.width > viewport.width + 1')],
   ['responsive screenshot harness captures canonical navigation destinations', screenshots.includes('nav[aria-label=\"Main navigation\"] button') && screenshots.includes('safeLabel')],
   ['responsive screenshot command is registered', pkg.scripts['capture:phase2-responsive']?.includes('capture-phase2-responsive-screenshots.mjs')],
-  ['new feed controls/performance gate is registered in prebuild and static verification', ['prebuild', 'verify:static'].every((key) => pkg.scripts[key]?.includes('check-phase2-feed-controls-performance.mjs'))],
+  ['new feed controls/performance gate is registered in prebuild and static verification', ['prebuild:checks', 'verify:static'].every((key) => pkg.scripts[key]?.includes('check-phase2-feed-controls-performance.mjs'))],
 ]
 let failures = 0
 for (const [label, ok] of checks) { console.log(`${ok ? 'PASS' : 'FAIL'} ${label}`); if (!ok) failures++ }

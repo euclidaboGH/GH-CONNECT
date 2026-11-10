@@ -9,7 +9,7 @@ const context = read('contexts/ghc-context.tsx')
 const release = read('lib/app-release.ts')
 const truth = read('docs/PROJECT_TRUTH.md')
 const manifest = read('VERIFIED_MANIFEST.txt')
-const prebuild = pkg.scripts?.prebuild || ''
+const prebuild = pkg.scripts?.['prebuild:checks'] || ''
 const checks = [
   ['saved listings use latest-request sequencing', /const requestId = \+\+savedRequestRef\.current/.test(screen) && screen.includes('requestId !== savedRequestRef.current')],
   ['seller listings use latest-request sequencing', /const requestId = \+\+mineRequestRef\.current/.test(screen) && screen.includes('requestId !== mineRequestRef.current')],

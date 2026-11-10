@@ -20,7 +20,7 @@ const doc = existsSync(join(root, 'docs/MAINTENANCE-GAPFILL-20-2026-11-08.md'))
   : ''
 const pkg = JSON.parse(read('package.json'))
 const release = read('lib/app-release.ts')
-const prebuild = String(pkg.scripts?.prebuild || '')
+const prebuild = String(pkg.scripts?.['prebuild:checks'] || '')
 
 test('not-found links to support', /href="\/support"/.test(notFound))
 test('not-found links to privacy and terms', /href="\/privacy"/.test(notFound) && /href="\/terms"/.test(notFound))

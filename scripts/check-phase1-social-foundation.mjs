@@ -21,7 +21,7 @@ const checks = [
   ['legacy local-only posts no longer expose fake curation or reaction controls', !/curateCommunityPost|socialSetCuration|disabled={!linked/.test(hub) && /Archived community post/.test(hub)],
   ['community canonical cards reuse the same EnhancedPostCard used by Feed/Profile', /<EnhancedPostCard/.test(card) && /CommunityCanonicalPostCard/.test(hub) && /export const EnhancedPostCard/.test(postCard)],
   ['canonical community card routes curation/reactions/save through durable APIs', /socialToggleReaction/.test(card) && /socialToggleSave/.test(card) && /onShowVisibilityReason/.test(card)],
-  ['phase-one regression gate is part of prebuild and static verification', (pkg.scripts.prebuild || '').includes('check-phase1-social-foundation.mjs') && (pkg.scripts['verify:static'] || '').includes('check-phase1-social-foundation.mjs')],
+  ['phase-one regression gate is part of prebuild and static verification', (pkg.scripts['prebuild:checks'] || '').includes('check-phase1-social-foundation.mjs') && (pkg.scripts['verify:static'] || '').includes('check-phase1-social-foundation.mjs')],
 ]
 let passed = 0
 for (const [name, ok] of checks) { console.log(`${ok ? 'PASS' : 'FAIL'} ${name}`); if (ok) passed++ }

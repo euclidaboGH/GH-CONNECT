@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 const source = readFileSync('components/ghc/enhanced-feed-screen.tsx', 'utf8')
 const composer = readFileSync('components/ghc/composer-prompt-bar.tsx', 'utf8')
 const packageJson = JSON.parse(readFileSync('package.json', 'utf8'))
-const prebuild = packageJson.scripts?.prebuild || ''
+const prebuild = packageJson.scripts?.['prebuild:checks'] || ''
 const verify = packageJson.scripts?.['verify:static'] || ''
 const checks = [
   ['saved feed lane is restored from device preference', source.includes('v === "saved"')],

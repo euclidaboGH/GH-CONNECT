@@ -9,7 +9,7 @@ const helper = read("lib/social/reconcile-feed-posts.ts")
 const release = read("lib/app-release.ts")
 const truth = read("docs/PROJECT_TRUTH.md")
 const manifest = read("VERIFIED_MANIFEST.txt")
-const prebuild = pkg.scripts?.prebuild || ""
+const prebuild = pkg.scripts?.['prebuild:checks'] || ""
 const checks = [
   ["package, lockfile and application release versions agree", lock.version === pkg.version && lock.packages?.[""]?.version === pkg.version && release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],
   ["shared feed reconciliation helper exposes replace and append modes", helper.includes('FeedReconcileMode = "replace" | "append"') && helper.includes('mode: FeedReconcileMode = "replace"')],

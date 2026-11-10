@@ -40,7 +40,7 @@ test('offline message flush removes permanent failures and bounds retries', /RET
 test('notification center dual mark-read waits for both social and unified writes', /\/api\/social\/notifications/.test(bell) && /\/api\/notifications/.test(bell) && /Promise\.all/.test(bell))
 test('mark-all reports partial durable failure honestly', /Some alerts could not be marked read/.test(bell))
 test('package and app release versions agree', release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`))
-test('phase 5 checker is registered in prebuild', Boolean(pkg.scripts?.prebuild?.includes('check-phase5-messages-notifications.mjs')))
+test('phase 5 checker is registered in prebuild', Boolean(pkg.scripts?.['prebuild:checks']?.includes('check-phase5-messages-notifications.mjs')))
 test('phase 5 programme doc exists', existsSync(join(root, 'docs/PHASE-5-MESSAGES-NOTIFICATIONS-2026-11-08.md')))
 
 const failed = checks.filter((x) => !x).length

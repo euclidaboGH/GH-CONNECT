@@ -31,7 +31,7 @@ test('match signal is rate limited', /match-signal:/.test(signal))
 test('match clarity separates Interest from Connect', /Like shows interest/.test(clarity) && /Connect sends a real request/.test(clarity))
 test('connection request emits social notification on durable write', /emitSocialNotification/.test(conn) && /connection/.test(conn))
 test('package and app release versions agree', release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`))
-test('phase 8 checker is registered in prebuild', Boolean(pkg.scripts?.prebuild?.includes('check-phase8-profile-matching.mjs')))
+test('phase 8 checker is registered in prebuild', Boolean(pkg.scripts?.['prebuild:checks']?.includes('check-phase8-profile-matching.mjs')))
 test('phase 8 programme doc exists', existsSync(join(root, 'docs/PHASE-8-PROFILE-MATCHING-2026-11-08.md')))
 
 const failed = checks.filter((x) => !x).length

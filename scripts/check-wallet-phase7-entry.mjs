@@ -24,7 +24,7 @@ const checks = [
   ["withdrawable values must be finite and non-negative", effect.includes('Number.isFinite(body.withdrawable)') && effect.includes('body.withdrawable >= 0') && effect.includes('Number.isFinite(body.available)') && effect.includes('body.available >= 0')],
   ["linked Pi identity is trimmed and type-checked", effect.includes('typeof body.linkedPiUsername === "string"') && effect.includes('body.linkedPiUsername.trim()')],
   ["release metadata and package lock are synchronized", Boolean(pkg.version) && lock.version === pkg.version && lock.packages?.[""]?.version === pkg.version && release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],
-  ["gate is registered exactly once in prebuild and static verification", (pkg.scripts.prebuild.match(/check-wallet-phase7-entry\.mjs/g) || []).length === 1 && (pkg.scripts["verify:static"].match(/check-wallet-phase7-entry\.mjs/g) || []).length === 1],
+  ["gate is registered exactly once in prebuild and static verification", (pkg.scripts['prebuild:checks'].match(/check-wallet-phase7-entry\.mjs/g) || []).length === 1 && (pkg.scripts["verify:static"].match(/check-wallet-phase7-entry\.mjs/g) || []).length === 1],
   ["financial mutation authorities remain outside this read-only gate", effect.includes('/api/economy/earnings/withdrawable') && !/POST|transfer|settle|payout|ledger\.insert/i.test(effect)],
 ]
 let failed = 0

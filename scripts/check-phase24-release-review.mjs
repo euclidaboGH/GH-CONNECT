@@ -10,7 +10,7 @@ const release = read('lib/app-release.ts')
 const readme = read('README.md')
 const truth = read('docs/PROJECT_TRUTH.md')
 const readiness = read('docs/PHASE-12-FINAL-INTEGRATION-RELEASE-READINESS.md')
-const prebuild = pkg.scripts.prebuild ?? ''
+const prebuild = pkg.scripts['prebuild:checks'] ?? ''
 const verify = pkg.scripts['verify:static'] ?? ''
 const version = pkg.version
 

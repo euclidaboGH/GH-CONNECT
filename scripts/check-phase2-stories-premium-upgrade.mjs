@@ -40,7 +40,7 @@ const checks = [
   ['Phase 2 migration remains held for review', read('MIGRATION-SOURCE-MANIFEST.csv').includes('20261106130001_gh_story_view_privacy_and_read_performance.sql,REVIEW_REQUIRED,')],
   ['migration ACLs remain service-role only', migration.includes('REVOKE ALL ON FUNCTION public.gh_story_view(text, text) FROM service_role') && migration.includes('GRANT EXECUTE ON FUNCTION public.gh_story_view_authorized_v2(text, text) TO service_role') && viewRoute.includes('gh_story_view_authorized_v2')],
   ['package and lockfile release metadata agree', /^\d+\.\d+\.\d+$/.test(pkg.version) && lock.version === pkg.version && lock.packages[''].version === pkg.version],
-  ['release and static verification include Phase 2 story contract', read('lib/app-release.ts').includes(`APP_RELEASE_VERSION = "${pkg.version}"`) && pkg.scripts.prebuild.includes('check-phase2-stories-premium-upgrade') && pkg.scripts['verify:static'].includes('check-phase2-stories-premium-upgrade')],
+  ['release and static verification include Phase 2 story contract', read('lib/app-release.ts').includes(`APP_RELEASE_VERSION = "${pkg.version}"`) && pkg.scripts['prebuild:checks'].includes('check-phase2-stories-premium-upgrade') && pkg.scripts['verify:static'].includes('check-phase2-stories-premium-upgrade')],
 ]
 for (const [name, passed] of checks) {
   assert.equal(passed, true, name)

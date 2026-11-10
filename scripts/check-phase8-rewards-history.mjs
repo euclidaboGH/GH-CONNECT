@@ -28,8 +28,8 @@ const checks = [
   ['No client-side mint/credit/settlement authority added', !/ledger\.insert|mintGhc|transferGhc|settleReward\s*\(/i.test(centre)],
   ['GHC and Pi cashback surfaces remain distinct', centre.includes('PiCashbackSummary') && centre.includes('Two different rewards')],
   ['Release metadata and lockfile synchronized', Boolean(pkg.version) && lock.version === pkg.version && lock.packages?.['']?.version === pkg.version && release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],
-  ['History contract registered once in prebuild and static verification', (pkg.scripts.prebuild.match(/check-phase8-rewards-history\.mjs/g) || []).length === 1 && (pkg.scripts['verify:static'].match(/check-phase8-rewards-history\.mjs/g) || []).length === 1],
-  ['Rewards source release gate registered once in prebuild and static verification', (pkg.scripts.prebuild.match(/check-phase8-rewards-release-gate\.mjs/g) || []).length === 1 && (pkg.scripts['verify:static'].match(/check-phase8-rewards-release-gate\.mjs/g) || []).length === 1],
+  ['History contract registered once in prebuild and static verification', (pkg.scripts['prebuild:checks'].match(/check-phase8-rewards-history\.mjs/g) || []).length === 1 && (pkg.scripts['verify:static'].match(/check-phase8-rewards-history\.mjs/g) || []).length === 1],
+  ['Rewards source release gate registered once in prebuild and static verification', (pkg.scripts['prebuild:checks'].match(/check-phase8-rewards-release-gate\.mjs/g) || []).length === 1 && (pkg.scripts['verify:static'].match(/check-phase8-rewards-release-gate\.mjs/g) || []).length === 1],
   ['Roadmap records Priority 3 Rewards source foundation and gated external acceptance', roadmap.includes('| 3 | **Rewards** |') && roadmap.includes('0.323.0') && roadmap.includes('mission')],
 ]
 let failed = 0

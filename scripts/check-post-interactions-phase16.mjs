@@ -19,7 +19,7 @@ const checks = [
   ["comment image previews are explicitly labelled for assistive technology", comments.includes("View photo attached by ${c.authorName}")],
   ["comment text and attachment gallery use valid block structure", comments.includes('<div className="mt-0.5 text-sm text-foreground">') && comments.includes('<p className="whitespace-pre-wrap">{c.text}</p>')],
   ["curation actions use concise product language", card.includes("Community curation") && !card.includes("Vote on contribution quality")],
-  ["release, lockfile and verification registrations are synchronized", pkg.version === lock.version && lock.version === pkg.version && lock.packages?.[""]?.version === pkg.version && read("lib/app-release.ts").includes(`APP_RELEASE_VERSION = "${pkg.version}"`) && pkg.scripts.prebuild.includes("check-post-interactions-phase16") && pkg.scripts["verify:static"].includes("check-post-interactions-phase16")],
+  ["release, lockfile and verification registrations are synchronized", pkg.version === lock.version && lock.version === pkg.version && lock.packages?.[""]?.version === pkg.version && read("lib/app-release.ts").includes(`APP_RELEASE_VERSION = "${pkg.version}"`) && pkg.scripts['prebuild:checks'].includes("check-post-interactions-phase16") && pkg.scripts["verify:static"].includes("check-post-interactions-phase16")],
 ]
 for (const [name, passed] of checks) {
   assert.equal(passed, true, name)

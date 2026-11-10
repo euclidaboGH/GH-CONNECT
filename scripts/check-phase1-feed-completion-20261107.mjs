@@ -38,7 +38,7 @@ const checks = [
   ["feed explanation offers a working see-fewer action", feed.includes("onSeeLess={() => {") && postCard.includes("onClick={onSeeLess}")],
   ["see-fewer preferences persist per account with a bounded unique string-ID set", feed.includes('`ghc.not-interested-post-ids:${feedPreferenceOwnerId}`') && feed.includes("notInterestedLoadedFor !== feedPreferenceOwnerId") && feed.includes('typeof id === "string"') && feed.includes(".slice(-200)")],
   ["feed explanation traps focus, restores the prior focus target and dismisses with Escape", postCard.includes('role="dialog"') && postCard.includes('aria-modal="true"') && postCard.includes('event.key === "Escape"') && postCard.includes('event.key !== "Tab"') && postCard.includes('previousActiveElement?.focus()')],
-  ["new Phase 1 completion contract is registered in prebuild and static verify", pkg.scripts.prebuild.includes("check-phase1-feed-completion-20261107.mjs") && pkg.scripts["verify:static"].includes("check-phase1-feed-completion-20261107.mjs")],
+  ["new Phase 1 completion contract is registered in prebuild and static verify", pkg.scripts['prebuild:checks'].includes("check-phase1-feed-completion-20261107.mjs") && pkg.scripts["verify:static"].includes("check-phase1-feed-completion-20261107.mjs")],
   ["Phase 1 source remains recorded at 0.330.19 while active release advances independently", Boolean(pkg.version) && readFileSync("docs/PRODUCT-ROADMAP.md", "utf8").includes("Source implementation completed in 0.330.19;")],
 ]
 let failures = 0

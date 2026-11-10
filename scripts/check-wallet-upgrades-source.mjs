@@ -19,7 +19,7 @@ const checks = [
   ['GHC panel validates Pi address shape before submit', /looksLikePiWalletAddress\(wallet\)/.test(ghc)],
   ['GHC panel blocks over-withdrawable amounts', /overWithdrawable/.test(ghc)],
   ['GHC formatter is negative-zero safe', /formatGhcSafe/.test(fmt)],
-  ['wallet helper tests are registered', typeof pkg.scripts['check:wallet-amounts'] === 'string' && pkg.scripts.prebuild.includes('test-wallet-amount-helpers.mjs')],
+  ['wallet helper tests are registered', typeof pkg.scripts['check:wallet-amounts'] === 'string' && pkg.scripts['prebuild:checks'].includes('test-wallet-amount-helpers.mjs')],
 ]
 let failed = 0
 for (const [name, ok] of checks) { console.log(`${ok ? 'PASS' : 'FAIL'} ${name}`); if (!ok) failed += 1 }

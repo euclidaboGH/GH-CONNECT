@@ -16,7 +16,7 @@ const test = (name, ok) => {
 
 const pkg = JSON.parse(read('package.json'))
 const release = read('lib/app-release.ts')
-const prebuild = String(pkg.scripts?.prebuild || '')
+const prebuild = String(pkg.scripts?.['prebuild:checks'] || '')
 const engines = pkg.engines?.node || ''
 const truth = existsSync(join(root, 'docs/PROJECT_TRUTH.md')) ? read('docs/PROJECT_TRUTH.md') : ''
 const securityHeaders = existsSync(join(root, 'scripts/check-security-headers.mjs'))

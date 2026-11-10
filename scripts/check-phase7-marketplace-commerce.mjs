@@ -34,7 +34,7 @@ test('cart can strip the viewer own-seller lines before checkout', /removeOwnSel
 test('order lifecycle exposes buyer and seller next-action hints', /orderNextActionHint/.test(lifecycle) && /orderRoleForViewer/.test(lifecycle))
 test('listings do not coerce explicit zero stock to one', /Never coerce zero to one|explicit zero stays zero/.test(listings) || /stockOnHand/.test(listings))
 test('package and app release versions agree', release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`))
-test('phase 7 checker is registered in prebuild', Boolean(pkg.scripts?.prebuild?.includes('check-phase7-marketplace-commerce.mjs')))
+test('phase 7 checker is registered in prebuild', Boolean(pkg.scripts?.['prebuild:checks']?.includes('check-phase7-marketplace-commerce.mjs')))
 test('phase 7 programme doc exists', existsSync(join(root, 'docs/PHASE-7-MARKETPLACE-COMMERCE-2026-11-08.md')))
 
 const failed = checks.filter((x) => !x).length

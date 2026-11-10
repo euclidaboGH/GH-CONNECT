@@ -100,3 +100,26 @@ Fifteen safe build/CI improvements were made from the supplied GitHub Actions #2
 Dependency warnings were reviewed but not “fixed” by unsafe package swaps. `pi-backend@0.1.3` brings in deprecated Stellar packages transitively; `eslint-config-next@15.5.26` declares ESLint 7/8/9 peer support; DOMPurify 4.x requires compatibility testing; and native install scripts remain unapproved pending exact script review. See `docs/VERCEL-GITHUB-RUN-247-BUILD-DIAGNOSTICS-AND-DEPENDENCY-WARNINGS-2026-11-10.md`.
 
 The visible Run #247 excerpt does not contain the underlying Next.js compiler diagnostic. The runner now makes prebuild failures attributable, but it does not prove the omitted Next.js failure is fixed. Local dependency installation could not complete because the registry returned `EAI_AGAIN`, and the available runtime was Node 22.16.0 rather than the required Node 24.15.0. Dependency-backed typecheck, lint and production build remain unverified. No migrations, balances, ledger entries, reservations, Pi transfers, GitHub pushes, Vercel deployments or production settings were changed. Production remains NOT APPROVED.
+
+
+## Run #248 — release-gate contract repair and runner hardening
+
+Fifteen primary improvements were applied after the supplied GitHub Actions #248 failure, with a further cross-repository contract-alignment sweep correcting all existing prebuild-registration assertions:
+
+1. Added a shared parser for the restricted prebuild command manifest.
+2. Rejects missing or empty prebuild manifests.
+3. Rejects empty entries caused by malformed `&&` chains.
+4. Requires direct Node.js invocation for every prebuild entry.
+5. Preserves supported Node flags before script paths.
+6. Rejects shell metacharacters and command substitution.
+7. Rejects path traversal in checker paths.
+8. Requires safe `scripts/*.mjs` targets.
+9. Confirms every declared checker exists before execution.
+10. Updated the runner to use the shared parser without shell execution.
+11. Fixed Phase 10 closure checks to inspect `prebuild:checks` rather than the runner-only `prebuild` script.
+12. Explicitly verifies the diagnostic runner remains the prebuild entrypoint.
+13. Preserved all five release controls in the declared prebuild manifest and static verification.
+14. Added a 15-assertion Run #248 regression contract to both verification suites.
+15. Updated Vercel's build command to clear injected npm cache-dir environment variables in its own shell, not only during install.
+
+Verification: Phase 10 release closure 16/16; Phase 10 platform acceptance 24/24; Phase 24 final release review PASS; Pass 36 system integrity 8/8; Run #248 focused contract 15/15; Run #247 diagnostic contract 15/15; full `npm run verify:static` exit 0; prebuild manifest dry-run discovers 278 commands, retaining the 277 previous checks. The cross-repository sweep updated 60+ legacy source contracts that were still inspecting the wrapper-only `prebuild` script rather than `prebuild:checks`. The supplied Run #248 error is a stale checker assumption, not missing release gates. Node 24.15.0 full CI and Next.js build remain unverified in the available Node 22.16.0 environment. No dependencies were changed, native scripts approved, migrations applied, financial state changed, or deployment performed. Production remains NOT APPROVED. See `docs/VERCEL-GITHUB-RUN-248-RELEASE-GATE-CONTRACT-REPAIR-2026-11-10.md`.

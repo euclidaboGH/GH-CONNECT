@@ -28,7 +28,7 @@ const globalHeaders = vercel.headers?.find((rule) => rule.source === '/(.*)')?.h
 const headerMap = new Map(globalHeaders.map(({ key, value }) => [key.toLowerCase(), value]))
 const checks = [
   ['package, lockfile root and supported runtime contract agree', pkg.version === lock.version && pkg.version === lock.packages?.['']?.version && pkg.engines?.node === '^24.15.0' && read('.nvmrc').trim() === '24.15.0'],
-  ['runtime preflight runs before build, lint and typecheck', (pkg.scripts?.prebuild ?? '').includes('check-node-runtime.mjs') && (pkg.scripts?.prelint ?? '').includes('check-node-runtime.mjs') && (pkg.scripts?.pretypecheck ?? '').includes('check-node-runtime.mjs')],
+  ['runtime preflight runs before build, lint and typecheck', (pkg.scripts?.['prebuild:checks'] ?? '').includes('check-node-runtime.mjs') && (pkg.scripts?.prelint ?? '').includes('check-node-runtime.mjs') && (pkg.scripts?.pretypecheck ?? '').includes('check-node-runtime.mjs')],
   ['CI pins the supported Node runtime and runs locked install', /node-version:\s*24\.15\.0/.test(ci) && /npm ci --legacy-peer-deps(?: --no-audit)?/.test(ci)],
   ['TypeScript strictness remains enabled', tsconfig.compilerOptions?.strict === true],
   ['deployment globally disables MIME sniffing', headerMap.get('x-content-type-options') === 'nosniff'],

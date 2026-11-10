@@ -69,7 +69,7 @@ add('third-party Pi SDK packages are pinned to exact versions', Object.entries(p
 add('package.json dependencies match the lockfile root exactly', Object.keys(pkg.dependencies).every((n) => lockRoot[n] === pkg.dependencies[n]))
 
 // 9. Registration
-add('security audit check is registered in prebuild', (pkg.scripts.prebuild || '').includes('check-security-audit-20261109.mjs'))
+add('security audit check is registered in prebuild', (pkg.scripts['prebuild:checks'] || '').includes('check-security-audit-20261109.mjs'))
 add('security audit check is registered in static verification', (pkg.scripts['verify:static'] || '').includes('check-security-audit-20261109.mjs'))
 
 let failures = 0

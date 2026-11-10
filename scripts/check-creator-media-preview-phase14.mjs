@@ -19,7 +19,7 @@ const checks = [
   ["story video attachments have playback controls before publishing", compose.includes("Story video preview") && compose.includes("<DurableVideo src={storyMedia.url} controls")],
   ["full-screen previews reuse the shared accessible media viewer", strip.includes("<MediaLightbox") && compose.includes("<MediaLightbox") && lightbox.includes('role="dialog"') && lightbox.includes('aria-modal="true"')],
   ["preview UI remains separate from media upload and publish ownership", compose.includes("uploadDurableMedia") && compose.includes("createPost") && strip.includes("onRemoveImage")],
-  ["release, lockfile and both quality gates are synchronized", pkg.version === lock.version && lock.version === pkg.version && lock.packages?.[""]?.version === pkg.version && read("lib/app-release.ts").includes(`APP_RELEASE_VERSION = "${pkg.version}"`) && pkg.scripts.prebuild.includes("check-creator-media-preview-phase14") && pkg.scripts["verify:static"].includes("check-creator-media-preview-phase14")],
+  ["release, lockfile and both quality gates are synchronized", pkg.version === lock.version && lock.version === pkg.version && lock.packages?.[""]?.version === pkg.version && read("lib/app-release.ts").includes(`APP_RELEASE_VERSION = "${pkg.version}"`) && pkg.scripts['prebuild:checks'].includes("check-creator-media-preview-phase14") && pkg.scripts["verify:static"].includes("check-creator-media-preview-phase14")],
 ]
 for (const [name, passed] of checks) { assert.equal(passed, true, name); console.log(`PASS ${name}`) }
 console.log(`Creator media preview Phase 14: ${checks.length}/${checks.length} passed`)

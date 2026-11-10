@@ -13,7 +13,7 @@ const checks = [
   ['results count is announced politely', /aria-live="polite" aria-atomic="true"/.test(screen) && /transactions"\} shown/.test(screen)],
   ['clear filters resets query, transaction type and date range', /setQuery\(""\); setTxFilter\("all"\); setTxDateRange\("all"\)/.test(screen)],
   ['Pi payment history remains explicitly separate from GHC ledger', /Rails are never mixed/.test(screen) && /separate from GHC ledger transfers/.test(screen)],
-  ['Phase 2 checker is registered in prebuild exactly once', (packageJson.scripts.prebuild.match(/check-wallet-phase2-asset-history\.mjs/g) || []).length === 1],
+  ['Phase 2 checker is registered in prebuild exactly once', (packageJson.scripts['prebuild:checks'].match(/check-wallet-phase2-asset-history\.mjs/g) || []).length === 1],
   ['Phase 2 checker is registered in static verification exactly once', (packageJson.scripts['verify:static'].match(/check-wallet-phase2-asset-history\.mjs/g) || []).length === 1],
 ]
 let failed = 0

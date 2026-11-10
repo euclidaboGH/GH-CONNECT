@@ -16,7 +16,7 @@ const checks = [
   ['GHC marketplace payment uses an order-scoped durable spend reference', /market_order_\$\{order\.id\}/.test(payRoute) && /ghc_execute_spend/.test(payRoute)],
   ['GHC membership purchase uses a per-attempt idempotency reference', /purchaseAttemptId/.test(membershipClient) && /spendReferenceId: `membership_\$\{tier\}_\$\{periodKey\}_\$\{purchaseAttemptId\}`/.test(membershipClient)],
   ['Pi membership requires exact catalog product and server-computed price', /getMembershipPiPrice\(tier, paidMonths\)\.chargePi/.test(membership) && /productId !== expected/.test(membership)],
-  ['Phase 8 contract and runtime tests are in prebuild and verify:static', ['prebuild', 'verify:static'].every((key) => pkg.scripts?.[key]?.includes('check-phase8-cross-domain-settlement.mjs') && pkg.scripts?.[key]?.includes('test-phase8-cross-domain-settlement.mjs'))],
+  ['Phase 8 contract and runtime tests are in prebuild and verify:static', ['prebuild:checks', 'verify:static'].every((key) => pkg.scripts?.[key]?.includes('check-phase8-cross-domain-settlement.mjs') && pkg.scripts?.[key]?.includes('test-phase8-cross-domain-settlement.mjs'))],
 ]
 let failed = 0
 for (const [label, ok] of checks) { console.log(`${ok ? 'PASS' : 'FAIL'} ${label}`); if (!ok) failed++ }

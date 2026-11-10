@@ -33,7 +33,7 @@ test("PIN field enforces six numeric characters with mobile-friendly input hints
 test("PIN field disables spelling/capitalization helpers and exposes invalid state", /autoCapitalize="off"/.test(sheet) && /spellCheck=\{false\}/.test(sheet) && /aria-invalid=\{pinInput.length > 0 && pinInput.length !== 6\}/.test(sheet))
 test("withdrawal cannot be submitted until a configured six-digit PIN is entered", /pinConfigured !== true \|\| pinInput.length !== 6/.test(sheet))
 test("withdrawal feedback is announced as a polite live status", /role="status" aria-live="polite"/.test(sheet))
-test("duplicate JSX prop checker is included in build and CI gates", /check-jsx-duplicate-props\.mjs/.test(pkg.scripts.prebuild) && /check-jsx-duplicate-props\.mjs/.test(read(".github/workflows/ci.yml")))
+test("duplicate JSX prop checker is included in build and CI gates", /check-jsx-duplicate-props\.mjs/.test(pkg.scripts['prebuild:checks']) && /check-jsx-duplicate-props\.mjs/.test(read(".github/workflows/ci.yml")))
 test("quote and submit actions expose their in-progress state", /aria-busy=\{quoting\}/.test(sheet) && /aria-busy=\{submitting \|\| pinBusy\}/.test(sheet))
 test("grant route verifies fresh Pi proof before any grant RPC", postPost.indexOf("verifyWalletConsentProof") > -1 && postPost.indexOf("verifyWalletConsentProof") < postPost.indexOf("grantWalletAuthorization"))
 test("grant route uses trusted server verification (Pi /v2/me) and the durable mapping", /verifyPiAccessToken/.test(postPost) && /getByGhUserId/.test(postPost) && /getByPiAppUid/.test(postPost))
@@ -63,7 +63,7 @@ test("PIN status fails closed when persistence is missing or unavailable", /res\
 test("PIN creation is insert-only and cannot overwrite an existing PIN", /resolution=ignore-duplicates,return=representation/.test(pinSet) && /PIN_ALREADY_CONFIGURED/.test(pinSet) && !/method: "PATCH"/.test(pinSet) && pinRoute.includes('result.error === "PIN_ALREADY_CONFIGURED" ? 409 : 503'))
 test("PIN controls stay unavailable until authoritative PIN status is known", /useState<boolean \| null>\(null\)/.test(sheet) && /pinStatusError/.test(sheet) && /pinConfigured !== true/.test(sheet))
 test("Rewards only offers redemption for server-eligible or approved holds, not pending validation", /const canClaim = status === "eligible" \|\| status === "approved"/.test(rewards) && /{canClaim &&/.test(rewards))
-test("phase 28 checks registered in prebuild and verify:static", ["prebuild", "verify:static"].every((k) => (pkg.scripts[k] || "").includes("check-phase28-wallet-consent-flow.mjs") && (pkg.scripts[k] || "").includes("test-phase28-wallet-consent.mjs")))
+test("phase 28 checks registered in prebuild and verify:static", ["prebuild:checks", "verify:static"].every((k) => (pkg.scripts[k] || "").includes("check-phase28-wallet-consent-flow.mjs") && (pkg.scripts[k] || "").includes("test-phase28-wallet-consent.mjs")))
 
 const failed = results.filter((x) => !x).length
 console.log(`\nPhase 28 wallet consent flow: ${results.length - failed}/${results.length} passed`)

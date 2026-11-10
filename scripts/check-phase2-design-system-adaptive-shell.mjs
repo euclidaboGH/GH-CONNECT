@@ -23,7 +23,7 @@ const checks = [
   ['shell loading fallback uses the shared page container', app.includes('className="gh-page-container flex w-full flex-col gap-3"')],
   ['reduced-motion support remains in the shared stylesheet', css.includes('@media (prefers-reduced-motion: reduce)')],
   ['the adaptive shell pass is presentation-only', /without a\s+global restyle or changing any domain \/ financial behavior/.test(css)],
-  ['new regression gate is registered before production build and in static verification', ['prebuild', 'verify:static'].every((key) => pkg.scripts[key]?.includes('check-phase2-design-system-adaptive-shell.mjs'))],
+  ['new regression gate is registered before production build and in static verification', ['prebuild:checks', 'verify:static'].every((key) => pkg.scripts[key]?.includes('check-phase2-design-system-adaptive-shell.mjs'))],
 ]
 let failures = 0
 for (const [label, ok] of checks) {

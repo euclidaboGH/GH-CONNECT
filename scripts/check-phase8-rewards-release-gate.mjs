@@ -27,7 +27,7 @@ const checks = [
   ['Rewards UI does not add client-side financial mutation authority', !/ledger\.insert|mintGhc|transferGhc|settleReward\s*\(/i.test(centre)],
   ['Mission verifier uses a fixed search_path and service-role-only execution', missionSql.includes('SECURITY DEFINER') && missionSql.includes('SET search_path = pg_catalog, public') && missionSql.includes('GRANT EXECUTE ON FUNCTION public.gh_rewards_mission_complete(text, text) TO service_role') && missionSql.includes('REVOKE ALL ON FUNCTION public.gh_rewards_mission_complete(text, text) FROM PUBLIC, anon, authenticated')],
   ['Mission achievements use advisory locking and unique-conflict idempotency', missionSql.includes('pg_advisory_xact_lock') && missionSql.includes('ON CONFLICT (gh_user_id, achievement_id) DO NOTHING')],
-  ['Phase 8 release gate is included in both build and static verification', (() => { const p=JSON.parse(read('package.json')); return (p.scripts.prebuild.match(/check-phase8-rewards-release-gate\.mjs/g)||[]).length===1 && (p.scripts['verify:static'].match(/check-phase8-rewards-release-gate\.mjs/g)||[]).length===1 })()],
+  ['Phase 8 release gate is included in both build and static verification', (() => { const p=JSON.parse(read('package.json')); return (p.scripts['prebuild:checks'].match(/check-phase8-rewards-release-gate\.mjs/g)||[]).length===1 && (p.scripts['verify:static'].match(/check-phase8-rewards-release-gate\.mjs/g)||[]).length===1 })()],
 ]
 let failed=0
 for (const [label,ok] of checks) { console.log(`${ok?'PASS':'FAIL'} ${label}`); if(!ok) failed++ }

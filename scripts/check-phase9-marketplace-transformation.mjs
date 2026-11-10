@@ -13,7 +13,7 @@ const lock = JSON.parse(read("package-lock.json"))
 const release = read("lib/app-release.ts")
 const truth = read("docs/PROJECT_TRUTH.md")
 const manifest = read("VERIFIED_MANIFEST.txt")
-const prebuild = pkg.scripts?.prebuild || ""
+const prebuild = pkg.scripts?.['prebuild:checks'] || ""
 const verify = pkg.scripts?.["verify:static"] || ""
 const checks = [
   ["payment rail is derived from server-created order currency", /getMarketplaceOrderCurrency\(created\.order\)/.test(screen)],

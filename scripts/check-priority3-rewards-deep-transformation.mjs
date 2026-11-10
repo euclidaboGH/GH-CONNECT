@@ -32,7 +32,7 @@ const checks = [
   ['Mission completion remains non-financial under current policy', screen.includes('Mission completion does not issue GHC under the current economy policy')],
   ['GHC and Pi cashback remain distinct reward journeys', screen.includes('Two different rewards') && screen.includes('<PiCashbackSummary />')],
   ['No client-side ledger minting or settlement authority is added to Rewards UI', !/ledger\.insert|mintGhc|transferGhc|settleReward\s*\(/i.test(screen)],
-  ['Deep Rewards regression check is registered exactly once in both build gates', (pkg.scripts.prebuild.match(/check-priority3-rewards-deep-transformation\.mjs/g) || []).length === 1 && (pkg.scripts['verify:static'].match(/check-priority3-rewards-deep-transformation\.mjs/g) || []).length === 1],
+  ['Deep Rewards regression check is registered exactly once in both build gates', (pkg.scripts['prebuild:checks'].match(/check-priority3-rewards-deep-transformation\.mjs/g) || []).length === 1 && (pkg.scripts['verify:static'].match(/check-priority3-rewards-deep-transformation\.mjs/g) || []).length === 1],
   ['Release version is aligned across package, lockfile and in-app metadata', Boolean(pkg.version) && lock.version === pkg.version && lock.packages[''].version === pkg.version && read('lib/app-release.ts').includes(`APP_RELEASE_VERSION = \"${pkg.version}\"`)],
 ]
 let failed = 0

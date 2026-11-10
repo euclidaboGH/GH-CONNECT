@@ -82,7 +82,7 @@ check(release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`), 'in-app releas
 const versionAtLeast = (actual, minimum) => actual.split('.').map(Number).reduce((result, part, index, parts) => result || (part === Number(minimum.split('.')[index]) ? 0 : part > Number(minimum.split('.')[index]) ? 1 : -1), 0) >= 0
 check(versionAtLeast(pkg.version, '0.330.38'), 'Priority 8 hardening remains preserved in releases from Phase 9.4 onward')
 check(pkg.scripts['check:priority8-messaging'] === 'node scripts/check-priority8-messaging-transformation.mjs', 'dedicated Priority 8 messaging verification command is available')
-for (const key of ['prebuild', 'verify:static']) check(pkg.scripts[key].includes('check-priority8-messaging-transformation.mjs'), `${key} runs the Priority 8 messaging gate`)
+for (const key of ['prebuild:checks', 'verify:static']) check(pkg.scripts[key].includes('check-priority8-messaging-transformation.mjs'), `${key} runs the Priority 8 messaging gate`)
 
 if (failures.length) {
   console.error(`\nPriority 8 Messages transformation: ${failures.length}/${total} failed`)

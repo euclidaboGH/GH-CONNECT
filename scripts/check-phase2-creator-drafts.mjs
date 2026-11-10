@@ -17,7 +17,7 @@ const checks = [
   ['draft storage is account-scoped to prevent shared-device leakage', drafts.includes('ghc.post-drafts.v2:') && drafts.includes('IdentityService.getCurrentUserId()')],
   ['unowned legacy drafts are not imported into an arbitrary account', drafts.includes('Never import it into an arbitrary') && drafts.includes('hasUnscopedLegacyPostDrafts') && panel.includes('have no recorded account owner')],
   ['draft content remains bounded', drafts.includes('.slice(0, 5000)')],
-  ['Creator Studio draft contract is registered in prebuild and static verification', ['prebuild', 'verify:static'].every((key) => pkg.scripts[key]?.includes('check-phase2-creator-drafts.mjs'))],
+  ['Creator Studio draft contract is registered in prebuild and static verification', ['prebuild:checks', 'verify:static'].every((key) => pkg.scripts[key]?.includes('check-phase2-creator-drafts.mjs'))],
 ]
 let failures = 0
 for (const [label, ok] of checks) { console.log(`${ok ? 'PASS' : 'FAIL'} ${label}`); if (!ok) failures++ }

@@ -36,7 +36,7 @@ test('people discover requires auth and rate limits', /AUTH_REQUIRED/.test(peopl
 test('discovery candidate filter excludes self block and mute', /filterDiscoveryCandidates/.test(candidates) && /idListIncludes/.test(candidates))
 test('communities UI uses resolveJoinCta for honest labels', /resolveJoinCta/.test(screen))
 test('package and app release versions agree', release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`))
-test('phase 6 checker is registered in prebuild', Boolean(pkg.scripts?.prebuild?.includes('check-phase6-communities-discovery.mjs')))
+test('phase 6 checker is registered in prebuild', Boolean(pkg.scripts?.['prebuild:checks']?.includes('check-phase6-communities-discovery.mjs')))
 test('phase 6 programme doc exists', existsSync(join(root, 'docs/PHASE-6-COMMUNITIES-DISCOVERY-2026-11-08.md')))
 
 const failed = checks.filter((x) => !x).length

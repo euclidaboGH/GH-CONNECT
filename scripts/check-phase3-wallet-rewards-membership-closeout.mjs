@@ -53,7 +53,7 @@ const checks = [
   ['Pi recovery retains ambiguous provider outcomes for retry instead of marking paid', /PI_PAYMENT_NOT_VERIFIED/.test(recovery) && /retryable: true/.test(recovery)],
   ['Pi recovery is rate limited and fails closed when durable protection is unavailable', /pi-payment-recover:\$\{auth\.userId\}/.test(recovery) && /onUnavailable: "deny"/.test(recovery)],
   ['Pi recovery uses private no-store responses', /private, no-store/.test(recovery) && !/return NextResponse\.json\(/.test(recovery)],
-  ['closeout contract is wired into prebuild and static verification exactly once', (pkg.scripts.prebuild.match(/check-phase3-wallet-rewards-membership-closeout\.mjs/g) || []).length === 1 && (pkg.scripts['verify:static'].match(/check-phase3-wallet-rewards-membership-closeout\.mjs/g) || []).length === 1],
+  ['closeout contract is wired into prebuild and static verification exactly once', (pkg.scripts['prebuild:checks'].match(/check-phase3-wallet-rewards-membership-closeout\.mjs/g) || []).length === 1 && (pkg.scripts['verify:static'].match(/check-phase3-wallet-rewards-membership-closeout\.mjs/g) || []).length === 1],
   ['in-app release notice exports a synchronized version and summary', release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`) && /export const APP_RELEASE_SUMMARY/.test(release)],
   ['membership and reward RPCs remain service-role only', /GRANT EXECUTE ON FUNCTION public\.ghc_purchase_membership[\s\S]*?TO service_role/.test(sql) && /GRANT EXECUTE ON FUNCTION public\.ghc_claim_pending[\s\S]*?TO service_role/.test(sql)],
 ]

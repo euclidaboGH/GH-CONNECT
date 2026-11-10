@@ -20,8 +20,8 @@ const checks = [
   ['Invitations can be accepted or declined through canonical context actions', card.includes('onAcceptInvite') && card.includes('onDeclineInvite') && screen.includes('acceptCommunityInvitation') && screen.includes('declineCommunityInvitation')],
   ['Community hub prevents duplicate joins for pending and invited states', hub.includes('community.membershipState === \"pending\" || community.membershipState === \"invited\"') && hub.includes('Accept invite')],
   ['Community privacy labels preserve approval and invite-only semantics', screen.includes('privacy: normalizeCommunityPrivacy(selected.privacy)') && hub.includes('Approval required') && hub.includes('Invite only')],
-  ['Discovery regression gates are registered in prebuild and static verification', (pkg.scripts.prebuild.match(/check-priority7-community-discovery\.mjs/g) || []).length === 1 && (pkg.scripts['verify:static'].match(/check-priority7-community-discovery\.mjs/g) || []).length === 1],
-  ['Runtime discovery contract is registered in prebuild and static verification', (pkg.scripts.prebuild.match(/test-priority7-community-discovery\.mjs/g) || []).length === 1 && (pkg.scripts['verify:static'].match(/test-priority7-community-discovery\.mjs/g) || []).length === 1],
+  ['Discovery regression gates are registered in prebuild and static verification', (pkg.scripts['prebuild:checks'].match(/check-priority7-community-discovery\.mjs/g) || []).length === 1 && (pkg.scripts['verify:static'].match(/check-priority7-community-discovery\.mjs/g) || []).length === 1],
+  ['Runtime discovery contract is registered in prebuild and static verification', (pkg.scripts['prebuild:checks'].match(/test-priority7-community-discovery\.mjs/g) || []).length === 1 && (pkg.scripts['verify:static'].match(/test-priority7-community-discovery\.mjs/g) || []).length === 1],
   ['Release metadata is synchronized', lock.version === pkg.version && lock.packages[''].version === pkg.version && read('lib/app-release.ts').includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],
 ]
 let failed = 0

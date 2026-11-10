@@ -21,7 +21,7 @@ const checks = [
   ['Resource normalizer tolerates missing rows and validates sort order', participation.includes('const source = r && typeof r === "object" ? r : {}') && participation.includes('Number.isFinite(Number(source.order))')],
   ['Raw event and resource card URLs are sanitized at the rendering boundary', resourceCard.includes('safeCommunityResourceUrl(event.virtualLink)') && resourceCard.includes('safeCommunityResourceUrl(resource.url)') && resourceCard.includes('href={safeVirtualLink}') && resourceCard.includes('href={safeResourceUrl}')],
   ['Community resource links retain safe external-link isolation', resourceCard.includes('target="_blank"') && resourceCard.includes('rel="noopener noreferrer"')],
-  ['Priority 7 regression gate is registered exactly once in prebuild and static verification', (pkg.scripts.prebuild.match(/check-priority7-community-transformation\.mjs/g) || []).length === 1 && (pkg.scripts['verify:static'].match(/check-priority7-community-transformation\.mjs/g) || []).length === 1],
+  ['Priority 7 regression gate is registered exactly once in prebuild and static verification', (pkg.scripts['prebuild:checks'].match(/check-priority7-community-transformation\.mjs/g) || []).length === 1 && (pkg.scripts['verify:static'].match(/check-priority7-community-transformation\.mjs/g) || []).length === 1],
   ['Release metadata is aligned across package, lockfile and app release', lock.version === pkg.version && lock.packages[''].version === pkg.version && read('lib/app-release.ts').includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],
 ]
 let failed = 0

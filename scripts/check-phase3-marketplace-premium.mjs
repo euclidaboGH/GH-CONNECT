@@ -10,7 +10,7 @@ const route = read("app/api/marketplace/listings/[listingId]/report/route.ts")
 const migration = read("supabase/migrations/20261106150001_marketplace_listing_report_intake.sql")
 const discovery = read("lib/marketplace/discovery-presentation.ts")
 const operatorReports = read("app/api/admin/marketplace/listing-reports/route.ts")
-const prebuild = pkg.scripts?.prebuild || ""
+const prebuild = pkg.scripts?.['prebuild:checks'] || ""
 const verify = pkg.scripts?.["verify:static"] || ""
 
 const checks = [
