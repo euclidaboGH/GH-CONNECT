@@ -26,12 +26,14 @@ export const radius = {
 export const layout = {
   appShellMax: "var(--gh-shell-max)",
   pageGutter: "var(--gh-page-gutter)",
+  /** Maximum width for the outer application shell. */
   contentMax: "var(--gh-shell-content-max)",
+  /** Maximum width for an inner content column. */
+  contentWidth: "var(--gh-content-max)",
   bottomNavHeight: "var(--gh-bottom-nav-height)",
   /** nav + safe-area + 16px — every scroll root */
   bottomContentInset: "var(--gh-bottom-content-inset)",
   screenBottomInset: "var(--gh-screen-bottom-inset)",
-  contentMax: "var(--gh-content-max)",
 } as const
 
 export const typeClass = {

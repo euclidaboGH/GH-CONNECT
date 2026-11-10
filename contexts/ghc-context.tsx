@@ -501,6 +501,8 @@ const GHCFeedContext = createContext<{
   shares: GHCContextType["shares"]
   reposts: GHCContextType["reposts"]
   blockedUsers: string[]
+  /** Muted accounts are hidden from feed ranking without severing the relationship. */
+  mutedUsers: string[]
 } | null>(null)
 
 

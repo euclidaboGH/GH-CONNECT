@@ -401,7 +401,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     try {
       setFeedError(null)
       const blockedIds = Array.from(
-        new Set([...(blockedUsers || []), ...((settings as any)?.blockedUsers || [])].filter(Boolean))
+        new Set([...(blockedUsers || []), ...(settings?.blockedUsers || [])].filter((id): id is string => typeof id === "string" && id.length > 0))
       )
       const communityIds = (conversations || [])
         .filter(
@@ -416,7 +416,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         userInterests: Array.isArray(profile?.interests) ? profile.interests : [],
         recentlyEngagedPostIds: [...new Set([...bookmarkedPostIds, ...likedPosts])],
         blockedUserIds: blockedIds,
-        mutedUserIds: Array.from(new Set([...(mutedUsers || []), ...((settings as any)?.mutedUsers || [])].filter(Boolean))),
+        mutedUserIds: Array.from(new Set([...(mutedUsers || []), ...(settings?.mutedUsers || [])].filter((id): id is string => typeof id === "string" && id.length > 0))),
         followingIds: following || [],
         friendIds: friends || [],
         communityIds,
