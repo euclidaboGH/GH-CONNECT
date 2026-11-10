@@ -35,6 +35,7 @@ const reviewRequired = new Set([
   '20261108150001_repair_pin_storage_and_payout_release.sql',
   '20261109100001_gh_messaging_phase1_controls_search.sql',
   '20261110100001_withdrawal_rpc_acl_and_recovery_atomicity.sql',
+  '20261110110001_wallet_recovery_reset_lock_race_guard.sql',
   '20261027010002_gh_media_asset_create_immutable_identity.sql',
   '20261027010003_gh_media_upload_finalize_identity.sql',
   '20261027010004_ghc_transfer_request_idempotency_intent.sql',
@@ -174,6 +175,7 @@ const notes = {
   '20261022010097_gh_social_canonical_visibility.sql': 'Security-sensitive additive feed/comment RPCs; validate schema, grants, mutual-follow and community membership policy, stable cursors, and cross-account denial on disposable PostgreSQL and Testnet before applying.',
   '20261022010098_gh_social_engagement_write_integrity.sql': 'Security-sensitive durable vote/reaction/comment/save/share write-path repair. Review all RPC signatures and table columns, run disposable PostgreSQL concurrency/idempotency tests, reconcile counters, and validate two-account visibility/ownership on Testnet before applying.',
   '20261110100001_withdrawal_rpc_acl_and_recovery_atomicity.sql': 'Run #246 security repair: restore least-privilege server access for PIN storage, keep payout request table access revoked, and add ownership-bound payout lookup plus atomic PIN-recovery RPCs. Requires target migration-history reconciliation and disposable PostgreSQL tests before Testnet application; does not execute Pi transfers.',
+  '20261110110001_wallet_recovery_reset_lock_race_guard.sql': 'Run #249 additive recovery race guard: re-check recovery lock under row lock, serialize PIN reset against failed attempts, and prevent extending an active post-reset cooldown. REVIEW_REQUIRED; validate migration history and concurrency behavior on disposable PostgreSQL before Testnet application.',
 }
 
 function classify(file) {

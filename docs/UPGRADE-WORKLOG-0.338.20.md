@@ -123,3 +123,18 @@ Fifteen primary improvements were applied after the supplied GitHub Actions #248
 15. Updated Vercel's build command to clear injected npm cache-dir environment variables in its own shell, not only during install.
 
 Verification: Phase 10 release closure 16/16; Phase 10 platform acceptance 24/24; Phase 24 final release review PASS; Pass 36 system integrity 8/8; Run #248 focused contract 15/15; Run #247 diagnostic contract 15/15; full `npm run verify:static` exit 0; prebuild manifest dry-run discovers 278 commands, retaining the 277 previous checks. The cross-repository sweep updated 60+ legacy source contracts that were still inspecting the wrapper-only `prebuild` script rather than `prebuild:checks`. The supplied Run #248 error is a stale checker assumption, not missing release gates. Node 24.15.0 full CI and Next.js build remain unverified in the available Node 22.16.0 environment. No dependencies were changed, native scripts approved, migrations applied, financial state changed, or deployment performed. Production remains NOT APPROVED. See `docs/VERCEL-GITHUB-RUN-248-RELEASE-GATE-CONTRACT-REPAIR-2026-11-10.md`.
+
+
+## Run #249 — wallet recovery contract repair and race hardening
+
+Full run report: `docs/VERCEL-GITHUB-RUN-249-WALLET-RECOVERY-AND-NODE24-CI-2026-11-10.md`.
+
+- Corrected `scripts/check-wallet-security-hardening.mjs`: recovery-answer hashing is checked in the server implementation, while the 24-hour reset cooldown is checked in the atomic SQL migration that actually enforces it.
+- Added `scripts/check-run249-wallet-recovery-build-guards.mjs` with focused contracts for salted scrypt, input normalization, constant-time comparison, insert-only setup, bounded/serialized failed attempts, transactional reset, cooldown enforcement, RPC ACLs, CI build diagnostics, and the additive race guard. Registered it in `prebuild:checks` and `verify:static`.
+- Added `20261110110001_wallet_recovery_reset_lock_race_guard.sql` (REVIEW_REQUIRED, unapplied). The replacement RPC re-checks the recovery lock under `FOR UPDATE`, locks the PIN row, blocks resets during an existing cooldown, and preserves service-role-only execution.
+- Regenerated the migration checklist, verified manifest, source CSV, and Testnet review order: 201 migration files. No migration was applied.
+- Added `docs/DEPENDENCY-WARNINGS-RUN249.md` to record the disposition of all supplied dependency/native-script warnings and the safe follow-up required.
+- Updated the CI diagnostics artifact action from `actions/upload-artifact@v4` to `@v7`, the current Node 24-compatible release, removing the explicit Node 20 deprecation warning from this workflow. The upstream action documentation confirms v7 runs on Node 24.
+- No application dependency versions or native install-script approvals changed. The npm deprecation/install-script warnings are retained as review items rather than hidden with unsafe blanket approvals.
+- The supplied Vercel excerpt ends at the generic `npm run build` failure and does not include the Next.js compiler diagnostic. The build failure is therefore not claimed fixed; rerun with the full build log/artifact before changing application code or compiler settings.
+- No Pi payment, wallet balance, GHC ledger, payout, escrow, or production state was changed. No GitHub push or Vercel deployment was performed.

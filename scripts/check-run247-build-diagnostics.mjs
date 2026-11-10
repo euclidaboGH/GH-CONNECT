@@ -27,7 +27,7 @@ check(runner.includes('process.versions.node') && runner.includes('pkg.engines?.
 check(runner.includes('--list') && runner.includes('--dry-run'), 'runner supports a non-executing diagnostic list')
 check(pkg.scripts?.['check:run247-build-diagnostics'] === 'node scripts/check-run247-build-diagnostics.mjs', 'focused Run 247 checker is registered')
 check(pkg.scripts?.['verify:static']?.includes('check-run247-build-diagnostics.mjs'), 'focused Run 247 checker is part of static verification')
-check(workflow.includes('actions/upload-artifact@v4') && workflow.includes('.next/trace'), 'CI preserves Next.js build traces on failure')
+check(workflow.includes('actions/upload-artifact@v7') && workflow.includes('.next/trace'), 'CI preserves Next.js build traces on failure')
 check(workflow.includes('npm config delete cache-dir --location=user'), 'CI removes stale user-level npm cache-dir config')
 check(workflow.includes('npm --version'), 'CI records the npm toolchain version')
 check(workflow.includes('if: failure()'), 'diagnostic artifact upload is failure-gated')
