@@ -31,6 +31,9 @@ jobs:
           node-version: 24.15.0
           cache: npm
 
+      - name: Verify pinned Node runtime
+        run: node -e "if (process.versions.node !== '24.15.0') { console.error('Expected Node.js 24.15.0, received ' + process.versions.node); process.exit(1) }"
+
       - name: Dependency lock integrity
         run: node scripts/check-dependency-lock-integrity.mjs
 
@@ -99,6 +102,9 @@ jobs:
         with:
           node-version: 24.15.0
           cache: npm
+
+      - name: Verify pinned Node runtime
+        run: node -e "if (process.versions.node !== '24.15.0') { console.error('Expected Node.js 24.15.0, received ' + process.versions.node); process.exit(1) }"
 
       - name: Dependency lock integrity
         run: node scripts/check-dependency-lock-integrity.mjs

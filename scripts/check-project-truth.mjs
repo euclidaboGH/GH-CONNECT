@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync, readdirSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
 import { join } from 'node:path'
 
 const root = process.cwd()
@@ -29,6 +30,12 @@ check(checklist.includes(`**On-disk count:** **${migrationCount}**`), 'migration
 check(truth.includes('NOT APPROVED') && truth.includes('does not establish'), 'release status and verification limits are explicit')
 check(pkg.engines?.node === '^24.15.0' && read('.nvmrc').trim() === '24.15.0', 'runtime pin and package engine agree')
 check(pkg.scripts?.['check:project-truth'] === 'node scripts/check-project-truth.mjs', 'project-truth check is registered')
+const inventoryCheck = spawnSync(process.execPath, ['scripts/generate-migration-inventory.mjs', '--check'], { cwd: root, encoding: 'utf8', env: process.env, maxBuffer: 4 * 1024 * 1024 })
+check(inventoryCheck.status === 0, 'generated migration inventory is synchronized with canonical SQL sources')
+if (inventoryCheck.status !== 0) {
+  const diagnostic = [inventoryCheck.stdout, inventoryCheck.stderr].filter(Boolean).join('\n').trim()
+  if (diagnostic) console.error(diagnostic)
+}
 if (errors.length) {
   console.error(`\nProject truth check: ${errors.length} failure(s)`)
   for (const error of errors) console.error(`FAIL ${error}`)
