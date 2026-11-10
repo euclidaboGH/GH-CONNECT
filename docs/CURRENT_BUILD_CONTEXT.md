@@ -2,20 +2,29 @@
 
 **Canonical implementation context. Read this before every new build prompt or engineering task. This document supersedes historical prompts, worklogs and archives for current implementation decisions.**
 
-## Run #258 — Current source authority (2026-11-10)
+## Run #261 — Current source authority (2026-11-10)
 
 - Run #258: Testnet Marketplace order-list RPC fixed after reproducing SQLSTATE 42703; applied migration `20261110110002_marketplace_orders_list_rpc_alias_fix.sql` (generated history version `20261110102610`). Synthetic read-only postflight returned an empty order list and confirmed service_role-only ACL. No order or financial data changed.
 
-- Current working source release: **0.338.25**, derived only from the user's latest authoritative `GREENHAVEN-0.338.23-RUN257-ECONOMY-MARKETPLACE-RECONCILIATION.zip`.
+- Current working source release: **0.338.27**, derived from the user's latest authoritative `GREENHAVEN-0.338.23-RUN257-ECONOMY-MARKETPLACE-RECONCILIATION.zip` through 0.338.25.
 - Current archive includes a Testnet-only A2U withdrawal reliability improvement: unrelated incomplete Pi server payments are now added to the shared operator review queue with provider ID/txid and bounded metadata; the operator treasury report can inspect Pi's single incomplete server payment read-only; failure diagnostics are sanitized and persisted. No A2U transfer is auto-cancelled or bypassed.
 - Testnet remains the only active audit target. Mainnet is not to be modified. Supabase migration history for the original manually applied migrations remains unreconciled; never run `supabase db push` or replay migrations 1–189.
-- Current Testnet source audit: 207 canonical migrations; 140 public tables with RLS; 0 public SECURITY DEFINER functions executable by client roles; 13 intentionally deny-all RLS tables. Wallet payout provider state, old membership payment intents, Daily Claim pending rows and marketplace SKU/fulfilment migrations still require controlled reconciliation and provider acceptance.
+- Current source inventory: 209 canonical migrations; 140 public tables with RLS; 0 public SECURITY DEFINER functions executable by client roles; 13 intentionally deny-all RLS tables. Wallet payout provider state, old membership payment intents, Daily Claim pending rows and marketplace SKU/fulfilment migrations still require controlled reconciliation and provider acceptance.
 - Production remains **NOT APPROVED** until Node 24.15.0 typecheck/lint/build, disposable PostgreSQL rehearsal, Testnet provider receipts, inventory/payment/fulfilment concurrency, two-account access tests and independent Mainnet review pass.
+
+## Live Pi withdrawal incident — Run #260
+
+- Vercel Testnet Preview 0.338.25 is READY on commit `237070b2817680933b82994ca72737bd1e90d505`; the observed `POST /api/economy/earnings/withdrawals/process` returned 503 because provider execution did not reach verified settlement. The old log emitted only `PI_PROVIDER_OUTCOME_UNCERTAIN`; the exact provider stage was not recorded.
+- Testnet currently has three 1.00 π requests in `uncertain`, with no persisted provider payment ID, txid or verified receipt. Their 3.00 π total remains reserved. Never force-release or blindly retry these requests.
+- The linked Pi identity and explicit payout authorization are UID-matched and active, but the current authorization schema has no blockchain wallet-address column. Existing payout execution is A2U by Pi app UID, not a raw wallet address.
+- Run #260 requests Pi's explicit `wallet_address` scope during payout consent, binds the SDK-reported public address to the same server-verified UID, and labels its source in Wallet. A2U continues to route by UID; before submission and settlement, the provider's actual `to_address` must match the bound address.
+- Migration `20261110125500_pi_wallet_address_binding_and_verified_a2u_diagnostics.sql` is REVIEW_REQUIRED and unapplied. It also blocks a second active withdrawal while one request is reserved, processing or uncertain. Do not deploy the new wallet-consent flow without applying this migration to Testnet after review and history reconciliation.
+- The new worker and health endpoint use a direct read-only Pi Platform incomplete-payment query to preserve HTTP/provider error codes instead of the official SDK's generic `unknown_error`; health also initializes the Pi SDK with the configured server seed without sending a payment. Wallet-address scope is bound to the server-verified Pi UID; before any A2U payment is submitted or settled, the provider's actual `to_address` must match the stored address. The provider lane must be inspected after the new source is deployed. Wallet reservation details now offer an explicit per-request reconciliation action for `uncertain` requests; it resumes only an exact provider match and never creates a replacement for an ambiguous prior attempt.
 
 ## CURRENT BUILD CONTEXT
 
-- Current source release: **0.338.25** (Runs #256–259 Pi A2U diagnostics, economy reconciliation, the live Marketplace RPC repair and release-hygiene repair; derived from the user-uploaded 0.338.23 archive).
-- Current baseline: `GREENHAVEN-0.338.23-RUN257-ECONOMY-MARKETPLACE-RECONCILIATION.zip`; 0.338.25 is the current sequential working increment. The 0.338.23 archive is the current user-authoritative source input; 0.338.24 is a derived working release. Historical Messenger/Community improvements remain part of the source tree.
+- Current source release: **0.338.27** (Runs #256–260: A2U diagnostics, Testnet reconciliation, Marketplace RPC repair, release hygiene, Pi wallet-address binding/provider-destination check, one-active-withdrawal guard, actionable provider diagnostics, and five-recipient A2U ecosystem qualification register).
+- Current baseline: `GREENHAVEN-0.338.23-RUN257-ECONOMY-MARKETPLACE-RECONCILIATION.zip`; 0.338.27 is the current sequential working increment. The 0.338.23 archive remains the user-authoritative source input; 0.338.24 and 0.338.25 are derived working releases. Historical Messenger/Community improvements remain part of the source tree.
 - Product: GreenHaven social platform and ecosystem. Keep the existing product identity, routes, data contracts and security boundaries unless a reviewed implementation explicitly changes them.
 - Visual direction: premium, modern, calm and accessible; deep emerald / teal / navy with restrained gold accents; light-mode-first. Screenshots are design references, not sources of banking features, balances, licenses, logos or provider capabilities.
 - Wallet: GHC and Pi are separate assets and separate ledgers. Never add them together, convert one into the other for display, fabricate balances, or treat local cache as financial authority. Server-confirmed balances must be clearly distinguished from stale, pending, locked and unavailable data.
@@ -35,3 +44,5 @@ Continue from `docs/PHASE-10.2-FILTER-STATE-AND-SERVER-PARITY-0.330.40.md`. Shar
 ## Marketplace acceptance follow-up — Phase 9.4
 
 Continue from `docs/PHASE-9.4-SELLER-FULFILMENT-BUYER-TRACKING-0.330.38.md`. Shipping, pickup and digital fulfilment are distinct server-validated workflows. Shipping requires carrier/tracking metadata and a dispatch transition before delivery; buyer completion remains gated. The event journal is database-enforced append-only and participant-scoped. Do not apply the new REVIEW_REQUIRED migration or claim provider verification, parcel proof, payment settlement, refunds or production readiness without the required external acceptance.
+
+- Run #261 adds `/admin/a2u-qualification`, operator-attested full-KYC recipient eligibility, read-only provider verification of existing Testnet A2U payments, distinct-recipient/duplicate-payment enforcement, and a five-settlement progress register. Its additive migration is REVIEW_REQUIRED and unapplied. No A2U payment has been created by this register.

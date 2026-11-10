@@ -19,6 +19,8 @@ import {
   RefreshCw,
   Shield,
   Wallet,
+  Copy,
+  Check,
 } from "lucide-react"
 
 type Withdrawable = {
@@ -47,6 +49,9 @@ type Withdrawable = {
     hasMapping?: boolean
     uidMatchesAuthorization?: boolean
     error?: string
+    piWalletAddress?: string | null
+    walletAddressSource?: "platform_api" | "pi_sdk_scope" | "provider_payment" | null
+    walletAddressVerifiedAt?: string | null
   } | null
   error?: string
 }
@@ -169,6 +174,7 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
   const [walletAuthActive, setWalletAuthActive] = useState<boolean | null>(null)
   const [walletAuthLoading, setWalletAuthLoading] = useState(false)
   const [authorizingWallet, setAuthorizingWallet] = useState(false)
+  const [walletAddressCopied, setWalletAddressCopied] = useState(false)
   const [charityTotal, setCharityTotal] = useState<string | null>(null)
   const [charityCount, setCharityCount] = useState(0)
   const [crossFindings, setCrossFindings] = useState<string[]>([])
@@ -279,13 +285,17 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
           ok?: boolean
           authorizationActive?: boolean
           uidMatchesAuthorization?: boolean
+          piWalletAddress?: string | null
+          walletAddressSource?: "platform_api" | "pi_sdk_scope" | "provider_payment" | null
+          walletAddressVerifiedAt?: string | null
           error?: string
         } | null
         if (!signal?.aborted) {
           if (aRes.ok && aJson?.ok) {
             setWalletAuthActive(
               aJson.authorizationActive === true &&
-              aJson.uidMatchesAuthorization === true,
+              aJson.uidMatchesAuthorization === true &&
+              Boolean(aJson.piWalletAddress && aJson.walletAddressSource),
             )
           } else if (aJson?.error === "WALLET_AUTHORIZATION_UNAVAILABLE") {
             setWalletAuthActive(null)
@@ -540,6 +550,65 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
         >
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
         </button>
+      </div>
+
+      <div className="mx-4 mt-3 rounded-xl border border-border/60 bg-muted/20 px-3 py-3" data-pi-wallet-connection>
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold text-foreground">Connected Pi wallet</p>
+            <p className="mt-0.5 text-[10px] text-muted-foreground">
+              {snap.walletAuthorization?.walletAddressSource === "provider_payment"
+                ? "Pi provider confirmed this payout address"
+                : snap.walletAuthorization?.walletAddressSource === "platform_api"
+                  ? "Wallet address returned by Pi Platform API"
+                  : snap.walletAuthorization?.walletAddressSource === "pi_sdk_scope"
+                    ? "Wallet address reported by Pi SDK; provider match checked before payout"
+                    : "Wallet address permission required"}
+            </p>
+          </div>
+          <span className={`shrink-0 rounded-full px-2 py-1 text-[9px] font-bold ${snap.walletAuthorization?.walletAddressSource === "provider_payment" || snap.walletAuthorization?.walletAddressSource === "platform_api" ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200" : snap.walletAuthorization?.walletAddressSource === "pi_sdk_scope" ? "bg-violet-100 text-violet-800 dark:bg-violet-950/60 dark:text-violet-200" : "bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-200"}`}>
+            {walletAuthLoading ? "Checking" : snap.walletAuthorization?.walletAddressSource === "provider_payment" ? "Provider-confirmed" : snap.walletAuthorization?.walletAddressSource === "platform_api" ? "Pi API" : snap.walletAuthorization?.walletAddressSource === "pi_sdk_scope" ? "Pi SDK" : "Reconnect"}
+          </span>
+        </div>
+        {snap.walletAuthorization?.piWalletAddress ? (
+          <div className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-background/80 px-2.5 py-2">
+            <div className="min-w-0">
+              <p className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground">Pi wallet address</p>
+              <p className="mt-0.5 break-all font-mono text-[11px] font-semibold text-foreground" data-pi-wallet-address>
+                {`${snap.walletAuthorization.piWalletAddress.slice(0, 7)}…${snap.walletAuthorization.piWalletAddress.slice(-6)}`}
+              </p>
+            </div>
+            <button
+              type="button"
+              className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-border/70 px-3 text-[10px] font-semibold text-foreground hover:bg-muted"
+              aria-label="Copy connected Pi wallet address"
+              onClick={async () => {
+                try {
+                  if (!navigator.clipboard?.writeText) throw new Error("CLIPBOARD_UNAVAILABLE")
+                  await navigator.clipboard.writeText(String(snap.walletAuthorization?.piWalletAddress || ""))
+                  setWalletAddressCopied(true)
+                } catch {
+                  setWalletAddressCopied(false)
+                }
+              }}
+            >
+              {walletAddressCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+              {walletAddressCopied ? "Copied" : "Copy"}
+            </button>
+          </div>
+        ) : (
+          <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+            Tap Withdraw and reconnect Pi with the wallet-address permission. GreenHaven binds the Pi-reported address to your server-verified Pi identity and checks the provider destination before any payout is submitted.
+          </p>
+        )}
+        {snap.walletAuthorization?.walletAddressVerifiedAt ? (
+          <p className="mt-1.5 text-[9px] text-muted-foreground">
+            Last verified: {new Date(snap.walletAuthorization.walletAddressVerifiedAt).toLocaleString()}
+          </p>
+        ) : null}
+        <p className="mt-2 text-[9px] leading-relaxed text-muted-foreground">
+          A2U payouts are addressed by Pi's app-specific user ID. This public address is reported by Pi for that same authenticated account; it is not a manually entered payout destination. GreenHaven checks the provider's actual `to_address` against it before submission and settlement.
+        </p>
       </div>
 
       <div className="grid grid-cols-2 gap-2 px-4 py-3 sm:grid-cols-4">

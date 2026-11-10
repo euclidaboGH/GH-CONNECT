@@ -63,6 +63,7 @@ export async function POST(request: Request) {
       ghUserId: auth.userId,
       accessToken: parsedBody.value.accessToken,
       consent: parsedBody.value.consent,
+      walletAddress: parsedBody.value.walletAddress,
     },
     { verifyPiAccessToken, getByGhUserId, getByPiAppUid },
   )
@@ -75,11 +76,13 @@ export async function POST(request: Request) {
       retryable: proof.error !== "IDENTITY_MISMATCH" && proof.error !== "IDENTITY_MAPPING_REQUIRED",
     }, walletConsentFailureStatus(proof.error))
   }
-  const mapping = { piAppUid: proof.piAppUid }
+  const mapping = { piAppUid: proof.piAppUid, piWalletAddress: proof.piWalletAddress, walletAddressSource: proof.walletAddressSource }
 
   const granted = await grantWalletAuthorization({
     ghUserId: auth.userId,
     piAppUid: mapping.piAppUid,
+    piWalletAddress: mapping.piWalletAddress,
+    walletAddressSource: mapping.walletAddressSource,
     source: "user_explicit",
   })
   if (!granted.ok) {
@@ -101,7 +104,9 @@ export async function POST(request: Request) {
     !verified.ok ||
     verified.authorizationActive !== true ||
     verified.uidMatchesAuthorization !== true ||
-    verified.authorizedPiAppUid !== mapping.piAppUid
+    verified.authorizedPiAppUid !== mapping.piAppUid ||
+    verified.piWalletAddress !== mapping.piWalletAddress ||
+    verified.walletAddressSource !== mapping.walletAddressSource
   ) {
     return reply({
       ok: false,
@@ -114,6 +119,9 @@ export async function POST(request: Request) {
     ok: true,
     authorizationId: verified.authorizationId || granted.authorizationId,
     piAppUid: verified.authorizedPiAppUid,
+    piWalletAddress: verified.piWalletAddress,
+    walletAddressSource: verified.walletAddressSource,
+    walletAddressVerifiedAt: verified.walletAddressVerifiedAt,
     status: "active",
     authorizationActive: true,
     uidMatchesAuthorization: true,

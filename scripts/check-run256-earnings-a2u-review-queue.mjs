@@ -15,7 +15,7 @@ const checks = [
   ['actual sanitized failure code is persisted when execution ends', /p_failure_code:failureCode/.test(route)],
   ['raw provider exception messages are not returned to the browser', /diagnosticCode:failureCode/.test(route) && !/detail:error instanceof Error\?error\.message/.test(route)],
   ['operator queue records payment ID, txid and bounded detail', /providerPaymentId\?: string/.test(orchestration) && /txid\?: string/.test(orchestration) && /p_detail: input\.detail/.test(orchestration)],
-  ['operator-only treasury summary can inspect Pi incomplete server payments read-only', /inspectPiIncompleteServerPayments/.test(orchestration) && /getIncompleteServerPayments/.test(orchestration) && /piProviderIncomplete: providerIncomplete/.test(treasury)],
+  ['operator-only treasury summary can inspect Pi incomplete server payments read-only', /inspectPiIncompleteServerPayments/.test(orchestration) && /getPiIncompleteA2uPayments/.test(orchestration) && /piProviderIncomplete: providerIncomplete/.test(treasury)],
   ['provider inspection never auto-submits, cancels or completes payments', /Read-only Testnet inspection/.test(orchestration) && !/sdk\.(?:submitPayment|cancelPayment|completePayment)\(/.test(orchestration.slice(orchestration.indexOf('export async function inspectPiIncompleteServerPayments')))],
   ['wallet explains that another incomplete A2U payment must be reconciled', /UNRELATED_INCOMPLETE_A2U_REQUIRES_OPERATOR_REVIEW/.test(ui) && /no duplicate transfer was created/i.test(ui)],
   ['wallet diagnostic action label uses safe nested quoting', /use 'Check for releasable requests' to return it/.test(ui)],

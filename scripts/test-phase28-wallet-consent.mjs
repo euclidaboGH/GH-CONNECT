@@ -17,6 +17,8 @@ async function t(name, fn) {
   console.log(`PASS ${name}`)
 }
 
+const PI_WALLET_ADDRESS = `G${"A".repeat(55)}`
+
 function deps(overrides = {}) {
   const calls = { verify: 0, byGh: 0, byPi: 0 }
   return {
@@ -29,7 +31,7 @@ function deps(overrides = {}) {
     },
   }
 }
-const good = { ghUserId: "gh-1", accessToken: "tok", consent: true }
+const good = { ghUserId: "gh-1", accessToken: "tok", consent: true, walletAddress: PI_WALLET_ADDRESS }
 
 await t("no explicit consent boolean → CONSENT_REQUIRED (no Pi call)", async () => {
   for (const consent of [undefined, false, "true", 1, null]) {
@@ -51,6 +53,15 @@ await t("Pi platform rejects token → PI_TOKEN_INVALID and no mapping read", as
   const r = await verifyWalletConsentProof(good, d)
   assert.deepEqual(r, { ok: false, error: "PI_TOKEN_INVALID" })
   assert.equal(calls.byGh, 0)
+})
+await t("missing SDK wallet address → PI_WALLET_ADDRESS_REQUIRED", async () => {
+  const { deps: d } = deps()
+  const { walletAddress, ...withoutAddress } = good
+  assert.deepEqual(await verifyWalletConsentProof(withoutAddress, d), { ok: false, error: "PI_WALLET_ADDRESS_REQUIRED" })
+})
+await t("server-returned wallet address must match Pi SDK address", async () => {
+  const { deps: d } = deps({ verifyPiAccessToken: async () => ({ uid: "pi-uid-1", walletAddress: `G${"B".repeat(55)}` }) })
+  assert.deepEqual(await verifyWalletConsentProof(good, d), { ok: false, error: "PI_WALLET_ADDRESS_MISMATCH" })
 })
 await t("no durable mapping → IDENTITY_MAPPING_REQUIRED", async () => {
   const { deps: d } = deps({ getByGhUserId: async () => null })
@@ -76,14 +87,22 @@ await t("valid proof returns the DURABLE mapped UID, ignoring any browser-suppli
   assert.equal(r.ok, true)
   assert.equal(r.piAppUid, "pi-uid-1")
   assert.equal(r.piUsername, "alice")
+  assert.equal(r.piWalletAddress, PI_WALLET_ADDRESS)
+  assert.equal(r.walletAddressSource, "pi_sdk_scope")
+})
+await t("Platform API wallet address match is marked as API verified", async () => {
+  const { deps: d } = deps({ verifyPiAccessToken: async () => ({ uid: "pi-uid-1", walletAddress: PI_WALLET_ADDRESS }) })
+  const r = await verifyWalletConsentProof(good, d)
+  assert.equal(r.ok, true)
+  assert.equal(r.walletAddressSource, "platform_api")
 })
 await t("every failure has a safe message and an HTTP status; none leak internals", async () => {
   for (const [code, msg] of Object.entries(WALLET_CONSENT_MESSAGES)) {
     assert.ok(msg.length > 10)
     assert.ok(!/PGRST|postgres|service_role|Bearer|token=/i.test(msg))
-    assert.ok([400, 401, 403, 409, 503].includes(walletConsentFailureStatus(code)))
+    assert.ok([400, 401, 403, 409, 422, 503].includes(walletConsentFailureStatus(code)))
     assert.notEqual(code, "WALLET_AUTHORIZATION_REQUIRED")
   }
 })
 
-console.log(`\nPhase 28 wallet consent tests: ${passed}/9 passed`)
+console.log(`\nPhase 28 wallet consent tests: ${passed}/12 passed`)

@@ -33,6 +33,8 @@ test("uses evaluateWithdrawalsHealth", /evaluateWithdrawalsHealth/.test(route) &
 test("scope marks infrastructure only", /userEligibilityEvaluated:\s*false/.test(mod) && /kind:\s*"infrastructure"/.test(mod))
 test("probes database connectivity", /probeSupabaseConnectivity/.test(mod) || /SUPABASE_REACHABLE/.test(mod))
 test("probes Pi Platform API without creating payouts", /probePiPlatformApi/.test(mod) && /No payout was attempted/.test(mod))
+test("probes Pi incomplete A2U lane read-only and detects a global blocker", /probePiIncompleteA2u/.test(mod) && /getPiIncompleteA2uPayments/.test(mod) && /PI_A2U_INCOMPLETE_PAYMENT_PRESENT/.test(mod))
+test("validates Pi A2U backend SDK and server wallet seed without payment/network mutation", /probePiBackendSdk/.test(mod) && /new PiBackend\(apiKey, walletSeed\)/.test(mod) && /No payment was attempted/.test(mod))
 test("probes wallet authorization RPC and table", /gh_pi_wallet_authorization_get/.test(mod) && /gh_pi_wallet_authorizations/.test(mod))
 test("does not expose service role key in responses", !/serviceRoleKey:/.test(mod) && !/PI_API_KEY\}/.test(mod))
 test("AbortSignal timeouts on upstream probes", /AbortSignal\.timeout/.test(mod))

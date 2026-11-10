@@ -12,7 +12,7 @@ const checks=[
  ['wallet authorization checked',route.includes('assertPayoutWalletAuthorization')],
  ['global execution lease acquired before provider call',route.indexOf('gh_pi_earnings_payout_begin_execution')<route.indexOf('import("pi-backend")')],
  ['provider payment is durably bound before submit',route.indexOf('gh_pi_earnings_payout_bind_provider_payment')<route.indexOf('sdk.submitPayment')],
- ['existing incomplete payments recovered before creating',route.indexOf('getIncompleteServerPayments')<route.indexOf('sdk.createPayment')],
+ ['existing incomplete payments recovered before creating',route.indexOf('getPiIncompleteA2uPayments')<route.indexOf('sdk.createPayment')],
  ['unrelated incomplete payment blocks duplicate create',route.includes('UNRELATED_INCOMPLETE_A2U_REQUIRES_OPERATOR_REVIEW')],
  ['payment metadata binds payout request and domain',route.includes('payoutRequestId:requestId')&&route.includes('domain:"pi_earnings"')],
  ['provider payment binding independently checked',route.includes('sdk.getPayment(paymentId)')&&route.includes('PROVIDER_PAYMENT_BINDING_MISMATCH')],

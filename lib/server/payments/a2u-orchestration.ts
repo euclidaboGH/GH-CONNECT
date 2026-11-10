@@ -11,6 +11,7 @@
 import type { PiBackendPayment } from "pi-backend"
 import { resolvePiSandbox } from "@/lib/pi-env"
 import { readGhcServerEnv, hasPrivilegedDatabase } from "@/lib/server/economy/env"
+import { getPiIncompleteA2uPayments, piA2uErrorDiagnostic, piA2uErrorHttpStatus } from "@/lib/server/payments/pi-platform-a2u"
 
 export type A2uSourceKind = "cashback" | "seller_marketplace" | "creator" | "other"
 
@@ -201,6 +202,8 @@ export function canMarkA2uPaid(input: {
 export async function inspectPiIncompleteServerPayments(): Promise<{
   ok: boolean
   state: "ready" | "not_configured" | "testnet_gate_closed" | "provider_unavailable"
+  diagnosticCode?: string
+  providerHttpStatus?: number
   items?: Array<{
     providerPaymentId: string
     direction: string
@@ -223,15 +226,10 @@ export async function inspectPiIncompleteServerPayments(): Promise<{
   ) return { ok: false, state: "testnet_gate_closed" }
 
   const apiKey = String(process.env.PI_API_KEY || process.env.PI_SERVER_API_KEY || "").trim()
-  const walletSeed = String(process.env.PI_WALLET_PRIVATE_SEED || "").trim()
-  if (!apiKey || !/^S[A-Z2-7]{55}$/.test(walletSeed)) {
-    return { ok: false, state: "not_configured" }
-  }
+  if (!apiKey) return { ok: false, state: "not_configured", diagnosticCode: "PI_API_KEY_MISSING" }
 
   try {
-    const sdkModule = await import("pi-backend")
-    const sdk = new sdkModule.default(apiKey, walletSeed)
-    const incomplete = await sdk.getIncompleteServerPayments()
+    const incomplete = await getPiIncompleteA2uPayments()
     return {
       ok: true,
       state: "ready",
@@ -250,9 +248,17 @@ export async function inspectPiIncompleteServerPayments(): Promise<{
       })),
     }
   } catch (error) {
+    const diagnosticCode = piA2uErrorDiagnostic(error, "INCOMPLETE_LOOKUP")
+    const providerHttpStatus = piA2uErrorHttpStatus(error)
     console.error("[pi-a2u-orchestration] provider incomplete-payment inspection failed", {
-      errorName: error instanceof Error ? error.name : "UnknownError",
+      diagnosticCode,
+      ...(providerHttpStatus ? { providerHttpStatus } : {}),
     })
-    return { ok: false, state: "provider_unavailable" }
+    return {
+      ok: false,
+      state: "provider_unavailable",
+      diagnosticCode,
+      ...(providerHttpStatus ? { providerHttpStatus } : {}),
+    }
   }
 }

@@ -1,8 +1,16 @@
+## Run #261 — Pi A2U ecosystem qualification register (2026-11-10)
+
+GreenHaven 0.338.27 adds an authenticated, A2U-admin-key-protected operator register at `/admin/a2u-qualification`. Operators attest full KYC-passed status only after checking the official Pi KYC app; the attestation is bound to the server-stored GreenHaven/Pi UID mapping and stores only a non-sensitive evidence reference. The register reads existing Pi provider payments and counts only Testnet `app_to_user` payments with exact recipient UID, positive amount, matching provider txid, verified transaction, developer completion, non-cancelled state and GreenHaven A2U request metadata. Database uniqueness prevents reusing a provider payment, txid or recipient; five distinct fully KYC-passed recipients are required. Each provider `to_address` must also match the same recipient's active, server-verified Pi wallet authorization address; the destination is retained with the qualification evidence. The qualification migration `20261110210001_pi_a2u_ecosystem_qualification.sql` is REVIEW_REQUIRED and unapplied. The register does not create, submit, complete, cancel or retry payments. No qualification transactions are asserted, no Supabase migration or Vercel deployment was performed, and Mainnet remains untouched. Source checks are 16/16 for Run #261, 25/25 for Run #260, migration manifest 209/209 and SQL lexical integrity 209/209. Node 24.15.0 dependency-backed typecheck/lint/build, PostgreSQL execution, live provider verification and actual five-transaction Testnet evidence remain open. Production NOT APPROVED.
+
+## Run #260 — Current Testnet/Vercel and Pi wallet withdrawal status (2026-11-10)
+
+Vercel Testnet Preview deployment `dpl_HMcWzp1ma76wqdJMdGrgNpq5JcWs` is READY on commit `237070b2817680933b82994ca72737bd1e90d505` and GitHub `testnet` package version 0.338.25. The live withdrawal process route returned HTTP 503 with only `PI_PROVIDER_OUTCOME_UNCERTAIN`; its old worker did not record which Pi provider stage failed. Testnet has three 1.00 π payout requests in `uncertain`, with no persisted provider payment ID, txid or verified receipt; 3.00 π remains reserved. The linked Pi UID and explicit authorization are active and match, but the current authorization table stores no blockchain wallet address. A2U is addressed by the app-specific Pi UID. Run #260 source 0.338.26 adds direct read-only incomplete-A2U provider diagnostics, per-stage failure codes, a one-active-request guard, and Pi wallet_address scope binding and provider `to_address` verification. Migration `20261110125500_pi_wallet_address_binding_and_verified_a2u_diagnostics.sql` is REVIEW_REQUIRED and unapplied; source 0.338.26 is not yet deployed. Do not release or retry the three uncertain requests until Pi's authoritative provider state is inspected. Mainnet remains untouched; production NOT APPROVED.
+
 ## Run #258 — Live Testnet Marketplace order-list RPC repair (2026-11-10)
 
 The Vercel runtime error cluster showed the durable Marketplace order-list RPC failing. A direct Testnet SQL probe reproduced PostgreSQL `42703`: the old RPC ordered its JSON aggregation by `x.created_at`, but its projected timestamp alias was the quoted `createdAt`. Added `20261110110002_marketplace_orders_list_rpc_alias_fix.sql` and applied it only to Testnet. Supabase recorded generated migration history version `20261110102610`. The replacement uses the existing order getter, orders by the real source timestamp, limits results to 200, pins `search_path`, and preserves service-role-only execution. A synthetic non-user lookup returned `[]`; ACL postflight confirmed anon/authenticated denied and service_role allowed. PostgREST schema cache reloaded at 10:26 UTC. No marketplace order, stock, payment, ledger, balance or payout row was changed.
 
-Testnet withdrawal recovery postflight also confirms `gh_withdrawal_pin_recovery_get` and `gh_pi_earnings_payout_get_owned` exist with service-role-only grants; synthetic probes returned the expected not-configured / not-found outcomes. The historical Vercel PGRST202 occurred before the PIN recovery migration and schema reload. Authenticated Vercel runtime verification remains outstanding because the current deployed `testnet` source is still 0.338.20; the 0.338.25 archive has not been pushed or deployed. Migrations 194–195 remain REVIEW_REQUIRED. Production remains NOT APPROVED.
+Testnet withdrawal recovery postflight also confirms `gh_withdrawal_pin_recovery_get` and `gh_pi_earnings_payout_get_owned` exist with service-role-only grants; synthetic probes returned the expected not-configured / not-found outcomes. The historical Vercel PGRST202 occurred before the PIN recovery migration and schema reload. At the time of the Run #258 snapshot, the deployed `testnet` source was still 0.338.20 and 0.338.25 had not yet been pushed; the subsequent Run #260 status above supersedes that historical deployment state. Migrations 194–195 remain REVIEW_REQUIRED. Production remains NOT APPROVED.
 
 ## Run #257 — Economy and Marketplace reconciliation (2026-11-10)
 
@@ -28,7 +36,7 @@ The earnings payout worker no longer directly selects from `gh_pi_earnings_payou
 
 ## 0.330.49 — Phase 3 wallet, rewards and membership concurrency hardening (2026-11-08)
 
-**Current source version:** `0.338.25`
+**Current source version:** `0.338.27`
 
 This increment closes several Phase 3 financial-reliability gaps. Pi withdrawal reservation recovery now reports per-request reasons and unlock conditions, and only releases a Pi Testnet reservation when it is still `reserved`, has no provider payment/txid, has no execution start/lease and has zero execution attempts. Processing/uncertain requests remain protected until an authoritative provider result; timeouts do not forfeit earned funds. Wallet ledger history prioritizes human-readable reasons over opaque references, and the withdrawal request response no longer contradicts its own execution gate. GHC membership purchase now serializes entitlement preflight and debit per account and prevents duplicate active same-tier charges or active VVIP downgrades during concurrent requests. Reward claim replay by either pending-row ID or rewardId alias resolves to the one posted credit. Pi payment recovery now looks up and validates the provider object before binding its ID, checks payer identity/network/direction/amount, and requires a verified transaction and txid before completion; recovery is durably rate limited and no-store. The new SQL migration `20261108110001_phase3_wallet_rewards_membership_concurrency_recovery.sql` is REVIEW_REQUIRED and unapplied. Its 43-check source contract passes; existing targeted Phase 3 ledger, request guard, membership, payout lifecycle/settlement/execution, wallet recovery and cross-feature reconciliation contracts pass. Live PostgreSQL concurrency, authenticated Pi Testnet payment/entitlement recovery, actual 3π reservation reconciliation, Node 24.15.0 dependency-backed typecheck/lint/build and browser/device acceptance remain outstanding. Production remains NOT APPROVED.
 
@@ -197,12 +205,12 @@ The release retains the 0.330.0 Settings/media/navigation work and corrects stal
 
 ## Current authoritative metadata
 
-- Package and lockfile version: `0.338.25` (verified against `package.json` and the lockfile root).
-- Current project archive: `GREENHAVEN-0.338.25-RUN259-RELEASE-HYGIENE-REPAIR.zip`.
+- Package and lockfile version: `0.338.27` (verified against `package.json` and the lockfile root).
+- Current project archive: `GREENHAVEN-0.338.27-RUN261-PI-A2U-ECOSYSTEM-QUALIFICATION.zip`.
 - Runtime: Node `24.15.0` / package engine `^24.15.0`; this audit environment only supplied Node 22.16.0, so dependency-backed typecheck/build remain unverified.
-- Canonical Supabase migrations: **207** SQL files.
+- Canonical Supabase migrations: **209** SQL files.
 - Duplicate migration numeric prefixes: **0** (source-level manifest check required for release).
-- Migration source manifest: 207 entries, synchronized with the canonical migration directory.
+- Migration source manifest: 209 entries, synchronized with the canonical migration directory.
 - No local secret `.env` file is included; `.env.example` is the only env template.
 
 

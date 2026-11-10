@@ -48,3 +48,36 @@ Server-only secrets required by the worker: `PI_API_KEY`, `PI_WALLET_PRIVATE_SEE
 ## Release decision
 
 Run #256–257 source checks pass, but the actual Pi provider incomplete payment has not yet been inspected because the Vercel deployment connector is not connected in this session. No Pi transfer or balance mutation was made. Testnet withdrawal acceptance remains OPEN; Mainnet A2U remains disabled; production is NOT APPROVED.
+
+
+## Run #260 — 13:42 local live incident and wallet-address audit
+
+### Confirmed live state
+
+- Vercel Preview deployment `dpl_HMcWzp1ma76wqdJMdGrgNpq5JcWs` is READY on commit `237070b2817680933b82994ca72737bd1e90d505` (source package 0.338.25, Node 24.x). Request `8b4d2-1794314546230-14f9648ea998` to `/api/economy/earnings/withdrawals/process` returned HTTP 503. The only provider log was `PI_PROVIDER_OUTCOME_UNCERTAIN`; there was no stage, provider HTTP status or provider error code. The old log is insufficient to distinguish SDK initialization, incomplete-payment lookup, create, bind, submit, complete or receipt lookup failure.
+- Testnet has three requests: `534bb470-5702-49da-a5e2-47bfce7aac13`, `411b2152-b47d-4fae-a9e3-818a71e82a51`, and `300baa48-2b04-4a62-b2d1-b0b4c97dc799`. Each is 1.00 π gross, 0.03 π fee, 0.97 π net, status `uncertain`, no persisted provider payment ID, no txid and no verified receipt. The 3.00 π total remains reserved.
+- The Testnet identity row is verified and the active payout authorization maps to the same Pi app UID. Its username is `EUCLIDABO`. The authorization table currently stores no Pi/Stellar wallet address. Therefore the old screen's “linked at sign-in” is not a verified blockchain wallet-address display.
+
+### Recipient and wallet model
+
+- The existing A2U worker sends to the Pi app-specific UID returned by server-verified `/v2/me`; it does not set a raw Stellar public address as the A2U recipient. A2U therefore relies on Pi Network's account-to-wallet mapping.
+- Run #260 requests the official Pi SDK `wallet_address` scope only during explicit payout consent, reads the wallet address from the official Pi SDK `wallet_address` scope, validates its public-key format, and persists it with the same server-verified Pi UID. If `/v2/me` also returns the address, the values must match; otherwise it is marked SDK-reported until the provider PaymentDTO `to_address` confirms it before submission. The Wallet screen masks the address by default, offers a copy action, labels its source (`Pi SDK`, `Pi API`, or `Provider-confirmed`), and explains that the A2U recipient remains the UID. A provider destination mismatch blocks submission and requires operator review. No arbitrary user-entered destination is accepted, and no wallet secret/private seed is ever exposed.
+- Legacy UID-only authorizations will no longer satisfy the new payout assertion after the Run #260 migration. Users must re-consent through Pi Browser with the wallet-address permission before a new payout can be created.
+
+### Surgical source changes in 0.338.26 / Run #260
+
+1. Replaced the opaque SDK `getIncompleteServerPayments()` call with a bounded direct Pi Platform read-only adapter that preserves safe HTTP/provider error codes. The pinned SDK catches all incomplete-lookup errors and throws generic `unknown_error`, which hid the true failure stage.
+2. Added per-stage diagnostics (`SDK_INITIALIZATION`, `INCOMPLETE_LOOKUP`, `CREATE_PAYMENT`, `BIND_PROVIDER_PAYMENT`, `GET_PAYMENT`, `SUBMIT_PAYMENT`, `COMPLETE_PAYMENT`, `VERIFY_RECEIPT`, `SETTLE_LEDGER`) and safe provider status/code logging; raw provider messages remain hidden.
+3. Added read-only incomplete-A2U lane status to `/api/health/withdrawals` and operator Treasury inspection. The health response exposes only lane status, not payment identifiers or recipient details.
+4. Added a database guard allowing at most one `reserved`, `processing` or `uncertain` Pi payout request per user. Existing requests remain unchanged; retries with the original idempotency key still resolve to the same request. A prior ambiguous attempt without a provider ID can only recover an exact matching incomplete payment; if no match exists, no replacement payment is created.
+5. Added Pi `wallet_address` scope binding, durable address/source metadata, provider `to_address` comparison, and masked Wallet display/copy action.
+6. Added a per-request “Reconcile this Pi payout” action for uncertain reservations. It can resume only the exact matching provider payment; if Pi has no exact incomplete match, it creates no replacement and leaves the reservation intact.
+7. Updated the withdrawal sheet to show safe provider diagnostics and warn users not to create another request while an earlier request is unresolved.
+
+### Migration and release gates
+
+Migration `20261110125500_pi_wallet_address_binding_and_verified_a2u_diagnostics.sql` is REVIEW_REQUIRED and unapplied. It adds the Pi-reported public wallet address and its source, retires the old UID-only grant function, requires a bound address, snapshots it on each payout request, checks provider `to_address` before submission and settlement, and adds the single-active-request guard. Apply only to Testnet after the 0.338.26 source is deployed and the target migration history is reconciled. Do not touch Mainnet.
+
+The three existing uncertain requests must be reconciled against Pi's authoritative provider state before settlement or release. A missing provider ID is not proof that no provider payment was created. If Pi returns a matching incomplete payment, resume only that exact payment after validating request ID, UID, amount, network and metadata. If no matching incomplete payment exists, the worker now refuses to create a replacement and escalates to provider-side transaction/history reconciliation; do not release the reservation based solely on that absence.
+
+Run #260 static/runtime source contracts and migration lexical checks must pass; the source has not yet been pushed/deployed and the migration has not been applied. A real small-value Testnet payout, provider receipt, app-wallet funding check, two-account wallet binding, Node 24.15.0 typecheck/lint/build, browser/device acceptance and Mainnet review remain separate gates. Production remains NOT APPROVED.

@@ -1,7 +1,7 @@
 # GreenHaven Testnet migration review order
 
 **Generated from:** `supabase/migrations/*.sql` and the canonical classification policy in `scripts/generate-migration-inventory.mjs`.
-**Current source inventory:** 207 migrations.
+**Current source inventory:** 209 migrations.
 
 > **This is a review order, not permission to apply.** It does not prove remote migration history, database compatibility, or Testnet/Mainnet readiness. See docs/TESTNET-RECONCILIATION-2026-11-10.md for the latest direct Testnet snapshot and custom migration-history entries. Never run `supabase db push` while any pending migration is held for review, approval, validation, or marked proposal. Supabase CLI does not enforce these classifications.
 
@@ -222,11 +222,13 @@ The rows are sorted by the canonical migration identifier for review. Dependenci
 | 200 | `20261110100001_withdrawal_rpc_acl_and_recovery_atomicity.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
 | 201 | `20261110110001_wallet_recovery_reset_lock_race_guard.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
 | 202 | `20261110110002_marketplace_orders_list_rpc_alias_fix.sql` | REQUIRED | REVIEW_THEN_APPLY |
-| 203 | `20261110160001_security_definer_rpc_server_only_acl_hardening.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
-| 204 | `20261110170001_function_search_path_hardening.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
-| 205 | `20261110180001_remove_verified_duplicate_indexes.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
-| 206 | `20261110190001_rls_policy_dedup_and_initplan_optimization.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
-| 207 | `20261110200001_supporting_foreign_key_indexes.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
+| 203 | `20261110125500_pi_wallet_address_binding_and_verified_a2u_diagnostics.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
+| 204 | `20261110160001_security_definer_rpc_server_only_acl_hardening.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
+| 205 | `20261110170001_function_search_path_hardening.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
+| 206 | `20261110180001_remove_verified_duplicate_indexes.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
+| 207 | `20261110190001_rls_policy_dedup_and_initplan_optimization.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
+| 208 | `20261110200001_supporting_foreign_key_indexes.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
+| 209 | `20261110210001_pi_a2u_ecosystem_qualification.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
 
 ## Classification meanings
 

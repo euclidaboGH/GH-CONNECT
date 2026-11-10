@@ -70,6 +70,8 @@ export function WalletBalanceCard({
     reason: string
     unlockCondition: string
   }>>([])
+  const [reconcilingRequestId, setReconcilingRequestId] = useState<string | null>(null)
+  const [reconcileMsg, setReconcileMsg] = useState<string | null>(null)
   const lastPiFetchRef = useRef(0)
   const [walletOnline, setWalletOnline] = useState(
     typeof navigator === "undefined" ? true : navigator.onLine !== false,
@@ -227,6 +229,52 @@ export function WalletBalanceCard({
       setReleasing(false)
     }
   }, [refreshPi])
+
+  const reconcilePiRequest = useCallback(async (requestId: string) => {
+    if (!requestId || reconcilingRequestId) return
+    setReconcilingRequestId(requestId)
+    setReconcileMsg(null)
+    try {
+      const res = await fetch("/api/economy/earnings/withdrawals/process", {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify({ requestId }),
+        signal: AbortSignal.timeout(90_000),
+      })
+      const body = (await res.json().catch(() => null)) as {
+        ok?: boolean
+        status?: string
+        error?: string
+        diagnosticCode?: string
+      } | null
+      if (body?.ok && body.status === "paid") {
+        setReleaseItems((items) => items.filter((item) => item.requestId !== requestId))
+        setReconcileMsg(`Pi confirmed and settled withdrawal ${requestId.slice(0, 8)}. Your wallet is refreshing.`)
+      } else if (body?.error === "PI_UNCERTAIN_REQUEST_REQUIRES_OPERATOR_RECONCILIATION") {
+        setReconcileMsg(`Pi returned no exact incomplete payment for ${requestId.slice(0, 8)}. No replacement transfer was created and the reservation remains protected; operator reconciliation is required.`)
+      } else if (body?.error === "UNRELATED_INCOMPLETE_A2U_REQUIRES_OPERATOR_REVIEW") {
+        setReconcileMsg("A different incomplete Pi App-to-User payment is blocking this request. It has been flagged for operator review; no payment was cancelled or duplicated.")
+      } else if (body?.error === "PI_EARNINGS_EXECUTION_UNCERTAIN") {
+        setReconcileMsg(`Pi could not confirm the provider outcome. Your reservation remains protected. Reference: ${body.diagnosticCode || "PI_PROVIDER_UNCERTAIN"}`)
+      } else if (body?.error === "PI_PAYOUT_WALLET_ADDRESS_MISMATCH" || body?.error === "PI_PROVIDER_WALLET_ADDRESS_UNAVAILABLE") {
+        setReconcileMsg("Pi's actual payment destination could not be confirmed against your connected wallet. The payout was not submitted and has been flagged for operator review.")
+      } else if (body?.error === "PI_WALLET_ADDRESS_CHANGED_SINCE_REQUEST") {
+        setReconcileMsg("Your connected Pi wallet changed after this request was reserved. The request remains protected and must be reconciled before a new withdrawal can be created.")
+      } else if (body?.error === "WALLET_AUTHORIZATION_REQUIRED" || body?.error === "PI_WALLET_ADDRESS_VERIFICATION_REQUIRED" || body?.error === "PI_WALLET_ADDRESS_REVERIFICATION_REQUIRED") {
+        setReconcileMsg("Reconnect Pi in the Withdraw sheet and approve the wallet-address permission before checking this payout.")
+      } else {
+        setReconcileMsg("The existing payout could not be reconciled. No reservation was released and no replacement payment was created.")
+      }
+      void refreshPi()
+      window.dispatchEvent(new CustomEvent("ghc:earnings-refresh"))
+    } catch {
+      setReconcileMsg("Could not reach Pi's payout status check. Your reservation remains unchanged; try again when the connection is stable.")
+    } finally {
+      setReconcilingRequestId(null)
+    }
+  }, [reconcilingRequestId, refreshPi])
 
   const mask = (n: number) => (balanceVisible ? formatGhc(n) : "••••")
   const maskPi = (n: number) =>
@@ -449,10 +497,21 @@ export function WalletBalanceCard({
                         <p className="font-semibold">{item.status.replaceAll("_", " ").toUpperCase()} · {item.requestId.slice(0, 8)}</p>
                         <p className="mt-0.5">{item.reason}</p>
                         <p className="mt-1"><strong>When it unlocks:</strong> {item.unlockCondition}</p>
+                        {item.status.toLowerCase() === "uncertain" ? (
+                          <button
+                            type="button"
+                            onClick={() => void reconcilePiRequest(item.requestId)}
+                            disabled={Boolean(reconcilingRequestId)}
+                            className="mt-2 rounded-full border border-violet-200/30 bg-violet-200/10 px-3 py-1.5 text-[10px] font-bold text-violet-100 disabled:opacity-50"
+                          >
+                            {reconcilingRequestId === item.requestId ? "Checking exact Pi payment…" : "Reconcile this Pi payout"}
+                          </button>
+                        ) : null}
                       </li>
                     ))}
                   </ul>
                 ) : null}
+                {reconcileMsg ? <p className="rounded-lg border border-white/10 bg-black/20 p-2 text-[10px] leading-relaxed text-violet-100" role="status">{reconcileMsg}</p> : null}
                 <p className="text-[10px] leading-relaxed text-violet-100/60">
                   Safety rule: unstarted requests can be released immediately. Processing or uncertain requests remain reserved only while Pi's outcome is unresolved; this control cannot force-release them. The server releases them after authoritative cancellation with no transaction, or settles them after verified payment. A timeout alone never forfeits your earned balance.
                 </p>

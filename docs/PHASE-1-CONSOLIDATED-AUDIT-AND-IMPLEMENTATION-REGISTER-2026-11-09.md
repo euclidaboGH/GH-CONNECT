@@ -2,9 +2,9 @@
 
 **Audit date:** 2026-11-09  
 **Authoritative source archive:** `GREENHAVEN-0.338.18-STEP2-SURGICAL-SQL-FIXES-DEPENDENCY-AUDIT-2026-11-09.zip`  
-**Project package:** `gh-connect@0.338.18`
+**Project package:** `gh-connect@0.338.27`
 
-**Current in-place maintenance derivative:** `gh-connect@0.338.25 (Runs #250–259)` (Runs #250–258); the audit findings and historical baseline below remain preserved.  
+**Current in-place maintenance derivative:** `gh-connect@0.338.27 (Runs #250–261)`; the audit findings and historical baseline below remain preserved.  
 **Phase:** 1 of the ten-phase completion roadmap — authoritative baseline and complete audit  
 **Disposition:** **Source inventory and selected contracts verified; Phase 1 is NOT fully closed. Production remains NOT APPROVED.**
 

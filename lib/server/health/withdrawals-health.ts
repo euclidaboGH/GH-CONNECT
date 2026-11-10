@@ -6,6 +6,7 @@
 import { readGhcServerEnv, hasPrivilegedDatabase } from "@/lib/server/economy/env"
 import { getPiApiKey } from "@/lib/server/payments/pi-api"
 import { resolvePiSandbox, getPiClientId } from "@/lib/pi-env"
+import { getPiIncompleteA2uPayments, piA2uErrorDiagnostic, piA2uErrorHttpStatus } from "@/lib/server/payments/pi-platform-a2u"
 
 export type ComponentStatus = "ok" | "degraded" | "unavailable" | "not_configured" | "skipped"
 
@@ -649,6 +650,57 @@ async function probePiPlatformApi(): Promise<WithdrawalsHealthComponent> {
   }
 }
 
+async function probePiBackendSdk(): Promise<WithdrawalsHealthComponent> {
+  const checkedAt = nowIso()
+  const apiKey = getPiApiKey()
+  const walletSeed = String(process.env.PI_WALLET_PRIVATE_SEED || "").trim()
+  if (!apiKey || !walletSeed) {
+    return { id: "pi_a2u_sdk", status: "not_configured", code: "PI_BACKEND_CREDENTIALS_MISSING", detail: "Pi A2U backend credentials are not fully configured.", checkedAt }
+  }
+  try {
+    const { default: PiBackend } = await import("pi-backend")
+    // Constructor validates the server wallet secret without making a payment
+    // or any network call. Never log or return the seed/public key here.
+    new PiBackend(apiKey, walletSeed)
+    return { id: "pi_a2u_sdk", status: "ok", code: "PI_BACKEND_SDK_READY", detail: "Pi A2U SDK initialized and accepted the configured server wallet seed.", checkedAt }
+  } catch (error) {
+    const code = piA2uErrorDiagnostic(error, "SDK_INITIALIZATION")
+    return { id: "pi_a2u_sdk", status: "unavailable", code, detail: "Pi A2U backend SDK could not initialize with the configured server credentials. No payment was attempted.", checkedAt }
+  }
+}
+
+async function probePiIncompleteA2u(): Promise<WithdrawalsHealthComponent> {
+  const checkedAt = nowIso()
+  if (!getPiApiKey()) {
+    return { id: "pi_incomplete_a2u", status: "not_configured", code: "PI_API_KEY_MISSING", detail: "Pi A2U incomplete-payment lookup is not configured.", checkedAt }
+  }
+  try {
+    const { result, latencyMs } = await timed(() => getPiIncompleteA2uPayments())
+    const hasBlocker = result.length > 0
+    return {
+      id: "pi_incomplete_a2u",
+      status: hasBlocker ? "degraded" : "ok",
+      code: hasBlocker ? "PI_A2U_INCOMPLETE_PAYMENT_PRESENT" : "PI_A2U_LANE_CLEAR",
+      detail: hasBlocker
+        ? "Pi reports an incomplete App-to-User payment. The shared A2U lane is blocked until its owning workflow reconciles it; this probe did not change any payment."
+        : "Pi reports no incomplete App-to-User payments. The shared A2U lane is clear at probe time.",
+      checkedAt,
+      latencyMs,
+    }
+  } catch (error) {
+    const code = piA2uErrorDiagnostic(error, "INCOMPLETE_LOOKUP")
+    const httpStatus = piA2uErrorHttpStatus(error)
+    return {
+      id: "pi_incomplete_a2u",
+      status: "unavailable",
+      code,
+      detail: "Could not verify Pi's incomplete App-to-User payment lane. New payouts remain blocked until this read-only check succeeds.",
+      checkedAt,
+      ...(httpStatus ? { latencyMs: undefined } : {}),
+    }
+  }
+}
+
 function assessFlags(hostname: string | null): {
   flags: Record<string, boolean>
   configPresence: Record<string, boolean>
@@ -719,6 +771,8 @@ function rollupStatus(components: WithdrawalsHealthComponent[]): "ready" | "degr
     "wallet_authorization_rpc",
     "wallet_authorization_table",
     "pi_platform_api",
+    "pi_a2u_sdk",
+    "pi_incomplete_a2u",
     "earnings_withdrawable_rpc",
     "payout_execution_lookup_rpc",
     "pin_recovery_rpc",
@@ -801,7 +855,7 @@ export async function evaluateWithdrawalsHealth(opts?: {
 
   const staticAssessment = assessFlags(hostname)
 
-  const [database, walletRpc, walletTable, earningsRpc, payoutLookupRpc, pinRecoveryRpc, piApi] = await Promise.all([
+  const [database, walletRpc, walletTable, earningsRpc, payoutLookupRpc, pinRecoveryRpc, piApi, piA2uSdk, piIncompleteA2u] = await Promise.all([
     probeSupabaseConnectivity(),
     probeWalletAuthorizationRpc(),
     probeWalletAuthorizationTable(),
@@ -809,11 +863,15 @@ export async function evaluateWithdrawalsHealth(opts?: {
     probePayoutExecutionLookupRpc(),
     probePinRecoveryRpc(),
     probePiPlatformApi(),
+    probePiBackendSdk(),
+    probePiIncompleteA2u(),
   ])
 
   const components = [
     database,
     piApi,
+    piA2uSdk,
+    piIncompleteA2u,
     ...staticAssessment.components,
     walletRpc,
     walletTable,

@@ -7,8 +7,8 @@ import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { assertPayoutWalletAuthorization } from "@/lib/server/identity/wallet-authorization"
 import { resolvePiSandbox } from "@/lib/pi-env"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
-import type { PiBackendPayment } from "pi-backend"
 import { enqueueA2uReview } from "@/lib/server/payments/a2u-orchestration"
+import { getPiIncompleteA2uPayments, piA2uErrorDiagnostic, piA2uErrorHttpStatus, type PiA2uPayment } from "@/lib/server/payments/pi-platform-a2u"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -20,7 +20,7 @@ function secretOk(request: Request) {
   return expected.length>=16 && expected.length===supplied.length && timingSafeEqual(expected,supplied)
 }
 function amountMatches(a: unknown,b:number) { const n=typeof a==="number"?a:Number(a); return Number.isFinite(n)&&Math.abs(n-b)<1e-8 }
-function matches(p: PiBackendPayment,input:{id:string;requestId:string;uid:string;amount:number}) {
+function matches(p: PiA2uPayment,input:{id:string;requestId:string;uid:string;amount:number}) {
   return p.identifier===input.id && p.direction==="app_to_user" && p.network==="Pi Testnet" &&
     p.user_uid===input.uid && amountMatches(p.amount,input.amount) &&
     String(p.metadata?.direction||"")==="a2u" && String(p.metadata?.payoutRequestId||"")===input.requestId &&
@@ -56,7 +56,7 @@ export async function POST(request:Request) {
   if(!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(requestId)) return reply({ok:false,error:"INVALID_REQUEST_ID"},400)
   const env=readGhcServerEnv(); if(!env.supabaseUrl||!env.supabaseServiceRoleKey) return reply({ok:false,error:"PAYOUT_SERVICE_UNAVAILABLE"},503)
   const base=env.supabaseUrl.replace(/\/$/,""); const key=env.supabaseServiceRoleKey
-  const lookup=await rpc<{ok:boolean;error?:string;request?:{id:string;user_id:string;gross_atomic:string;fee_atomic:string;net_atomic:string;recipient_pi_app_uid:string;network:string;status:string;provider_payment_id:string|null}}>(base,key,"gh_pi_earnings_payout_get_owned",{p_request_id:requestId,p_user_id:auth.userId}).catch((error)=>{
+  const lookup=await rpc<{ok:boolean;error?:string;request?:{id:string;user_id:string;gross_atomic:string;fee_atomic:string;net_atomic:string;recipient_pi_app_uid:string;network:string;status:string;provider_payment_id:string|null;execution_attempts:number;recipient_wallet_address?:string|null}}>(base,key,"gh_pi_earnings_payout_get_owned",{p_request_id:requestId,p_user_id:auth.userId}).catch((error)=>{
     console.error("[pi-earnings-payout] owned request lookup failed",{cause:error instanceof Error?error.message:"unknown"})
     return null
   })
@@ -69,12 +69,22 @@ export async function POST(request:Request) {
   if(row.network!=="Pi Testnet") return reply({ok:false,error:"TESTNET_ONLY"},409)
   const wallet=await assertPayoutWalletAuthorization({ghUserId:auth.userId,recipientUid:row.recipient_pi_app_uid})
   if(!wallet.ok) return reply({ok:false,error:wallet.error||"WALLET_AUTHORIZATION_REQUIRED"},wallet.error==="WALLET_AUTHORIZATION_UNAVAILABLE"?503:409)
+  // A prior attempt with no durable provider ID is ambiguous. We may read Pi's
+  // incomplete-payment list to recover the exact matching payment, but must not
+  // create a replacement if that list has no exact match.
+  const executionAttempts=Number(row.execution_attempts||0)
+  const hasAmbiguousPriorAttempt=!row.provider_payment_id&&(row.status==="uncertain"||row.status==="processing"||(Number.isSafeInteger(executionAttempts)&&executionAttempts>0))
+  const expectedWalletAddress=String(row.recipient_wallet_address||wallet.piWalletAddress||"").trim().toUpperCase()
+  const currentWalletAddress=String(wallet.piWalletAddress||"").trim().toUpperCase()
+  if(!expectedWalletAddress||!currentWalletAddress) return reply({ok:false,error:"PI_WALLET_ADDRESS_REQUIRED"},409)
+  if(expectedWalletAddress!==currentWalletAddress) return reply({ok:false,error:"PI_WALLET_ADDRESS_CHANGED_SINCE_REQUEST",reservationRetained:true},409)
   const lease=randomUUID()
   const begin=await rpc<{ok:boolean;error?:string;providerPaymentId?:string|null;recipientUid:string;netPi:number;status?:string;duplicate?:boolean}>(base,key,"gh_pi_earnings_payout_begin_execution",{p_request_id:requestId,p_user_id:auth.userId,p_lease_token:lease}).catch(()=>null)
   if(!begin?.ok) return reply({ok:false,error:begin?.error||"EXECUTION_CLAIM_FAILED",retryable:begin?.error==="EXECUTION_BUSY"},begin?.error==="EXECUTION_BUSY"?409:503)
   if(begin.duplicate&&begin.status==="paid") return reply({ok:true,duplicate:true,status:"paid",requestId})
   let uncertain=true
   let failureCode="PI_PROVIDER_OUTCOME_UNCERTAIN"
+  let providerStage="SDK_INITIALIZATION"
   let heartbeatLost=false
   let heartbeatBusy=false
   const heartbeatTimer=setInterval(()=>{
@@ -87,11 +97,13 @@ export async function POST(request:Request) {
   },45_000)
   heartbeatTimer.unref?.()
   try {
+    providerStage="SDK_INITIALIZATION"
     const mod=await import("pi-backend"); const sdk=new mod.default(apiKey,seed)
     if(heartbeatLost) throw new Error("EXECUTION_LEASE_HEARTBEAT_LOST")
     let paymentId=String(begin.providerPaymentId||"")
     if(!paymentId) {
-      const incomplete=await sdk.getIncompleteServerPayments()
+      providerStage="INCOMPLETE_LOOKUP"
+      const incomplete=await getPiIncompleteA2uPayments()
       const match=incomplete.find(p=>p.direction==="app_to_user"&&p.network==="Pi Testnet"&&p.user_uid===begin.recipientUid&&amountMatches(p.amount,begin.netPi)&&String(p.metadata?.direction||"")==="a2u"&&String(p.metadata?.payoutRequestId||"")===requestId)
       if(match?.identifier) paymentId=match.identifier
       else if(incomplete.length) {
@@ -121,15 +133,47 @@ export async function POST(request:Request) {
           reviewQueued:queued.ok,
         })
         return reply({ok:false,error:"UNRELATED_INCOMPLETE_A2U_REQUIRES_OPERATOR_REVIEW",retryable:false,reviewQueued:queued.ok},409)
+      } else if(hasAmbiguousPriorAttempt) {
+        // No exact incomplete payment was found. Absence from this endpoint is
+        // not proof that an earlier create did not complete or leave a receipt.
+        // Stop here; only provider-side history/operator reconciliation can clear it.
+        failureCode="PI_UNCERTAIN_REQUEST_REQUIRES_OPERATOR_RECONCILIATION"
+        return reply({ok:false,error:"PI_UNCERTAIN_REQUEST_REQUIRES_OPERATOR_RECONCILIATION",retryable:false,reservationRetained:true,requestId},409)
       } else {
         // Revalidate ownership immediately before creating a provider-side payment.
         const active=await rpc<{ok:boolean}>(base,key,"gh_pi_earnings_payout_heartbeat_execution",{p_request_id:requestId,p_lease_token:lease})
         if(!active?.ok||heartbeatLost) throw new Error("EXECUTION_LEASE_LOST_BEFORE_CREATE")
-        paymentId=await sdk.createPayment({amount:begin.netPi,memo:`GreenHaven PI earnings withdrawal ${requestId}`.slice(0,120),metadata:{provider:"greenhaven",direction:"a2u",payoutRequestId:requestId,domain:"pi_earnings"},uid:begin.recipientUid})
+        providerStage="CREATE_PAYMENT"
+        try {
+          paymentId=await sdk.createPayment({amount:begin.netPi,memo:`GreenHaven PI earnings withdrawal ${requestId}`.slice(0,120),metadata:{provider:"greenhaven",direction:"a2u",payoutRequestId:requestId,domain:"pi_earnings"},uid:begin.recipientUid})
+        } catch (createError) {
+          // Pi can race the preceding incomplete-payment read. The official SDK
+          // includes the existing payment on `ongoing_payment_found`; recover it
+          // only when its full recipient/amount/request binding matches.
+          const providerPayment = createError && typeof createError === "object" && "payment" in createError
+            ? (createError as { payment?: PiA2uPayment }).payment
+            : undefined
+          if (providerPayment?.identifier && matches(providerPayment,{id:providerPayment.identifier,requestId,uid:begin.recipientUid,amount:begin.netPi})) {
+            paymentId=providerPayment.identifier
+          } else if (providerPayment?.identifier) {
+            const blockerId=String(providerPayment.identifier).trim()
+            const blockerTxid=String(providerPayment.transaction?.txid||"").trim()
+            const blockerDomain=String(providerPayment.metadata?.domain||providerPayment.metadata?.payoutKind||"unknown").replace(/[^A-Za-z0-9_.:-]/g,"").slice(0,64)
+            const blockerRequest=String(providerPayment.metadata?.payoutRequestId||"").replace(/[^A-Za-z0-9_.:-]/g,"").slice(0,80)
+            const queued=await enqueueA2uReview({sourceKind:"other",sourceRequestId:requestId,userId:auth.userId,reasonCode:"UNRELATED_INCOMPLETE_A2U_PAYMENT",providerPaymentId:blockerId,txid:blockerTxid||undefined,amountAtomic:Number(row.net_atomic),detail:`blocked_domain=${blockerDomain};blocked_request=${blockerRequest};tx_present=${Boolean(blockerTxid)};developer_completed=${providerPayment.status?.developer_completed===true}`}).catch(()=>({ok:false as const,error:"REVIEW_QUEUE_UNAVAILABLE"}))
+            failureCode="UNRELATED_INCOMPLETE_A2U_PAYMENT"
+            console.warn("[pi-earnings-payout] provider create returned an existing payment",{requestRef:requestId.slice(0,8),blockerPaymentPresent:true,blockerTxPresent:Boolean(blockerTxid),reviewQueued:queued.ok})
+            return reply({ok:false,error:"UNRELATED_INCOMPLETE_A2U_REQUIRES_OPERATOR_REVIEW",retryable:false,reviewQueued:queued.ok},409)
+          } else {
+            throw createError
+          }
+        }
       }
+      providerStage="BIND_PROVIDER_PAYMENT"
       const bind=await rpc<{ok:boolean;error?:string}>(base,key,"gh_pi_earnings_payout_bind_provider_payment",{p_request_id:requestId,p_lease_token:lease,p_provider_payment_id:paymentId})
       if(!bind.ok) throw new Error(bind.error||"PROVIDER_BIND_FAILED")
     }
+    providerStage="GET_PAYMENT"
     let payment=await sdk.getPayment(paymentId)
     const exactBinding=payment.identifier===paymentId&&payment.direction==="app_to_user"&&payment.network==="Pi Testnet"&&payment.user_uid===begin.recipientUid&&amountMatches(payment.amount,begin.netPi)&&String(payment.metadata?.direction||"")==="a2u"&&String(payment.metadata?.payoutRequestId||"")===requestId
     if(!exactBinding) throw new Error("PROVIDER_PAYMENT_BINDING_MISMATCH")
@@ -145,11 +189,24 @@ export async function POST(request:Request) {
       return reply({ok:true,requestId,status:"released",reservationReleased:true,providerPaymentId:paymentId},200)
     }
     if(!matches(payment,{id:paymentId,requestId,uid:begin.recipientUid,amount:begin.netPi})) throw new Error("PROVIDER_PAYMENT_BINDING_MISMATCH")
+    const providerToAddress=String(payment.to_address||"").trim().toUpperCase()
+    if(!providerToAddress) throw new Error("PI_PROVIDER_WALLET_ADDRESS_UNAVAILABLE")
+    if(providerToAddress!==expectedWalletAddress) {
+      const queued=await enqueueA2uReview({sourceKind:"other",sourceRequestId:requestId,userId:auth.userId,reasonCode:"PI_PAYOUT_WALLET_ADDRESS_MISMATCH",providerPaymentId:paymentId,txid:paymentTxid||undefined,amountAtomic:Number(row.net_atomic),detail:`domain=pi_earnings;wallet_address_match=false;tx_present=${Boolean(paymentTxid)}`}).catch(()=>({ok:false as const,error:"REVIEW_QUEUE_UNAVAILABLE"}))
+      failureCode="PI_PAYOUT_WALLET_ADDRESS_MISMATCH"
+      return reply({ok:false,error:"PI_PAYOUT_WALLET_ADDRESS_MISMATCH",retryable:false,reservationRetained:true,reviewQueued:queued.ok,requestId},409)
+    }
+    providerStage="CONFIRM_PROVIDER_WALLET_ADDRESS"
+    const addressConfirmation=await rpc<{ok:boolean;error?:string}>(base,key,"gh_pi_wallet_authorization_confirm_provider_address",{
+      p_user_id:auth.userId,p_pi_app_uid:row.recipient_pi_app_uid,p_expected_wallet_address:expectedWalletAddress,p_provider_to_address:providerToAddress,
+    })
+    if(!addressConfirmation?.ok) throw new Error(addressConfirmation?.error||"PI_WALLET_ADDRESS_PROVIDER_CONFIRM_FAILED")
     let txid=paymentTxid
     if(txid && payment.status?.transaction_verified!==true && payment.transaction?.verified!==true) throw new Error("EXISTING_TRANSACTION_UNVERIFIED")
     if(!txid) {
       const active=await rpc<{ok:boolean}>(base,key,"gh_pi_earnings_payout_heartbeat_execution",{p_request_id:requestId,p_lease_token:lease})
       if(!active?.ok||heartbeatLost) throw new Error("EXECUTION_LEASE_LOST_BEFORE_SUBMIT")
+      providerStage="SUBMIT_PAYMENT"
       txid=await sdk.submitPayment(paymentId)
     }
     if(!txid) throw new Error("PROVIDER_TXID_MISSING")
@@ -157,29 +214,40 @@ export async function POST(request:Request) {
     if(payment.status?.developer_completed!==true) {
       const active=await rpc<{ok:boolean}>(base,key,"gh_pi_earnings_payout_heartbeat_execution",{p_request_id:requestId,p_lease_token:lease})
       if(!active?.ok||heartbeatLost) throw new Error("EXECUTION_LEASE_LOST_BEFORE_COMPLETE")
+      providerStage="COMPLETE_PAYMENT"
       const completed=await sdk.completePayment(paymentId,txid)
       if(!matches(completed,{id:paymentId,requestId,uid:begin.recipientUid,amount:begin.netPi})||completed.status?.developer_completed!==true) throw new Error("PROVIDER_COMPLETION_UNCONFIRMED")
     }
     // Independent read-after-write from Pi is mandatory; never settle from the mutation response alone.
+    providerStage="VERIFY_RECEIPT"
     const receipt=await sdk.getPayment(paymentId)
     if(heartbeatLost) throw new Error("EXECUTION_LEASE_HEARTBEAT_LOST")
+    const receiptToAddress=String(receipt.to_address||"").trim().toUpperCase()
+    if(receiptToAddress!==expectedWalletAddress) {
+      const queued=await enqueueA2uReview({sourceKind:"other",sourceRequestId:requestId,userId:auth.userId,reasonCode:"PI_PAYOUT_WALLET_ADDRESS_MISMATCH",providerPaymentId:paymentId,txid:txid||undefined,amountAtomic:Number(row.net_atomic),detail:"domain=pi_earnings;wallet_address_match=false;stage=independent_receipt"}).catch(()=>({ok:false as const,error:"REVIEW_QUEUE_UNAVAILABLE"}))
+      failureCode="PI_PAYOUT_WALLET_ADDRESS_MISMATCH"
+      return reply({ok:false,error:"PI_PAYOUT_WALLET_ADDRESS_MISMATCH",retryable:false,reservationRetained:true,reviewQueued:queued.ok,requestId},409)
+    }
     if(!matches(receipt,{id:paymentId,requestId,uid:begin.recipientUid,amount:begin.netPi})||receipt.transaction?.txid!==txid||receipt.status?.transaction_verified!==true&&receipt.transaction?.verified!==true||receipt.status?.developer_completed!==true) throw new Error("INDEPENDENT_PROVIDER_RECEIPT_MISMATCH")
     const active=await rpc<{ok:boolean}>(base,key,"gh_pi_earnings_payout_heartbeat_execution",{p_request_id:requestId,p_lease_token:lease})
     if(!active?.ok||heartbeatLost) throw new Error("EXECUTION_LEASE_LOST_BEFORE_SETTLEMENT")
+    providerStage="SETTLE_LEDGER"
     const settled=await rpc<{ok:boolean;error?:string;status?:string}>(base,key,"gh_pi_earnings_payout_settle_verified",{
       p_request_id:requestId,p_provider_payment_id:paymentId,p_provider_txid:txid,p_recipient_uid:begin.recipientUid,
       p_amount_pi:begin.netPi,p_network:"Pi Testnet",p_transaction_verified:true,p_developer_completed:true,
-      p_receipt:{identifier:receipt.identifier,direction:receipt.direction,network:receipt.network,user_uid:receipt.user_uid,amount:receipt.amount,transaction:receipt.transaction,status:receipt.status,metadata:receipt.metadata},
+      p_receipt:{identifier:receipt.identifier,direction:receipt.direction,network:receipt.network,user_uid:receipt.user_uid,to_address:receiptToAddress,amount:receipt.amount,transaction:receipt.transaction,status:receipt.status,metadata:receipt.metadata},
     })
     if(!settled.ok) throw new Error(settled.error||"LEDGER_SETTLEMENT_FAILED")
     uncertain=false
     return reply({ok:true,requestId,status:"paid",network:"Pi Testnet",providerPaymentId:paymentId,txid,grossAtomic:row.gross_atomic,feeAtomic:row.fee_atomic,netAtomic:row.net_atomic})
   } catch(error) {
-    const rawCode=error instanceof Error?error.message:""
-    failureCode=/^[A-Z0-9_]{3,120}$/.test(rawCode)?rawCode:"PI_PROVIDER_OUTCOME_UNCERTAIN"
+    failureCode=piA2uErrorDiagnostic(error,providerStage)
+    const providerHttpStatus=piA2uErrorHttpStatus(error)
     console.error("[pi-earnings-payout] provider execution did not reach verified settlement",{
       requestRef:requestId.slice(0,8),
+      stage:providerStage,
       diagnosticCode:failureCode,
+      ...(providerHttpStatus ? {providerHttpStatus} : {}),
     })
     return reply({ok:false,error:"PI_EARNINGS_EXECUTION_UNCERTAIN",diagnosticCode:failureCode,retryable:true,reservationRetained:true,requestId},503)
   } finally {

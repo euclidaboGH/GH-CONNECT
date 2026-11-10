@@ -14,6 +14,9 @@ export type WalletAuthorizationStatus = {
   authorizationActive?: boolean
   authorizationId?: string | null
   authorizedPiAppUid?: string | null
+  piWalletAddress?: string | null
+  walletAddressSource?: "platform_api" | "pi_sdk_scope" | "provider_payment" | null
+  walletAddressVerifiedAt?: string | null
   consentedAt?: string | null
   lastVerifiedAt?: string | null
   uidMatchesAuthorization?: boolean
@@ -114,7 +117,10 @@ export async function getWalletAuthorization(ghUserId: string): Promise<WalletAu
   return {
     ...value,
     ok: value.ok === true,
-    authorizationActive: value.authorizationActive === true && uidMatches,
+    authorizationActive: value.authorizationActive === true && uidMatches && Boolean(value.piWalletAddress && value.walletAddressSource),
+    piWalletAddress: uidMatches ? value.piWalletAddress || null : null,
+    walletAddressSource: uidMatches ? value.walletAddressSource || null : null,
+    walletAddressVerifiedAt: uidMatches ? value.walletAddressVerifiedAt || null : null,
     uidMatchesAuthorization: uidMatches,
   }
 }
@@ -123,16 +129,22 @@ export async function grantWalletAuthorization(input: {
   ghUserId: string
   piAppUid: string
   source?: "user_explicit"
-}): Promise<{ ok: boolean; error?: string; authorizationId?: string; piAppUid?: string; diagnosticCode?: string; httpStatus?: number }> {
+  piWalletAddress: string
+  walletAddressSource: "platform_api" | "pi_sdk_scope"
+}): Promise<{ ok: boolean; error?: string; authorizationId?: string; piAppUid?: string; piWalletAddress?: string; walletAddressSource?: string; diagnosticCode?: string; httpStatus?: number }> {
   const result = await rpc<{
     ok?: boolean
     error?: string
     authorizationId?: string
     piAppUid?: string
+    piWalletAddress?: string
+    walletAddressSource?: string
   }>("gh_pi_wallet_authorization_grant", {
     p_user_id: String(input.ghUserId || "").trim(),
     p_pi_app_uid: String(input.piAppUid || "").trim(),
     p_source: input.source || "user_explicit",
+    p_pi_wallet_address: String(input.piWalletAddress || "").trim(),
+    p_wallet_address_source: input.walletAddressSource,
   })
   if (!result.ok) return { ok: false, error: result.error, diagnosticCode: result.diagnosticCode, httpStatus: result.httpStatus }
   if (result.value.ok !== true) return { ok: false, error: String(result.value.error || "GRANT_FAILED") }
@@ -140,6 +152,8 @@ export async function grantWalletAuthorization(input: {
     ok: true,
     authorizationId: typeof result.value.authorizationId === "string" ? result.value.authorizationId : undefined,
     piAppUid: typeof result.value.piAppUid === "string" ? result.value.piAppUid : undefined,
+    piWalletAddress: typeof result.value.piWalletAddress === "string" ? result.value.piWalletAddress : undefined,
+    walletAddressSource: typeof result.value.walletAddressSource === "string" ? result.value.walletAddressSource : undefined,
   }
 }
 
@@ -162,19 +176,29 @@ export async function revokeWalletAuthorization(input: {
   }
 }
 
-/** Gate A2U payouts: mapping + active consent must match recipient uid. */
+/** Gate A2U payouts: mapped UID + explicit consent + bound Pi wallet address. */
 export async function assertPayoutWalletAuthorization(input: {
   ghUserId: string
   recipientUid: string
-}): Promise<{ ok: boolean; error?: string; authorizationId?: string }> {
-  const result = await rpc<{ ok?: boolean; error?: string; authorizationId?: string }>(
-    "gh_pi_wallet_authorization_assert_payout",
-    {
-      p_user_id: String(input.ghUserId || "").trim(),
-      p_recipient_uid: String(input.recipientUid || "").trim(),
-    },
-  )
+}): Promise<{ ok: boolean; error?: string; authorizationId?: string; piWalletAddress?: string; walletAddressSource?: string; walletAddressVerifiedAt?: string | null }> {
+  const result = await rpc<{
+    ok?: boolean
+    error?: string
+    authorizationId?: string
+    piWalletAddress?: string
+    walletAddressSource?: string
+    walletAddressVerifiedAt?: string | null
+  }>("gh_pi_wallet_authorization_assert_payout", {
+    p_user_id: String(input.ghUserId || "").trim(),
+    p_recipient_uid: String(input.recipientUid || "").trim(),
+  })
   if (!result.ok) return { ok: false, error: result.error }
   if (result.value.ok !== true) return { ok: false, error: String(result.value.error || "WALLET_AUTHORIZATION_REQUIRED") }
-  return { ok: true, authorizationId: typeof result.value.authorizationId === "string" ? result.value.authorizationId : undefined }
+  return {
+    ok: true,
+    authorizationId: typeof result.value.authorizationId === "string" ? result.value.authorizationId : undefined,
+    piWalletAddress: typeof result.value.piWalletAddress === "string" ? result.value.piWalletAddress : undefined,
+    walletAddressSource: typeof result.value.walletAddressSource === "string" ? result.value.walletAddressSource : undefined,
+    walletAddressVerifiedAt: typeof result.value.walletAddressVerifiedAt === "string" ? result.value.walletAddressVerifiedAt : null,
+  }
 }

@@ -167,6 +167,7 @@ export async function ensurePiInitialized(): Promise<PiRuntimeSnapshot> {
 export type PiAuthenticateResult = {
   uid: string
   username: string | null
+  walletAddress: string | null
   accessToken: string | null
 }
 
@@ -187,7 +188,7 @@ export async function piAuthenticateOfficial(
     scopes: string[],
     onIncomplete: (payment: unknown) => void
   ) => Promise<{
-    user?: { uid?: string | number; username?: string }
+    user?: { uid?: string | number; username?: string; wallet_address?: string }
     accessToken?: string
   }>
 
@@ -210,6 +211,7 @@ export async function piAuthenticateOfficial(
   return {
     uid,
     username: authResult?.user?.username ? String(authResult.user.username) : null,
+    walletAddress: authResult?.user?.wallet_address ? String(authResult.user.wallet_address) : null,
     accessToken: authResult?.accessToken ? String(authResult.accessToken) : null,
   }
 }

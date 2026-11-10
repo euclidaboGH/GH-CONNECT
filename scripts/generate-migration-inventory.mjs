@@ -41,6 +41,8 @@ const reviewRequired = new Set([
   '20261110180001_remove_verified_duplicate_indexes.sql',
   '20261110190001_rls_policy_dedup_and_initplan_optimization.sql',
   '20261110200001_supporting_foreign_key_indexes.sql',
+  '20261110125500_pi_wallet_address_binding_and_verified_a2u_diagnostics.sql',
+  '20261110210001_pi_a2u_ecosystem_qualification.sql',
   '20261027010002_gh_media_asset_create_immutable_identity.sql',
   '20261027010003_gh_media_upload_finalize_identity.sql',
   '20261027010004_ghc_transfer_request_idempotency_intent.sql',

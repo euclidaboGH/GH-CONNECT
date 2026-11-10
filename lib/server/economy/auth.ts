@@ -94,7 +94,7 @@ function verifyHs256Jwt(
  */
 export async function verifyPiAccessToken(
   accessToken: string
-): Promise<{ uid: string; username?: string } | null> {
+): Promise<{ uid: string; username?: string; walletAddress?: string } | null> {
   const env = readGhcServerEnv()
   const url = `${env.piPlatformApiUrl}/v2/me`
   try {
@@ -109,12 +109,18 @@ export async function verifyPiAccessToken(
     if (!res.ok) return null
     const data = (await res.json()) as {
       uid?: string
-      user?: { uid?: string; username?: string }
+      user?: { uid?: string; username?: string; wallet_address?: string }
       username?: string
+      wallet_address?: string
     }
     const uid = data.uid || data.user?.uid
     if (typeof uid !== "string" || !uid) return null
-    return { uid, username: data.username || data.user?.username }
+    const walletAddress = data.wallet_address || data.user?.wallet_address
+    return {
+      uid,
+      username: data.username || data.user?.username,
+      ...(typeof walletAddress === "string" && walletAddress.trim() ? { walletAddress: walletAddress.trim().toUpperCase() } : {}),
+    }
   } catch {
     return null
   }
