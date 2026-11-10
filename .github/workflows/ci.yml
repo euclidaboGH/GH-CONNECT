@@ -37,6 +37,9 @@ jobs:
       - name: Install
         run: npm ci --legacy-peer-deps
 
+      - name: Complete source regression suite
+        run: npm run verify:static
+
       - name: Phase 5 production readiness gate
         run: node scripts/check-phase5-production-readiness.mjs
 

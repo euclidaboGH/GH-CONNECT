@@ -4,7 +4,7 @@
  */
 
 export function sanitizeTargetUserId(raw: unknown, actorId: string): { ok: true; targetUserId: string } | { ok: false; error: string } {
-  const target = String(raw || "").trim()
+  const target = typeof raw === "string" ? raw.trim() : ""
   if (!target || target.length > 160 || /[\u0000-\u001f\u007f]/.test(target)) {
     return { ok: false, error: "TARGET_REQUIRED" }
   }

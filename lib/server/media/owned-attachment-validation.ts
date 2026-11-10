@@ -1,13 +1,10 @@
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import {
+  reconcileAttachmentWithAsset, sanitizeAttachmentFileName, type DurableAttachment,
+} from "@/lib/server/media/message-attachment-policy"
 
-export type DurableAttachment = {
-  id: string
-  type: "image" | "video" | "file"
-  url: string
-  fileName?: string
-  mimeType?: string
-  sizeBytes?: number
-}
+export type { DurableAttachment }
+
 
 /**
  * Accept only media assets created by this application and owned by the current
@@ -55,7 +52,7 @@ export async function validateOwnedMediaAttachments(input: {
     }
     parsed.push({
       id: match[1], type: typeRaw, url: url.pathname,
-      fileName: o.fileName == null ? undefined : String(o.fileName).slice(0, 180),
+      fileName: sanitizeAttachmentFileName(o.fileName),
       mimeType: o.mimeType == null ? undefined : String(o.mimeType).slice(0, 120),
       sizeBytes,
     })
@@ -63,16 +60,19 @@ export async function validateOwnedMediaAttachments(input: {
 
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return { ok: false, error: "MEDIA_AUTHORIZATION_UNAVAILABLE" }
+  const base = env.supabaseUrl.replace(/\/$/, "")
+  const headers = {
+    "Content-Type": "application/json",
+    apikey: env.supabaseServiceRoleKey,
+    Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+  }
+  const reconciled = new Map<string, DurableAttachment>()
   const uniqueIds = [...new Set(parsed.map((attachment) => attachment.id))]
   for (const mediaId of uniqueIds) {
     try {
-      const response = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/gh_media_authorize_viewer`, {
+      const response = await fetch(`${base}/rest/v1/rpc/gh_media_authorize_viewer`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: env.supabaseServiceRoleKey,
-          Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-        },
+        headers,
         body: JSON.stringify({ p_media_id: mediaId, p_viewer_id: ownerId }),
         cache: "no-store",
         signal: AbortSignal.timeout(8_000),
@@ -82,9 +82,28 @@ export async function validateOwnedMediaAttachments(input: {
       if (asset?.ok !== true || asset.mediaId !== mediaId || asset.ownerId !== ownerId) {
         return { ok: false, error: "ATTACHMENT_NOT_OWNED" }
       }
+      // Re-read the stored record for authoritative MIME type, kind and size.
+      const rowResponse = await fetch(
+        `${base}/rest/v1/gh_media_assets?id=eq.${encodeURIComponent(mediaId)}&select=owner_id,mime_type,byte_size,media_kind,status,deleted_at&limit=1`,
+        { method: "GET", headers, cache: "no-store", signal: AbortSignal.timeout(8_000) },
+      )
+      if (!rowResponse.ok) return { ok: false, error: "MEDIA_AUTHORIZATION_UNAVAILABLE" }
+      const rows = await rowResponse.json() as unknown
+      const row = Array.isArray(rows) ? rows[0] : undefined
+      if (!row || typeof row !== "object") return { ok: false, error: "ATTACHMENT_NOT_OWNED" }
+      const declared = parsed.find((attachment) => attachment.id === mediaId)!
+      const result = reconcileAttachmentWithAsset(declared, row as Record<string, unknown>, ownerId)
+      if (!result.ok) return result
+      reconciled.set(mediaId, result.attachment)
     } catch {
       return { ok: false, error: "MEDIA_AUTHORIZATION_UNAVAILABLE" }
     }
   }
-  return { ok: true, attachments: parsed }
+  return {
+    ok: true,
+    attachments: parsed.map((attachment) => {
+      const server = reconciled.get(attachment.id)!
+      return { ...attachment, type: server.type, mimeType: server.mimeType, sizeBytes: server.sizeBytes }
+    }),
+  }
 }

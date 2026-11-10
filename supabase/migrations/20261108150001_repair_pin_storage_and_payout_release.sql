@@ -8,22 +8,53 @@
 -- This migration is safe to run on a fresh database, on a database that already has the earlier migrations, and
 -- more than once. It supersedes the older cancel function in 20261107130001 with the Phase 3 version (explicit
 -- reasons per active request) and never force-releases processing / uncertain / started requests.
--- Apply after 20261105200001 and 20261107120001. Validate on a disposable database / Testnet first.
+-- Requires the payout request table and authoritative reserve-release RPC from
+-- 20261030010002 and 20261105170001, plus PIN foundations from 20261105200001
+-- and 20261107120001. Apply after 20261107130001 and 20261108110001 because
+-- this migration deliberately supersedes their earlier RPC definitions.
+-- Validate on a disposable PostgreSQL database before any Testnet deployment.
 BEGIN;
 
 -- 1) PIN tables: app user ids are text; drop uuid FK to auth.users.
 DO $$
-DECLARE c text; t text;
+DECLARE
+  v_table regclass;
+  v_constraint record;
+  v_table_name text;
 BEGIN
-  FOREACH t IN ARRAY ARRAY['gh_withdrawal_pins', 'gh_withdrawal_pin_recovery'] LOOP
-    IF to_regclass('public.' || t) IS NULL THEN CONTINUE; END IF;
-    FOR c IN SELECT conname FROM pg_constraint
-      WHERE conrelid = to_regclass('public.' || t) AND contype = 'f' LOOP
-      EXECUTE format('ALTER TABLE public.%I DROP CONSTRAINT %I', t, c);
+  FOREACH v_table IN ARRAY ARRAY[
+    to_regclass('public.gh_withdrawal_pins'),
+    to_regclass('public.gh_withdrawal_pin_recovery')
+  ] LOOP
+    IF v_table IS NULL THEN
+      CONTINUE;
+    END IF;
+
+    -- Only the legacy app-user FK to auth.users is incompatible with Pi-auth
+    -- identities. Do not remove unrelated foreign keys from either table.
+    FOR v_constraint IN
+      SELECT DISTINCT c.conname
+      FROM pg_catalog.pg_constraint AS c
+      JOIN pg_catalog.pg_attribute AS a
+        ON a.attrelid = c.conrelid
+       AND a.attnum = ANY (c.conkey)
+      WHERE c.conrelid = v_table
+        AND c.contype = 'f'
+        AND c.confrelid = to_regclass('auth.users')
+        AND a.attname = 'user_id'
+    LOOP
+      EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I', v_table, v_constraint.conname);
     END LOOP;
-    IF EXISTS (SELECT 1 FROM information_schema.columns
-                WHERE table_schema = 'public' AND table_name = t AND column_name = 'user_id' AND data_type <> 'text') THEN
-      EXECUTE format('ALTER TABLE public.%I ALTER COLUMN user_id TYPE text USING user_id::text', t);
+
+    SELECT c.relname INTO v_table_name
+    FROM pg_catalog.pg_class AS c
+    WHERE c.oid = v_table;
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = v_table_name
+        AND column_name = 'user_id' AND data_type <> 'text'
+    ) THEN
+      EXECUTE format('ALTER TABLE %s ALTER COLUMN user_id TYPE text USING user_id::text', v_table);
     END IF;
   END LOOP;
 END $$;
@@ -179,7 +210,7 @@ $$;
 REVOKE ALL ON FUNCTION public.gh_pi_earnings_payout_cancel_unstarted(text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.gh_pi_earnings_payout_cancel_unstarted(text) TO service_role;
 COMMENT ON FUNCTION public.gh_pi_earnings_payout_cancel_unstarted(text) IS
-  'Self-service recovery: releases only provably unstarted Pi Testnet reservations and returns explicit reasons/unlock conditions for active requests;
+  'Self-service recovery: releases only provably unstarted Pi Testnet reservations and returns explicit reasons/unlock conditions for active requests.';
 
 REVOKE ALL ON FUNCTION public.gh_pi_earnings_payout_cancel_unstarted(text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.gh_pi_earnings_payout_cancel_unstarted(text) TO service_role;

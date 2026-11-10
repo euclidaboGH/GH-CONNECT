@@ -6,7 +6,7 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { nonDurableWriteResponse } from "@/lib/server/production-guard"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
 import {
   mapJoinStatus,
   sanitizeCommunityId,
@@ -27,10 +27,8 @@ export async function POST(_request: Request, ctx: Ctx) {
   if (!communityId) {
     return NextResponse.json({ ok: false, error: "INVALID_ID" }, { status: 400, headers: { "Cache-Control": "no-store, private" } })
   }
-  const rl = checkRateLimit(`community-join:${auth.userId}`, 20, 60_000)
-  if (!rl.ok) {
-    return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429 })
-  }
+  const rateLimited = await enforceUserMutationRateLimit(auth.userId, "communities/[id]/join:POST", 20, 60_000, { failClosed: true })
+  if (rateLimited) return rateLimited
   if (!socialDbConfigured()) {
     const nd = nonDurableWriteResponse("Community join", { extra: { status: "unavailable" } })
     return NextResponse.json(nd.body, { status: nd.status })
@@ -68,6 +66,8 @@ export async function DELETE(_request: Request, ctx: Ctx) {
   if (!communityId) {
     return NextResponse.json({ ok: false, error: "INVALID_ID" }, { status: 400, headers: { "Cache-Control": "no-store, private" } })
   }
+  const rateLimited = await enforceUserMutationRateLimit(auth.userId, "communities/[id]/join:DELETE", 20, 60_000, { failClosed: true })
+  if (rateLimited) return rateLimited
   if (!socialDbConfigured()) {
     const nd = nonDurableWriteResponse("Community leave")
     return NextResponse.json(nd.body, { status: nd.status })

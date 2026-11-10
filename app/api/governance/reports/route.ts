@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { GovernanceStoreError, createGovernanceReport, listGovernanceReports, requireCommunityModerator, resolveGovernanceReport } from "@/lib/server/community/governance-store"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -26,6 +27,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const auth = await resolveAuthenticatedUser(req.headers)
   if (!auth) return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+  const __rateLimited = await enforceUserMutationRateLimit(auth.userId, "governance/reports:POST", 20, 60_000, { failClosed: false })
+  if (__rateLimited) return __rateLimited
   const parsed = await readBoundedJson(req, 12 * 1024)
   if (!parsed.ok) return NextResponse.json({ ok: false, error: parsed.error }, { status: parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400 })
   const payload = parsed.value

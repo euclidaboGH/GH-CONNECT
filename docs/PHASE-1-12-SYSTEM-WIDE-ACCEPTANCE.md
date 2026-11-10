@@ -5,11 +5,11 @@
 
 ## Release snapshot
 
-- Current source baseline for this consolidated report: `0.338.6` (2026-11-08). Historical implementation notes below retain their original release labels; they are not the current project version.
+- Current source baseline for this consolidated report: `0.338.13` (2026-11-09). This file remains a legacy verification fixture; detailed historical implementation notes and counts below retain their original snapshot context and are not a substitute for the current Phase 1–12 audit register. See `docs/PHASE-1-CONSOLIDATED-AUDIT-AND-IMPLEMENTATION-REGISTER-2026-11-09.md` for the current source audit.
 - Scope: consolidation and source-level acceptance across Phases 1–12, plus the later source checks already present in this repository.
 - The canonical project root is the repository root. The stale nested `greenhaven-upgrade-next/` copy was removed because it was pinned to `0.150.1` and duplicated the project tree; its only nested-only path was an empty directory.
 
-## Current audit status (v0.338.6)
+## Current audit status (v0.338.13) — legacy verification snapshot; see the current consolidated audit register for controlling findings
 
 - Current product roadmap: Priorities 1–9 have reached their current source transformation milestones; Marketplace (Priority 9) source work is at 0.330.38, and Filters (Priority 10) has its first coordinated source increment in 0.330.39. The current Marketplace increments harden server-authoritative checkout currency, inventory honesty and seller stock editing, durable delivery metadata and per-attempt checkout idempotency, plus durable SKU variants with independent pricing/stock, variant-bound buyer cart/order identity and database reservation/release/commit paths. Browser/device, Node 24.15.x build, disposable PostgreSQL concurrency, database and Testnet/operator acceptance remain open.
 
@@ -26,7 +26,7 @@
 - The v0.157.13 cross-phase hardening increment applied streaming byte limits to seven previously unbounded JSON write routes across account lifecycle, social, notifications, communities, and marketplace features.
 - The v0.157.14 follow-up adds streaming byte limits to twelve further high-impact financial, identity, and social write routes, tightens payout amount type validation, and makes social follow target identifiers string-only. The v0.157.16 follow-up extends this to connection requests, reports, matching signals, creator tips, and bank-beneficiary mutations, with runtime tests for the bounded JSON parser. These are source-level safeguards and isolated helper tests, not full application or live-system acceptance.
 - The available audit container runs Node.js 22.16.0, while the project requires Node.js 24.15.0; `node_modules` is absent. TypeScript, lint, production build and browser E2E have therefore not been run here. Phase 16 post-interaction and Phase 17 cohesive social-engagement source checks are registered in the current release.
-- The repository migration inventory is generated from the canonical migration directory; see `docs/MIGRATION_CHECKLIST.md` for current counts and classifications. The current 194-file inventory is 118 REQUIRED, 73 REVIEW_REQUIRED, 1 REQUIRES_APPROVAL and 2 PROPOSAL. This is a source inventory only; each target's remote migration history must be reconciled independently.
+- The repository migration inventory is generated from the canonical migration directory; see `docs/MIGRATION_CHECKLIST.md` for current counts and classifications. The current 198-file inventory is 119 REQUIRED, 77 REVIEW_REQUIRED, 1 REQUIRES_APPROVAL and 1 PROPOSAL. This is a source inventory only; each target's remote migration history must be reconciled independently.
 - No live Supabase/Pi/Vercel operation, database migration, restore drill, or financial mutation was performed.
 
 ## Current source increment — Priority 8 Messages (0.330.33)
@@ -303,3 +303,8 @@ Seller fulfilment now explicitly supports shipping, pickup/meetup and digital pr
 
 The current source baseline includes a shared accessible active-filter summary across Feed, Discovery, Wallet, Messages, Marketplace and Notifications, plus common bounded Unicode/diacritic-insensitive token matching for Feed, Discovery, Wallet and Messages. The old random-distance placeholder was removed; text location matching is not geographic distance. Focused tests pass 14/14 and source contracts pass 17/17. Account-scoped persistence, server-side query parity, Communities/Rewards filter coverage and browser/device acceptance remain open. No migration or authorization change was made. Production remains NOT APPROVED.
 
+
+
+## Current 0.338.9 experience and navigation follow-up (2026-11-09)
+
+The shared application header is slimmer; hidden duplicate header controls are inert; Marketplace and Community content use improved responsive spacing; active-tab scroll reset resolves the actual scroll owner; and global keyboard shortcuts avoid editable controls, modal workflows and IME composition. The dedicated UI/navigation audit passes 31/31. The independent Marketplace/Community security contract passes 42/42. These source checks do not replace Node 24.15.0 typecheck/build or browser/device, database and provider acceptance. No financial authority or production state changed.

@@ -29,7 +29,7 @@ const checks = [
   ['message identity remains session-derived', messages.includes('senderId: auth.userId')],
   ['message attachments still pass owned-media validation', messages.includes('validateOwnedMediaAttachments')],
   ['message pagination cursor length and control characters are bounded at route boundary', messages.includes('before.length > 80') && messages.includes('beforeId.length > 180')],
-  ['client message id is bounded and rejects control characters', messages.includes('INVALID_CLIENT_MESSAGE_ID') && messages.includes('clientMessageId.length > 180')],
+  ['client message id is bounded and rejects control characters', messages.includes('INVALID_CLIENT_MESSAGE_ID') && messages.includes('clientMessageId.length > 80')],
   ['message send rate-limit response includes Retry-After', messages.includes('String(rl.retryAfterSec)')],
   ['pagination invalid cursor returns 400 without querying the store', messages.includes('error: "INVALID_CURSOR"') && messages.indexOf('error: "INVALID_CURSOR"') < messages.indexOf('const result = await listMessages')],
   ['conversation presence action uses bounded JSON parser', presence.includes('readBoundedJson(request, 2 * 1024)') && !presence.includes('request.json()')],
@@ -37,10 +37,10 @@ const checks = [
   ['read receipts validate conversation IDs before store access', readReceipt.includes('INVALID_CONVERSATION_ID') && readReceipt.indexOf('INVALID_CONVERSATION_ID') < readReceipt.indexOf('const result = await markConversationRead')],
   ['read receipts are rate limited with Retry-After', readReceipt.includes('messaging-read-receipt:') && readReceipt.includes('Retry-After')],
   ['conversation preferences use bounded JSON parsing', conversationPrefs.includes('readBoundedJson(request, 4 * 1024)') && !conversationPrefs.includes('request.json()')],
-  ['conversation preferences validate IDs before store access', conversationPrefs.includes('INVALID_CONVERSATION_ID') && conversationPrefs.indexOf('INVALID_CONVERSATION_ID') < conversationPrefs.indexOf('const result = await setConversationPrefs')],
+  ['conversation preferences validate IDs before store access', conversationPrefs.includes('INVALID_CONVERSATION_ID') && conversationPrefs.indexOf('INVALID_CONVERSATION_ID') < conversationPrefs.indexOf('const result = await socialRpc')],
   ['conversation preferences rate limit with Retry-After', conversationPrefs.includes('messaging-conversation-prefs-write:') && conversationPrefs.includes('Retry-After')],
-  ['conversation preferences reject empty or invalid preference patches', conversationPrefs.includes('INVALID_PREFERENCE') && conversationPrefs.includes('!hasPinned && !hasArchived && !hasMutedUntil')],
-  ['conversation mute timestamps reject non-finite, fractional and out-of-range values', conversationPrefs.includes('Number.isSafeInteger(body.mutedUntil)') && conversationPrefs.includes('body.mutedUntil > 8_640_000_000_000_000')],
+  ['conversation preferences reject empty or invalid preference patches', conversationPrefs.includes('INVALID_PREFERENCE') && conversationPrefs.includes('!hasNickname && !hasReaction && !hasReceipts && !hasPinned && !hasArchived && !hasMuted')],
+  ['conversation mute timestamps reject non-finite, fractional and out-of-range values', conversationPrefs.includes('Number.isSafeInteger(b.mutedUntil)') && conversationPrefs.includes('b.mutedUntil > 8_640_000_000_000_000')],
 ]
 let failed = 0
 for (const [name, ok] of checks) {

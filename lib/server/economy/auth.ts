@@ -192,15 +192,28 @@ export async function resolveAuthenticatedUser(
   // Never trust client-supplied uid; only Platform /v2/me result is used.
   const piUser = await verifyPiAccessToken(token)
   if (piUser?.uid) {
-    let ghUserId = piUser.uid
+    let mapping: Awaited<ReturnType<typeof getByPiAppUid>> = null
     try {
-      const mapping = await getByPiAppUid(piUser.uid)
-      if (mapping?.ghUserId) ghUserId = mapping.ghUserId
+      mapping = await getByPiAppUid(piUser.uid)
     } catch {
-      /* mapping unavailable: production identity bridge fails closed when durable storage is unavailable */
+      // A verified Pi UID is not a canonical GreenHaven user ID. Production
+      // must fail closed when its durable identity mapping cannot be resolved.
     }
+
+    if (!mapping?.ghUserId) {
+      if (env.isProduction) return null
+      // Non-production compatibility only: legacy local/test flows may not yet
+      // have run the Pi identity bootstrap. This fallback is never production auth.
+      return {
+        userId: piUser.uid,
+        username: piUser.username,
+        source: "pi_platform",
+        rawToken: token,
+      }
+    }
+
     return {
-      userId: ghUserId,
+      userId: mapping.ghUserId,
       username: piUser.username,
       source: "pi_platform",
       rawToken: token,

@@ -504,7 +504,7 @@ function ListingDetail({
 
   return (
     <div className="gh-world-marketplace flex h-full min-h-0 flex-col bg-background">
-      <header className="flex shrink-0 items-center gap-2 border-b border-border/50 px-2.5 pb-1 pt-[max(0.25rem,env(safe-area-inset-top,0px))]">
+      <header className="gh-marketplace-header gh-marketplace-detail-header flex shrink-0 items-center gap-2 border-b border-border/50 px-3 pb-1 pt-[max(0.25rem,env(safe-area-inset-top,0px))]">
         <button
           type="button"
           onClick={onBack}
@@ -2578,7 +2578,7 @@ export function MarketplaceScreen({
 
   return (
     <div className="gh-marketplace-shell gh-world-marketplace flex h-full min-h-0 flex-col bg-background text-foreground" role="region" aria-label={msg("marketplaceTitle")}>
-      <header className="flex shrink-0 flex-col gap-1.5 border-b border-border/50 px-2.5 pb-1 pt-[max(0.25rem,env(safe-area-inset-top,0px))]">
+      <header className="gh-marketplace-header flex shrink-0 flex-col gap-1 border-b border-border/50 px-3 pb-1 pt-[max(0.25rem,env(safe-area-inset-top,0px))]">
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -2589,7 +2589,7 @@ export function MarketplaceScreen({
             <ArrowLeft size={18} />
           </button>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-sm font-bold">{msg("marketplaceTitle")}</h1>
+            <h1 className="gh-type-title truncate font-bold">{msg("marketplaceTitle")}</h1>
             <p className="truncate text-[11px] text-muted-foreground">
               {msg("buySellSubtitle")}
             </p>

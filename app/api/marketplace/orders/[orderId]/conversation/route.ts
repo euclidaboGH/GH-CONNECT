@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { loadOrder } from "@/lib/server/marketplace/order-store"
 import { createDirectConversation, setConversationContext, isMessagingStoreDurable } from "@/lib/server/messaging/message-store"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -11,6 +12,8 @@ type Ctx = { params: Promise<{ orderId: string }> }
 export async function POST(request: Request, ctx: Ctx) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return NextResponse.json({ ok:false,error:"AUTH_REQUIRED" }, { status:401, headers:{"Cache-Control":"no-store"} })
+  const __rateLimited = await enforceUserMutationRateLimit(auth.userId, "marketplace/orders/[orderId]/conversation:POST", 12, 60_000, { failClosed: true })
+  if (__rateLimited) return __rateLimited
   const { orderId } = await ctx.params
   if (!orderId || orderId.length > 180 || /[\u0000-\u001f\u007f]/.test(orderId)) return NextResponse.json({ok:false,error:"INVALID_ORDER_ID"},{status:400})
   const order = await loadOrder(orderId)

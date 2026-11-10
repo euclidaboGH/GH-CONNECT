@@ -4,6 +4,7 @@
  */
 
 import { offlineQueue, withRetry } from "@/lib/network-resilience"
+import { isPermanentMessageFailure, OFFLINE_RETRY_MAX } from "@/lib/messaging/essential-controls"
 
 export type FlushSendMessageFn = (input: {
   conversationId: string
@@ -64,12 +65,16 @@ export async function flushQueuedMessages(
       if (result?.ok) {
         offlineQueue.removeAction(action.id)
         succeeded++
-      } else if (result?.permanent) {
+      } else if (result?.permanent || isPermanentMessageFailure(undefined, result?.error)) {
         offlineQueue.removeAction(action.id)
         failedItems.push({ conversationId, messageId: payload.messageId || `offline-${action.id}`, error: result.error || "MESSAGE_REJECTED" })
         failed++
       } else {
-        offlineQueue.incrementRetry(action.id)
+        if (((action as { retries?: number }).retries || 0) >= OFFLINE_RETRY_MAX) {
+          offlineQueue.removeAction(action.id)
+        } else {
+          offlineQueue.incrementRetry(action.id)
+        }
         const updated = offlineQueue.getQueue().find((a) => a.id === action.id)
         if (updated && updated.retries >= (updated.maxRetries || 3)) {
           offlineQueue.removeAction(action.id)

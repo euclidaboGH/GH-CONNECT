@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import { NextResponse } from "next/server"
 import { verifyPaystackSignature } from "@/lib/server/payouts/paystack"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { readBoundedText } from "@/lib/server/http/read-bounded-text"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -10,7 +11,9 @@ const reply = (body: unknown, status = 200) => NextResponse.json(body, { status,
 type TransferWebhook = { event?: string; data?: { id?: number | string; reference?: string; amount?: number; currency?: string; status?: string; transfer_code?: string; recipient?: string | number | { recipient_code?: string } } }
 
 export async function POST(request: Request) {
-  const raw = await request.text()
+  const boundedBody = await readBoundedText(request, 256_000)
+  if (!boundedBody.ok) return reply({ ok: false, error: boundedBody.error === "REQUEST_TOO_LARGE" ? "WEBHOOK_PAYLOAD_TOO_LARGE" : "INVALID_WEBHOOK_BODY" }, boundedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400)
+  const raw = boundedBody.text
   if (raw.length > 256_000) return reply({ ok: false, error: "WEBHOOK_PAYLOAD_TOO_LARGE" }, 413)
   if (!verifyPaystackSignature(raw, request.headers.get("x-paystack-signature"))) return reply({ ok: false, error: "INVALID_WEBHOOK_SIGNATURE" }, 401)
   let event: TransferWebhook

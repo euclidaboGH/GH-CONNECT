@@ -27,6 +27,7 @@ import { splitMarketplaceCommission } from "@/lib/server/marketplace/commission"
 import { appendVerifiedCompanyRevenueEvent } from "@/lib/server/revenue/revenue-event"
 import { attachLedgerCorrelation, buildCorrelationEnvelope } from "@/lib/server/economy/correlation"
 import { parseGhcSpendRpcResult } from "@/lib/server/economy/spend-rpc-contract"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -141,6 +142,8 @@ export async function POST(
   if (!auth) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
+  const __rateLimited = await enforceUserMutationRateLimit(auth.userId, "marketplace/orders/[orderId]/pay:POST", 12, 60_000, { failClosed: true })
+  if (__rateLimited) return __rateLimited
 
   const { orderId } = await ctx.params
   const order = await loadOrder(orderId)

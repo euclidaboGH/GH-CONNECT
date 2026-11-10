@@ -1,6 +1,6 @@
 ## 0.330.49 — Phase 3 wallet, rewards and membership concurrency hardening (2026-11-08)
 
-**Current source version:** `0.338.6`
+**Current source version:** `0.338.16`
 
 This increment closes several Phase 3 financial-reliability gaps. Pi withdrawal reservation recovery now reports per-request reasons and unlock conditions, and only releases a Pi Testnet reservation when it is still `reserved`, has no provider payment/txid, has no execution start/lease and has zero execution attempts. Processing/uncertain requests remain protected until an authoritative provider result; timeouts do not forfeit earned funds. Wallet ledger history prioritizes human-readable reasons over opaque references, and the withdrawal request response no longer contradicts its own execution gate. GHC membership purchase now serializes entitlement preflight and debit per account and prevents duplicate active same-tier charges or active VVIP downgrades during concurrent requests. Reward claim replay by either pending-row ID or rewardId alias resolves to the one posted credit. Pi payment recovery now looks up and validates the provider object before binding its ID, checks payer identity/network/direction/amount, and requires a verified transaction and txid before completion; recovery is durably rate limited and no-store. The new SQL migration `20261108110001_phase3_wallet_rewards_membership_concurrency_recovery.sql` is REVIEW_REQUIRED and unapplied. Its 43-check source contract passes; existing targeted Phase 3 ledger, request guard, membership, payout lifecycle/settlement/execution, wallet recovery and cross-feature reconciliation contracts pass. Live PostgreSQL concurrency, authenticated Pi Testnet payment/entitlement recovery, actual 3π reservation reconciliation, Node 24.15.0 dependency-backed typecheck/lint/build and browser/device acceptance remain outstanding. Production remains NOT APPROVED.
 
@@ -169,12 +169,21 @@ The release retains the 0.330.0 Settings/media/navigation work and corrects stal
 
 ## Current authoritative metadata
 
-- Package and lockfile version: `0.338.1`.
-- Runtime: Node `24.15.0` / package engine `^24.15.0`.
-- Canonical Supabase migrations: **192** SQL files.
-- Duplicate migration numeric prefixes: **0**.
-- Migration source manifest: synchronized with all 191 canonical migrations.
+- Package and lockfile version: `0.338.10` (verified against `package.json` and the lockfile root).
+- Runtime: Node `24.15.0` / package engine `^24.15.0`; this audit environment only supplied Node 22.16.0, so dependency-backed typecheck/build remain unverified.
+- Canonical Supabase migrations: **198** SQL files.
+- Duplicate migration numeric prefixes: **0** (source-level manifest check required for release).
+- Migration source manifest: 198 entries, synchronized with the canonical migration directory.
 - No local secret `.env` file is included; `.env.example` is the only env template.
+
+
+## 0.338.9 — Responsive experience and navigation refinement (2026-11-09)
+
+The shared application headers now use a slimmer 36px control rhythm; hidden duplicate header actions are inert, and the compact header no longer repeats its subtitle. Marketplace browse/detail headers have a unified compact treatment. Marketplace and Community content surfaces have more responsive horizontal breathing room and safe-area-aware scroll endings. Active-tab scroll reset now uses stable panel identity and actual computed scroll containers. Global `/` and `c` shortcuts avoid editable controls, modal workflows and IME composition. A 31-assertion UI/navigation/responsive gate runs during prebuild and static verification. Existing 42-control Marketplace/Community security audit and financial regression boundaries remain in place. No migration or financial authority changed. Node 24.15.0 typecheck/build and external database/provider/browser acceptance remain unverified; production remains NOT APPROVED.
+
+## 0.338.8 — Independent marketplace, community and financial controls (2026-11-09)
+
+Marketplace checkout and saved-listing endpoints now use durable fail-closed mutation throttling; saved-listing RPC calls are time-bounded. Community creation, membership, moderation, governance, platform and chat mutations now use durable fail-closed throttling. Community IDs and moderation target IDs are bounded/sanitized, and join-request decisions require an explicit boolean. The independent source-contract gate covers 22 marketplace and 20 community controls. Existing Pi/GHC ledger, checkout, inventory, payout and reconciliation authority is unchanged; no SQL migration was added or applied. Node 24.15.0 typecheck/build and live PostgreSQL/Supabase/Testnet acceptance remain blocked/pending; production remains NOT APPROVED. See `docs/INDEPENDENT-MARKETPLACE-COMMUNITY-FINANCIAL-AUDIT-2026-11-09.md`.
 
 ## Current source/audit status
 
@@ -439,3 +448,15 @@ Settings now has a coordinated control-centre landing overview with live summari
 ## User programme Phase 3 — Rewards & Membership (2026-11-08)
 
 The 0.330.48 Phase 3 increment reuses the existing unified earnings ledger, server-authoritative GHC reward claim/maturity, mission evidence, separate PI cashback, keyset-paginated reward history, canonical VIP/VVIP catalog, verified payment-intent grants and entitlement lifecycle. It adds durable fail-closed per-account request limits to membership status, lifecycle history, payment-history reconciliation and activation before privileged work. The new source gate is registered in `prebuild` and `verify:static`. Targeted Rewards/Membership source and pure-policy suites pass; see `docs/PHASE-3-REWARDS-MEMBERSHIP-2026-11-08.md`. This is source implementation only: Node 24.15.0 build/typecheck/lint, remote migration reconciliation, disposable PostgreSQL concurrency, authenticated Testnet provider journeys and browser/device acceptance remain outstanding. No migration was added or applied, no financial state was modified, and production remains NOT APPROVED.
+
+
+## 0.338.10 — Messaging and Community transformation (2026-11-09)
+
+- Responsive message composer with measured multi-line growth capped at 120px and internal overflow for long drafts.
+- Accessible recent-message search within the active conversation, explicitly limited to the loaded recent message window.
+- Search focus management and Escape behavior close search before closing the thread.
+- Community join, invitation accept/decline, and leave actions return stable failure outcomes under offline/transport failure; local membership remains server-success-gated.
+- Three new regression gates are registered in `prebuild` and `verify:static`.
+- No SQL migrations, payment authority changes, or authorization relaxations.
+- Static regression checks passed; TypeScript/lint/build and live E2E remain unverified because the available runtime is Node 22.16.0 while the repository requires Node 24.15.0, and dependency installation timed out.
+- See `docs/PRIORITY_9_MESSAGING_COMMUNITY_TRANSFORMATION.md` for the full implementation record.

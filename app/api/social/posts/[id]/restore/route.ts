@@ -8,6 +8,7 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { nonDurableWriteResponse } from "@/lib/server/production-guard"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -20,6 +21,8 @@ export async function POST(
   if (!auth) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
+  const __rateLimited = await enforceUserMutationRateLimit(auth.userId, "social/posts/[id]/restore:POST", 60, 60_000, { failClosed: false })
+  if (__rateLimited) return __rateLimited
 
   const { id } = await ctx.params
   const postId = String(id || "").trim()

@@ -20,7 +20,7 @@ import { usePermissions } from "@/hooks/usePermissions"
 import { ShareSheet } from "./share-sheet"
 import type { ShareResult } from "@/lib/share-service"
 import { Bookmark, Plus, Search, Filter, Zap, Clock, TrendingUp, Users, MapPin, RefreshCw, MessageCircle, Send, X, UsersRound, Hash, Compass, Store } from "lucide-react"
-import { MOBILE_PAGE_SIZES, prefetchMediaFacades, preferReducedData, setPreferReducedData } from "@/lib/mobile-performance"
+import { MOBILE_PAGE_SIZES, getAdaptiveFeedPageSize, prefetchMediaFacades, preferReducedData, setPreferReducedData } from "@/lib/mobile-performance"
 import { getBoundDomainServices } from "@/lib/domains/compat"
 import { GlobalSearchModal } from "./global-search"
 import { EmptyState } from "./empty-state"
@@ -104,7 +104,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     posts, profile, candidates, likedPostIds, likePost, reactToPost,
     addToast, followUser,
     blockUser, reportPost, reportContent, deletePost, following, friends,
-    blockedUsers, settings, applyShareResult, shares, reposts, setTab, editPost,
+    blockedUsers, mutedUsers, settings, applyShareResult, shares, reposts, setTab, editPost,
     muteUser, unfollowFromPost, archivePost, savePost, unsavePost, refreshFeed, loadPostComments, hidePost } = useGHCFeed()
   const { setTab: shellSetTab } = useGHCShell()
   const { conversations } = useGHCMessaging()
@@ -142,7 +142,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
 
   const handleFeedFilterChange = useCallback((next: FeedFilter) => {
     setActiveFilter(next)
-    setDisplayedPostsCount(MOBILE_PAGE_SIZES.feed)
+    setDisplayedPostsCount(getAdaptiveFeedPageSize())
     if (containerRef.current) containerRef.current.scrollTo({ top: 0, behavior: "smooth" })
   }, [])
   useEffect(() => {
@@ -175,6 +175,8 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   const loadMoreLockRef = useRef(false)
   const [hasMorePosts, setHasMorePosts] = useState(true)
   const [displayedPostsCount, setDisplayedPostsCount] = useState<number>(MOBILE_PAGE_SIZES.feed)
+  // Preserve identical server/client first paint; adapt the batch immediately after hydration.
+  useEffect(() => { setDisplayedPostsCount(getAdaptiveFeedPageSize()) }, [])
   const [likedPosts, setLikedPosts] = useState<string[]>([])
   // Keep the visible liked state tied to the authenticated server-hydrated feed,
   // rather than waiting for the user to click Like once in this screen session.
@@ -204,6 +206,26 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   } | null>(null)
   const feedPreferenceOwnerId = String(profile?.id || "anonymous").trim() || "anonymous"
   const feedPreferenceStorageKey = `ghc.not-interested-post-ids:${feedPreferenceOwnerId}`
+  const topicPreferenceStorageKey = `ghc.feed-topic-preferences:${feedPreferenceOwnerId}`
+  const [selectedTopic, setSelectedTopic] = useState<string | null>(null)
+  const [mutedTopics, setMutedTopics] = useState<string[]>([])
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(topicPreferenceStorageKey)
+      const value: unknown = raw ? JSON.parse(raw) : []
+      setMutedTopics(Array.isArray(value) ? [...new Set(value.filter((v): v is string => typeof v === "string").map((v) => v.trim().toLowerCase()).filter((v) => /^[\p{L}\p{N}_]{2,32}$/u.test(v)))].slice(0, 100) : [])
+      setSelectedTopic(null)
+    } catch { setMutedTopics([]); setSelectedTopic(null) }
+  }, [topicPreferenceStorageKey])
+  useEffect(() => {
+    try { window.localStorage.setItem(topicPreferenceStorageKey, JSON.stringify(mutedTopics.slice(0, 100))) } catch { /* device storage may be unavailable */ }
+  }, [topicPreferenceStorageKey, mutedTopics])
+  const toggleMutedTopic = useCallback((topic: string) => {
+    const normalized = topic.trim().toLowerCase()
+    if (!/^[\p{L}\p{N}_]{2,32}$/u.test(normalized)) return
+    setMutedTopics((current) => current.includes(normalized) ? current.filter((value) => value !== normalized) : [...current, normalized].slice(-100))
+    if (selectedTopic === normalized) setSelectedTopic(null)
+  }, [selectedTopic])
   const [notInterestedIds, setNotInterestedIds] = useState<string[]>(() => {
     try {
       const raw = typeof window !== "undefined" ? window.localStorage.getItem(feedPreferenceStorageKey) : null
@@ -319,7 +341,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     if (loadMoreLockRef.current || isLoadingMore || !hasMorePosts) return
     // Reveal already-hydrated posts locally before requesting another server page.
     if (displayedPostsCount < rankedPosts.length) {
-      setDisplayedPostsCount((prev) => Math.min(rankedPosts.length, prev + MOBILE_PAGE_SIZES.feed))
+      setDisplayedPostsCount((prev) => Math.min(rankedPosts.length, prev + getAdaptiveFeedPageSize()))
       return
     }
 
@@ -394,6 +416,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         userInterests: Array.isArray(profile?.interests) ? profile.interests : [],
         recentlyEngagedPostIds: [...new Set([...bookmarkedPostIds, ...likedPosts])],
         blockedUserIds: blockedIds,
+        mutedUserIds: Array.from(new Set([...(mutedUsers || []), ...((settings as any)?.mutedUsers || [])].filter(Boolean))),
         followingIds: following || [],
         friendIds: friends || [],
         communityIds,
@@ -403,6 +426,8 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         intentionBias,
         geolocation: regional.location ? { latitude: regional.location.latitude, longitude: regional.location.longitude } : undefined,
         focusMode,
+        includedTopics: selectedTopic ? [selectedTopic] : [],
+        excludedTopics: mutedTopics,
       }
 
       const realPosts = posts.filter((post) => !seedPostIds.has(post.id) && !(post as any).deletedAt && !(post as any).isArchived && !hiddenPostIds.includes(post.id))
@@ -428,7 +453,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
       setRankedPosts(posts.map((post) => ({ post, score: 0, reason: { reason: "Feed unavailable", category: "error" } })))
       setFeedBootstrapped(true)
     }
-  }, [activeFilter, posts, likedPosts, profile, bookmarkedPostIds, notInterestedIds, seedPostIds, seedPostList, blockedUsers, settings, following, friends, conversations, locationLane, intentionBias, focusMode, hiddenPostIds, regional.location])
+  }, [activeFilter, posts, likedPosts, profile, bookmarkedPostIds, notInterestedIds, seedPostIds, seedPostList, blockedUsers, settings, following, friends, conversations, locationLane, intentionBias, focusMode, hiddenPostIds, regional.location, selectedTopic, mutedTopics, mutedUsers])
 
   // Pull-to-refresh handlers
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -554,7 +579,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
         addToast(result.error || "Failed to refresh. Try again.", "error")
         return
       }
-      setDisplayedPostsCount(MOBILE_PAGE_SIZES.feed)
+      setDisplayedPostsCount(getAdaptiveFeedPageSize())
       if (result.durable) {
         addToast("Feed refreshed", "success")
         setFeedStatusMsg("Feed updated")
@@ -991,7 +1016,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
               />
             </div>
             {discoveryTopics.length > 0 ? (
-              <section className="mx-1 mt-3 rounded-2xl border border-border/60 bg-card/80 px-3 py-3 sm:mx-2" aria-label="Topics in your feed">
+              <section className="gh-card-padding mx-1 mt-3 rounded-2xl border border-border/60 bg-card/80 sm:mx-2" aria-label="Topics in your feed">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-[11px] font-bold tracking-wide text-foreground">Explore conversations</p>
@@ -1001,14 +1026,32 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                 </div>
                 <div className="flex gap-2 overflow-x-auto pb-0.5 scrollbar-hide" role="group" aria-label="Explore feed topics">
                   {discoveryTopics.map((topic) => (
-                    <button
-                      key={topic}
-                      type="button"
-                      onClick={() => { setSearchQuery(`#${topic}`); setIsSearchOpen(true); containerRef.current?.scrollTo({ top: 0, behavior: "smooth" }) }}
-                      className="inline-flex min-h-9 shrink-0 items-center rounded-full border border-emerald-700/15 bg-emerald-700/[0.06] px-3 text-[11px] font-semibold text-emerald-800 transition hover:bg-emerald-700/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-emerald-300"
-                    >#{topic}</button>
+                    <span key={topic} className="inline-flex shrink-0 items-center overflow-hidden rounded-full border border-border/70 bg-muted/40">
+                      <button
+                        type="button"
+                        aria-pressed={selectedTopic === topic}
+                        onClick={() => { setSelectedTopic((current) => current === topic ? null : topic); setDisplayedPostsCount(getAdaptiveFeedPageSize()); containerRef.current?.scrollTo({ top: 0, behavior: "smooth" }) }}
+                        className={`inline-flex min-h-9 items-center px-3 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${selectedTopic === topic ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted"}`}
+                      >#{topic}</button>
+                      <button
+                        type="button"
+                        aria-label={`${mutedTopics.includes(topic) ? "Show" : "Hide"} topic ${topic}`}
+                        aria-pressed={mutedTopics.includes(topic)}
+                        onClick={() => toggleMutedTopic(topic)}
+                        className={`min-h-9 border-l border-border/60 px-2 text-[10px] font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${mutedTopics.includes(topic) ? "text-destructive" : "text-muted-foreground hover:text-foreground"}`}
+                      >{mutedTopics.includes(topic) ? "×" : "−"}</button>
+                    </span>
                   ))}
+                  {selectedTopic ? <button type="button" onClick={() => setSelectedTopic(null)} className="min-h-9 shrink-0 rounded-full px-3 text-[10px] font-semibold text-primary underline underline-offset-2">Clear topic filter</button> : null}
                 </div>
+                {mutedTopics.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5" aria-label="Muted feed topics">
+                    <span className="text-[10px] font-semibold text-muted-foreground">Muted:</span>
+                    {mutedTopics.map((topic) => (
+                      <button key={topic} type="button" onClick={() => toggleMutedTopic(topic)} className="inline-flex min-h-8 items-center gap-1 rounded-full border border-destructive/25 bg-destructive/5 px-2.5 text-[10px] font-semibold text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label={`Unmute topic ${topic}`}>#{topic} <span aria-hidden="true">×</span></button>
+                    ))}
+                  </div>
+                ) : null}
               </section>
             ) : null}
             {(discoveryCreators.length > 0 || discoveryCommunities.length > 0) ? (
@@ -1078,7 +1121,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
               }
             />
           ) : (
-            <div className="gh-premium-feed-list gh-feed-column space-y-4 px-2 py-3 sm:px-3">
+            <div className="gh-premium-feed-list gh-feed-column gh-section-stack space-y-4 px-2 py-3 sm:px-3">
               {displayPosts.map(({ post, reason }, index) => (
                 <div key={post.id}>
                   {index > 0 && !focusMode && activeFilter === "for-you" && interstitialKindAt(index) ? (
@@ -1096,6 +1139,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                   <PostErrorBoundary>
                     <div className="gh-feed-post-slot cv-auto"><EnhancedPostCard
                       post={post}
+                      priority={index === 0}
                       isLiked={likedPosts.includes(post.id)}
                       isSaved={bookmarkedPostIds.includes(post.id)}
                       isOwnPost={isOwnAuthor(post.authorId, post.authorName, profile)}

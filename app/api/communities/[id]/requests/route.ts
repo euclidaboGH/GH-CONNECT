@@ -7,7 +7,9 @@ import { NextResponse } from "next/server"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
-import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
+import { nonDurableWriteResponse } from "@/lib/server/production-guard"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
+import { sanitizeCommunityId } from "@/lib/server/community/community-integrity"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -19,8 +21,10 @@ export async function POST(request: Request, ctx: Ctx) {
   if (!auth) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
+  const __rateLimited = await enforceUserMutationRateLimit(auth.userId, "communities/[id]/requests:POST", 60, 60_000, { failClosed: true })
+  if (__rateLimited) return __rateLimited
   const { id } = await ctx.params
-  const communityId = String(id || "").trim()
+  const communityId = sanitizeCommunityId(id)
   if (!communityId) {
     return NextResponse.json({ ok: false, error: "INVALID_ID" }, { status: 400 })
   }
@@ -29,13 +33,16 @@ export async function POST(request: Request, ctx: Ctx) {
   if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400 })
   const body = parsedBody.value
   const applicantId = String(body.applicantId || body.userId || "").trim()
-  if (!applicantId) {
+  if (!applicantId || applicantId.length > 160 || /[\u0000-\u001f\u007f]/.test(applicantId)) {
     return NextResponse.json({ ok: false, error: "APPLICANT_REQUIRED" }, { status: 400 })
   }
   if (applicantId === auth.userId) {
     return NextResponse.json({ ok: false, error: "SELF_DECIDE" }, { status: 400 })
   }
-  const approve = body.approve !== false && body.approve !== "false"
+  if (typeof body.approve !== "boolean") {
+    return NextResponse.json({ ok: false, error: "APPROVAL_DECISION_REQUIRED" }, { status: 400, headers: { "Cache-Control": "no-store, private" } })
+  }
+  const approve = body.approve
 
   if (!socialDbConfigured()) {
     const nd = nonDurableWriteResponse("Community join decide", {

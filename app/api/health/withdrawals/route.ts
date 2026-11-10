@@ -14,6 +14,7 @@ import {
   evaluateWithdrawalsHealth,
   withdrawalsHealthHttpStatus,
 } from "@/lib/server/health/withdrawals-health"
+import { diagnosticsDetailAllowed } from "@/lib/server/security/operator-key"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -28,6 +29,15 @@ export async function GET(request: Request) {
 
   const report = await evaluateWithdrawalsHealth({ hostname })
   const status = withdrawalsHealthHttpStatus(report)
+
+  if (!diagnosticsDetailAllowed(request)) {
+    // Anonymous callers only learn the coarse state. Per-variable gate hints (including the
+    // format state of payout secrets) are operator-only.
+    return NextResponse.json(
+      { ok: report.status !== "blocked", status: report.status, detail: "restricted" },
+      { status, headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0", Pragma: "no-cache" } },
+    )
+  }
 
   return NextResponse.json(report, {
     status,

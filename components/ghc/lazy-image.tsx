@@ -13,6 +13,9 @@ interface LazyImageProps {
   onClick?: () => void
   online?: boolean
   verified?: boolean
+  /** Critical above-the-fold imagery may opt out of lazy loading. */
+  priority?: boolean
+  sizes?: string
   /** post-media: neutral tile + retry (never show misleading initials like "PI") */
   variant?: "default" | "avatar" | "post-media"
 }
@@ -26,6 +29,8 @@ function LazyImageInner({
   onClick,
   online = false,
   verified = false,
+  priority = false,
+  sizes = "100vw",
   variant = "default",
 }: LazyImageProps) {
   const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading")
@@ -177,7 +182,9 @@ function LazyImageInner({
               ? "absolute inset-0 h-full w-full"
               : "h-full w-full"
           } object-cover transition-opacity duration-200 ${status === "loading" ? "opacity-0" : "opacity-100"}`}
-          loading="lazy"
+          loading={priority ? "eager" : "lazy"}
+          fetchPriority={priority ? "high" : "auto"}
+          sizes={sizes}
           decoding="async"
           referrerPolicy="no-referrer"
           style={{ contentVisibility: "auto", contain: "paint" }}

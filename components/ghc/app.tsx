@@ -101,7 +101,7 @@ function TabScreenFallback({ label }: { label: string }) {
       label={`${loadingLabel} ${label}`}
       busy
     >
-      <div className="mx-auto flex w-full max-w-[var(--gh-content-max,28rem)] flex-col gap-3">
+      <div className="gh-page-container flex w-full flex-col gap-3">
         <div className="flex items-center gap-2.5">
           <div className="gh-brand-loading-blink flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-50/80 p-1.5 dark:bg-emerald-950/35" aria-hidden="true">
             <img src="/greenhaven-mark.png" alt="" className="h-full w-full object-contain" width={36} height={30} />
@@ -231,15 +231,24 @@ const NAV_ITEMS = [
 /** Keyboard + deep-link still support secondary tabs */
 const NAV_IDS = PRIMARY_TABS
 
-function scrollActiveTabToTop() {
+function scrollActiveTabToTop(tab: string) {
   try {
-    const main = document.querySelector("main")
-    if (!main) return
-    const active = main.querySelector('[style*="pointer-events: auto"], [style*="pointer-events:auto"]') as HTMLElement | null
-    const scroller = active?.querySelector(".overflow-y-auto, [class*=\"overflow-y-auto\"]") as HTMLElement | null
-    ;(scroller || active || main).scrollTo?.({ top: 0, behavior: "smooth" })
+    const panel = document.querySelector<HTMLElement>(`[data-gh-tab-panel="${tab}"]`)
+    const main = document.querySelector<HTMLElement>("#ghc-main-content")
+    if (!panel) {
+      main?.scrollTo?.({ top: 0, behavior: "smooth" })
+      return
+    }
+    const scrollables = Array.from(panel.querySelectorAll<HTMLElement>("*"))
+      .filter((element) => {
+        const style = window.getComputedStyle(element)
+        return element.scrollHeight > element.clientHeight + 2 &&
+          (style.overflowY === "auto" || style.overflowY === "scroll")
+      })
+    const scroller = scrollables[scrollables.length - 1] || panel
+    scroller.scrollTo({ top: 0, behavior: "smooth" })
   } catch {
-    /* */
+    /* Navigation should remain usable if a screen is mid-transition. */
   }
 }
 
@@ -1293,7 +1302,7 @@ export function GHConnectApp() {
       >
         {/* Content fills the flex area above the nav. Modest pb only for last-item breathing room. */}
         {visitedTabs.has("home") && (
-        <div aria-hidden={activeTab !== "home"} inert={activeTab !== "home"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "home" ? 1 : 0, pointerEvents: activeTab === "home" ? "auto" : "none", contentVisibility: activeTab === "home" ? "visible" : "hidden", contain: "layout paint style" }}>
+        <div data-gh-tab-panel="home" aria-hidden={activeTab !== "home"} inert={activeTab !== "home"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "home" ? 1 : 0, pointerEvents: activeTab === "home" ? "auto" : "none", contentVisibility: activeTab === "home" ? "visible" : "hidden", contain: "layout paint style" }}>
           <div className="h-full min-h-0 overflow-hidden" onScrollCapture={onTabScrollHideNav}>
             <ScreenBoundary label="Feed" onReset={() => resetScreen("home")}>
               <Suspense fallback={<TabScreenFallback label="Feed" />}>
@@ -1304,7 +1313,7 @@ export function GHConnectApp() {
         </div>
         )}
         {visitedTabs.has("discover") && (
-        <div aria-hidden={activeTab !== "discover"} inert={activeTab !== "discover"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "discover" ? 1 : 0, pointerEvents: activeTab === "discover" ? "auto" : "none", contentVisibility: activeTab === "discover" ? "visible" : "hidden", contain: "layout paint style" }}>
+        <div data-gh-tab-panel="discover" aria-hidden={activeTab !== "discover"} inert={activeTab !== "discover"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "discover" ? 1 : 0, pointerEvents: activeTab === "discover" ? "auto" : "none", contentVisibility: activeTab === "discover" ? "visible" : "hidden", contain: "layout paint style" }}>
           <div className="h-full min-h-0 overflow-hidden">
             <ScreenBoundary label="Discover" onReset={() => resetScreen("discover")}>
               <Suspense fallback={<TabScreenFallback label="Find" />}>
@@ -1315,7 +1324,7 @@ export function GHConnectApp() {
         </div>
         )}
         {visitedTabs.has("matches") && (
-        <div aria-hidden={activeTab !== "matches"} inert={activeTab !== "matches"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "matches" ? 1 : 0, pointerEvents: activeTab === "matches" ? "auto" : "none", contentVisibility: activeTab === "matches" ? "visible" : "hidden", contain: "layout paint style" }}>
+        <div data-gh-tab-panel="matches" aria-hidden={activeTab !== "matches"} inert={activeTab !== "matches"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "matches" ? 1 : 0, pointerEvents: activeTab === "matches" ? "auto" : "none", contentVisibility: activeTab === "matches" ? "visible" : "hidden", contain: "layout paint style" }}>
           <div
             className="gh-scroll-root gh-scroll-stable h-full touch-pan-y scrollbar-hide"
             onScroll={onTabScrollHideNav}
@@ -1329,7 +1338,7 @@ export function GHConnectApp() {
         </div>
         )}
         {visitedTabs.has("communities") && (
-        <div aria-hidden={activeTab !== "communities"} inert={activeTab !== "communities"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "communities" ? 1 : 0, pointerEvents: activeTab === "communities" ? "auto" : "none", contentVisibility: activeTab === "communities" ? "visible" : "hidden", contain: "layout paint style" }}>
+        <div data-gh-tab-panel="communities" aria-hidden={activeTab !== "communities"} inert={activeTab !== "communities"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "communities" ? 1 : 0, pointerEvents: activeTab === "communities" ? "auto" : "none", contentVisibility: activeTab === "communities" ? "visible" : "hidden", contain: "layout paint style" }}>
           <div
             className="gh-scroll-root gh-scroll-stable h-full touch-pan-y scrollbar-hide"
             onScroll={onTabScrollHideNav}
@@ -1343,7 +1352,7 @@ export function GHConnectApp() {
         </div>
         )}
         {visitedTabs.has("messages") && (
-        <div aria-hidden={activeTab !== "messages"} inert={activeTab !== "messages"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "messages" ? 1 : 0, pointerEvents: activeTab === "messages" ? "auto" : "none", contentVisibility: activeTab === "messages" ? "visible" : "hidden", contain: "layout paint style" }}>
+        <div data-gh-tab-panel="messages" aria-hidden={activeTab !== "messages"} inert={activeTab !== "messages"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "messages" ? 1 : 0, pointerEvents: activeTab === "messages" ? "auto" : "none", contentVisibility: activeTab === "messages" ? "visible" : "hidden", contain: "layout paint style" }}>
           <div className="h-full min-h-0 overflow-hidden">
             <ScreenBoundary label="Messages" onReset={() => resetScreen("messages")}>
               <Suspense fallback={<TabScreenFallback label="Messages" />}>
@@ -1354,7 +1363,7 @@ export function GHConnectApp() {
         </div>
         )}
         {visitedTabs.has("profile") && (
-        <div aria-hidden={activeTab !== "profile"} inert={activeTab !== "profile"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "profile" ? 1 : 0, pointerEvents: activeTab === "profile" ? "auto" : "none", contentVisibility: activeTab === "profile" ? "visible" : "hidden", contain: "layout paint style" }}>
+        <div data-gh-tab-panel="profile" aria-hidden={activeTab !== "profile"} inert={activeTab !== "profile"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "profile" ? 1 : 0, pointerEvents: activeTab === "profile" ? "auto" : "none", contentVisibility: activeTab === "profile" ? "visible" : "hidden", contain: "layout paint style" }}>
           <div
             className="gh-scroll-root gh-scroll-stable h-full min-h-0 touch-pan-y scrollbar-hide"
             onScroll={onTabScrollHideNav}
@@ -1436,7 +1445,7 @@ export function GHConnectApp() {
                         emitSectionRefresh("messages", { reason: "attention" })
                       } catch { /* */ }
                     }
-                    scrollActiveTabToTop()
+                    scrollActiveTabToTop(activeTab)
                     return
                   }
                   try {

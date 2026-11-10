@@ -5,8 +5,9 @@
 import { jsonOk } from "@/lib/server/economy/http"
 import { hasPrivilegedDatabase, readGhcServerEnv, requiredEnvChecklist } from "@/lib/server/economy/env"
 import { testnetUnlockSnapshot } from "@/lib/server/economy/testnet-unlock"
+import { diagnosticsDetailAllowed } from "@/lib/server/security/operator-key"
 
-export async function GET() {
+export async function GET(request: Request) {
   const env = readGhcServerEnv()
   const checklist = requiredEnvChecklist()
   const databaseConfigured = hasPrivilegedDatabase(env)
@@ -15,6 +16,13 @@ export async function GET() {
   const devAuthEnabled = env.allowDevAuth
   const productionDevAuthRisk = env.isProduction && process.env.GHC_ALLOW_DEV_AUTH === "1"
   const productionMemoryRisk = env.isProduction && memoryExplicit
+  if (!diagnosticsDetailAllowed(request)) {
+    return jsonOk({
+      service: "ghc-economy",
+      detail: "restricted",
+      securityOk: !productionDevAuthRisk && !productionMemoryRisk,
+    })
+  }
   const piAuthReady = Boolean(env.piPlatformApiUrl)
   const jwtAuthReady = Boolean(env.authJwtSecret)
   /** Production-grade auth means Pi and/or JWT secret — not dev tokens */

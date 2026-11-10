@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 const app = fs.readFileSync(new URL('../components/ghc/app.tsx', import.meta.url), 'utf8')
 const tabs = ['home', 'discover', 'matches', 'communities', 'messages', 'profile']
 for (const tab of tabs) {
-  const panel = app.match(new RegExp(`<div aria-hidden={activeTab !== "${tab}"} inert={activeTab !== "${tab}"} className="gh-tab-panel`))?.[0] ?? ''
+  const panel = app.match(new RegExp(`<div data-gh-tab-panel="${tab}" aria-hidden={activeTab !== "${tab}"} inert={activeTab !== "${tab}"} className="gh-tab-panel`))?.[0] ?? ''
   assert.ok(panel, `the ${tab} panel is hidden from assistive technology and keyboard interaction when inactive`)
 }
 const navStart = app.indexOf('<nav', app.indexOf('Bottom navigation'))

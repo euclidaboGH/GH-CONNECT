@@ -249,6 +249,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   const [txFilter, setTxFilter] = useState<TxFilter>("all")
   /** GHC ledger vs Pi payment intents — never mixed in one list */
   const [assetRail, setAssetRail] = useState<"ghc" | "pi">("ghc")
+  const [showMoreInsights, setShowMoreInsights] = useState(false)
   const [piWithdrawOpen, setPiWithdrawOpen] = useState(false)
   const [piWithdrawAvailable, setPiWithdrawAvailable] = useState<number | null>(null)
   const [piWithdrawUser, setPiWithdrawUser] = useState<string | null>(null)
@@ -259,11 +260,9 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
     const controller = new AbortController()
     const timeout = window.setTimeout(() => controller.abort(), 8_000)
 
-    // Never carry a previous sheet's withdrawable snapshot into a new session.
-    // This endpoint is read-only; the quote and withdrawal APIs remain authoritative.
-    // Sheet form state is independently guarded (wasOpenRef / amountTouchedRef).
-    setPiWithdrawAvailable(null)
-    setPiWithdrawUser(null)
+    // Refresh withdrawable on open, but do NOT clear the previous snapshot to 0/null.
+    // Clearing caused Max · 0.00 π mid-session and looked like funds were reserved/lost.
+    // Quote and withdrawal APIs remain the authority; this is display-only hydration.
 
     ;(async () => {
       try {
@@ -1442,6 +1441,18 @@ const lowBalance = balance === 0 && displayPending === 0
           </div>
           <PaymentRecoveryBanner />
 
+          {/* Declutter: secondary insights stay one tap away instead of crowding the balance. */}
+          <button
+            type="button"
+            onClick={() => setShowMoreInsights((v) => !v)}
+            aria-expanded={showMoreInsights}
+            className="mx-3 mt-3 flex w-[calc(100%-1.5rem)] items-center justify-between rounded-2xl border border-border/60 bg-card px-4 py-3 text-left text-[12px] font-bold text-foreground shadow-sm transition active:scale-[0.99]"
+          >
+            <span>{showMoreInsights ? "Hide insights & benefits" : "Insights & benefits"}</span>
+            <span aria-hidden className={`text-muted-foreground transition ${showMoreInsights ? "rotate-180" : ""}`}>⌄</span>
+          </button>
+          {showMoreInsights ? (
+            <>
           <EconomyOutcomeCentre
             availableGhc={balance}
             pendingGhc={displayPending}
@@ -1476,6 +1487,8 @@ const lowBalance = balance === 0 && displayPending === 0
               </button>
             </div>
           </section>
+            </>
+          ) : null}
 
           {/* Single PI earnings surface — source of truth for withdraw / auth / eligibility (no duplicate CTAs) */}
           {assetRail === "pi" ? (

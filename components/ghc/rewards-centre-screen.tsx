@@ -754,7 +754,7 @@ const claimPendingReward = useCallback(
           <ArrowLeft size={17} strokeWidth={2.25} />
         </button>
         <div className="min-w-0 flex-1">
-          <h1 className="text-[14px] font-bold leading-tight tracking-tight text-foreground">{msg("rewardsTitle")}</h1>
+          <h1 className="gh-type-title font-bold tracking-tight text-foreground">{msg("rewardsTitle")}</h1>
           <p className="text-[10px] leading-tight text-muted-foreground">Daily · missions · not pay-to-win</p>
         </div>
         {onOpenWallet && (

@@ -47,14 +47,15 @@ export function CollapsingAppHeader({
     <>
       {/* Compact sticky bar — mirrors Profile compact identity bar */}
       <div
-        className={`pointer-events-none absolute inset-x-0 top-0 z-30 transition-[opacity,transform] duration-300 ease-out ${
+        className={`gh-app-header gh-app-header-compact pointer-events-none absolute inset-x-0 top-0 z-30 transition-[opacity,transform] duration-200 ease-out ${
           compact && !hidden
             ? "pointer-events-auto translate-y-0 opacity-100"
             : "pointer-events-none -translate-y-full opacity-0"
         }`}
         aria-hidden={!compact || hidden}
+        inert={!compact || hidden}
       >
-        <div className="flex min-h-10 items-center gap-2 border-b border-border/50 bg-background/95 px-3 py-0.5 sm:px-4" style={{ paddingTop: "max(0.25rem, env(safe-area-inset-top, 0px))" }}>
+        <div className="flex min-h-9 items-center gap-2 border-b border-border/50 bg-background/95 px-3 py-0 sm:px-4" style={{ paddingTop: "max(0.25rem, env(safe-area-inset-top, 0px))" }}>
           {compactLeading ? (
             <div className="shrink-0">{compactLeading}</div>
           ) : (
@@ -66,27 +67,26 @@ export function CollapsingAppHeader({
             {(compactTitle || title) ? (
               <p className="truncate text-sm font-bold text-foreground">{compactTitle || title}</p>
             ) : null}
-            {subtitle ? (
-              <p className={`truncate text-[10px] font-medium text-muted-foreground ${(compactTitle || title) ? "" : "text-xs font-semibold text-foreground/80"}`}>
-                {subtitle}
-              </p>
+            {subtitle && !(compactTitle || title) ? (
+              <p className="truncate text-xs font-semibold text-foreground/80">{subtitle}</p>
             ) : null}
           </div>
           {actions ? <div className="flex shrink-0 items-center gap-0.5">{actions}</div> : null}
         </div>
       </div>
 
-      {/* Expanded header — part of scroll stream conceptually; hides on scroll-down */}
+      {/* Expanded header yields completely to the compact bar after the scroll threshold. */}
       <div
         role="banner" id="gh-main-header"
-        className={`sticky top-0 z-20 shrink-0 border-b border-border/50 bg-background/95 backdrop-blur-md transition-[opacity,transform,max-height] duration-300 ease-out ${
-          hidden && compact
+        inert={compact}
+        className={`gh-app-header gh-app-header-expanded sticky top-0 z-20 shrink-0 border-b border-border/50 bg-background/95 backdrop-blur-md transition-[opacity,transform,max-height] duration-200 ease-out ${
+          compact
             ? "pointer-events-none max-h-0 -translate-y-2 overflow-hidden opacity-0 border-transparent"
             : "translate-y-0 opacity-100"
         } ${className}`}
       >
-        <div className="px-3 py-1 sm:px-4">
-          <div className="flex min-h-10 items-center justify-between gap-1.5">
+        <div className="px-3 py-0.5 sm:px-4">
+          <div className="flex min-h-9 items-center justify-between gap-1.5">
             <div className="flex min-w-0 flex-1 items-center gap-2">
               {leading}
               <div className="min-w-0">
@@ -104,7 +104,7 @@ export function CollapsingAppHeader({
             </div>
             {actions ? <div className="flex shrink-0 items-center gap-0.5">{actions}</div> : null}
           </div>
-          {secondary ? <div className="mt-0.5 pb-1">{secondary}</div> : null}
+          {secondary ? <div className="mt-1 pb-1">{secondary}</div> : null}
         </div>
       </div>
     </>

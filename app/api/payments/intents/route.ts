@@ -11,6 +11,7 @@ import { ASSET_POLICY } from "@/lib/asset-separation"
 import { checkDurableRateLimit, durableRateLimitStatus, durableRateLimitCode } from "@/lib/server/security/control-plane"
 import { tryGetEntitlementAuthoritative } from "@/lib/server/membership/entitlement-store"
 import { isDatabaseConfigured } from "@/lib/server/economy/http"
+import { readBoundedText } from "@/lib/server/http/read-bounded-text"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -53,7 +54,12 @@ export async function POST(request: Request) {
   }
 
   // Bound request parsing before JSON decoding to avoid unnecessarily large payloads.
-  const rawBody = await request.text().catch(() => "")
+  const boundedBody = await readBoundedText(request, MAX_INTENT_BODY_CHARS)
+  if (!boundedBody.ok) {
+    const tooLarge = boundedBody.error === "REQUEST_TOO_LARGE"
+    return NextResponse.json({ ok: false, error: tooLarge ? "REQUEST_TOO_LARGE" : "INVALID_BODY" }, { status: tooLarge ? 413 : 400, headers: NO_STORE })
+  }
+  const rawBody = boundedBody.text
   if (rawBody.length > MAX_INTENT_BODY_CHARS) {
     return NextResponse.json({ ok: false, error: "REQUEST_TOO_LARGE" }, { status: 413, headers: NO_STORE })
   }

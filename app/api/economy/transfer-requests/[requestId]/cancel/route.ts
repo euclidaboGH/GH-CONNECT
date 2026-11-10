@@ -2,6 +2,7 @@ import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { cancelTransferRequest, getProcessGhcStore } from "@/lib/server/economy/store"
 import { rpcCancelTransferRequest } from "@/lib/server/economy/db"
 import { allowMemoryServer, isDatabaseConfigured, jsonErr, jsonOk } from "@/lib/server/economy/http"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
 
 export async function POST(
   _request: Request,
@@ -9,6 +10,8 @@ export async function POST(
 ) {
   const auth = await resolveAuthenticatedUser(_request.headers)
   if (!auth) return jsonErr("AUTH_REQUIRED", "Authentication required", 401)
+  const __rateLimited = await enforceUserMutationRateLimit(auth.userId, "economy/transfer-requests/[requestId]/cancel:POST", 12, 60_000, { failClosed: true })
+  if (__rateLimited) return __rateLimited
 
   const { requestId } = await ctx.params
   const ref = decodeURIComponent(requestId)

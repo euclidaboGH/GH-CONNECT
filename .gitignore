@@ -38,3 +38,7 @@ yarn-error.log*
 *.pem
 .idea/
 .vscode/
+
+# Local responsive/device acceptance evidence may contain private preview data
+artifacts/phase2-responsive/
+playwright/.auth/

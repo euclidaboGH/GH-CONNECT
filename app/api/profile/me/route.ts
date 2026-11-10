@@ -13,6 +13,7 @@ import {
   serverProfileToClientPartial,
   isProfileStoreDurable,
 } from "@/lib/server/identity/profile-store"
+import { readBoundedText } from "@/lib/server/http/read-bounded-text"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -71,7 +72,12 @@ export async function PATCH(request: Request) {
     if (Number.isFinite(contentLength) && contentLength > 65_536) {
       return NextResponse.json({ ok: false, error: "REQUEST_TOO_LARGE" }, { status: 413, headers: { "Cache-Control": "no-store" } })
     }
-    const rawBody = await request.text()
+    const boundedBody = await readBoundedText(request, 65_536)
+    if (!boundedBody.ok) {
+      const tooLarge = boundedBody.error === "REQUEST_TOO_LARGE"
+      return NextResponse.json({ ok: false, error: tooLarge ? "REQUEST_TOO_LARGE" : "INVALID_BODY" }, { status: tooLarge ? 413 : 400, headers: { "Cache-Control": "no-store" } })
+    }
+    const rawBody = boundedBody.text
     if (rawBody.length > 65_536) {
       return NextResponse.json({ ok: false, error: "REQUEST_TOO_LARGE" }, { status: 413, headers: { "Cache-Control": "no-store" } })
     }

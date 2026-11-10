@@ -4,6 +4,7 @@ import { rpcAcceptTransferRequest } from "@/lib/server/economy/db"
 import { allowMemoryServer, isDatabaseConfigured, jsonErr, jsonOk } from "@/lib/server/economy/http"
 import { mapTransferFailure } from "@/lib/domains/economy-transfer-contract"
 import { requireRecentStepUp } from "@/lib/server/identity/step-up-store"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
 
 export async function POST(
   _request: Request,
@@ -11,6 +12,8 @@ export async function POST(
 ) {
   const auth = await resolveAuthenticatedUser(_request.headers)
   if (!auth) return jsonErr("AUTH_REQUIRED", "Authentication required", 401)
+  const __rateLimited = await enforceUserMutationRateLimit(auth.userId, "economy/transfer-requests/[requestId]/accept:POST", 12, 60_000, { failClosed: true })
+  if (__rateLimited) return __rateLimited
 
   const stepUpErr = await requireRecentStepUp(auth)
   if (stepUpErr) {

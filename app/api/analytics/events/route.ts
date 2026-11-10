@@ -9,6 +9,7 @@
  */
 import { NextResponse } from "next/server"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { readBoundedText } from "@/lib/server/http/read-bounded-text"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -35,12 +36,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "TOO_LARGE" }, { status: 413 })
   }
 
-  let raw = ""
-  try {
-    raw = await request.text()
-  } catch {
-    return NextResponse.json({ ok: false, error: "INVALID" }, { status: 400 })
+  const boundedBody = await readBoundedText(request, MAX_BODY_BYTES)
+  if (!boundedBody.ok) {
+    const tooLarge = boundedBody.error === "REQUEST_TOO_LARGE"
+    return NextResponse.json({ ok: false, error: tooLarge ? "TOO_LARGE" : "INVALID" }, { status: tooLarge ? 413 : 400 })
   }
+  const raw = boundedBody.text
   if (raw.length > MAX_BODY_BYTES) {
     return NextResponse.json({ ok: false, error: "TOO_LARGE" }, { status: 413 })
   }

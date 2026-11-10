@@ -38,7 +38,9 @@
 --   NONE. No ghc_* tables or RPCs are referenced.
 --
 -- Deployment:
---   Apply on Testnet only after 20261013–20261016. Do not apply from this repo automatically.
+--   Apply only after the canonical in-repository dependencies above and the
+--   social foundations 20261022010036 / 20261022010045. This remains REVIEW_REQUIRED
+--   until the full GHPV runtime contract and clean-database rehearsal pass.
 -- =============================================================================
 
 CREATE OR REPLACE FUNCTION public.gh_ghpv_settlement_snapshot(

@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 
 export const runtime = "nodejs"
@@ -16,6 +16,7 @@ async function rpc(name: string, body: Record<string, unknown>): Promise<{ ok: b
   try {
     const response = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/${name}`, {
       method: "POST",
+      signal: AbortSignal.timeout(8_000),
       headers: { "Content-Type": "application/json", apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}` },
       body: JSON.stringify(body), cache: "no-store",
     })
@@ -27,8 +28,8 @@ async function rpc(name: string, body: Record<string, unknown>): Promise<{ ok: b
 export async function GET(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: { "Cache-Control": "no-store" } })
-  const rl = checkRateLimit(`marketplace-saves:${auth.userId}`, 60, 60_000)
-  if (!rl.ok) return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { "Retry-After": "60", "Cache-Control": "no-store" } })
+  const rateLimited = await enforceUserMutationRateLimit(auth.userId, "marketplace/saves:GET", 60, 60_000, { failClosed: true })
+  if (rateLimited) return rateLimited
   const url = new URL(request.url)
   const raw = Number(url.searchParams.get("limit") || 50)
   const limit = Number.isFinite(raw) ? Math.min(100, Math.max(1, Math.floor(raw))) : 50
@@ -40,8 +41,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
-  const rl = checkRateLimit(`marketplace-save-write:${auth.userId}`, 40, 60_000)
-  if (!rl.ok) return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { "Retry-After": "60" } })
+  const rateLimited = await enforceUserMutationRateLimit(auth.userId, "marketplace/saves:POST", 40, 60_000, { failClosed: true })
+  if (rateLimited) return rateLimited
   const parsedBody = await readBoundedJson(request, 8 * 1024)
   if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400, headers: { "Cache-Control": "no-store" } })
   const body = parsedBody.value

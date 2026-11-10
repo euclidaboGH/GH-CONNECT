@@ -1385,9 +1385,11 @@ export async function editMessage(input: {
           return { ok: false, error: String(rpcData.error || "EDIT_FAILED") }
         }
       } catch {
-        /* fall through to PATCH */
+        /* A production RPC failure must not downgrade to a service-role table mutation. */
       }
     }
+    if (isProd()) return { ok: false, error: "EDIT_FAILED" }
+    // Development-only fallback; production always requires the membership-checking RPC.
     // Fallback PATCH: ownership enforced by sender_id filter
     const patch = await rest(
       `gh_messages?id=eq.${encodeURIComponent(mid)}&conversation_id=eq.${encodeURIComponent(cid)}&sender_id=eq.${encodeURIComponent(uid)}&deleted_at=is.null`,
@@ -1460,9 +1462,10 @@ export async function pinMessage(input: {
         if (rpcRes.ok && rpcData?.ok === true) return { ok: true, durable: true }
         if (rpcData?.ok === false) return { ok: false, error: String(rpcData.error || "PIN_FAILED") }
       } catch {
-        /* fall through */
+        /* A production RPC failure must not downgrade to a service-role table mutation. */
       }
     }
+    if (isProd()) return { ok: false, error: "PIN_FAILED" }
     const patch = await rest(
       `gh_messages?id=eq.${encodeURIComponent(mid)}&conversation_id=eq.${encodeURIComponent(cid)}&deleted_at=is.null`,
       {

@@ -3,7 +3,7 @@
  * lookup confirms the exact amount, recipient, completed status and verified transaction.
  * This adapter intentionally does not reconcile GHC or bank transfers.
  */
-import { createHash, timingSafeEqual } from "node:crypto"
+import { createHash } from "node:crypto"
 import { NextResponse } from "next/server"
 import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
@@ -11,6 +11,7 @@ import { piGetPayment, amountsMatch } from "@/lib/server/payments/pi-api"
 import { resolvePiSandbox } from "@/lib/pi-env"
 
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+import { operatorKeyAuthorized, OPERATOR_KEY_MIN_BYTES } from "@/lib/server/security/operator-key"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -20,11 +21,11 @@ function reply(body: unknown, status = 200) {
 }
 
 export async function POST(request: Request, context: { params: Promise<{ requestId: string }> }) {
-  const configuredKey = String(process.env.GHC_PAYOUT_RECONCILIATION_KEY || "").trim()
-  const suppliedKey = String(request.headers.get("x-ghc-payout-reconciliation-key") || "").trim()
-  const configuredBytes = Buffer.from(configuredKey, "utf8")
-  const suppliedBytes = Buffer.from(suppliedKey, "utf8")
-  if (!configuredKey || suppliedBytes.length !== configuredBytes.length || !timingSafeEqual(suppliedBytes, configuredBytes)) {
+  if (!operatorKeyAuthorized(request, {
+    headers: ["x-ghc-payout-reconciliation-key"],
+    envNames: ["GHC_PAYOUT_RECONCILIATION_KEY"],
+    minBytes: OPERATOR_KEY_MIN_BYTES,
+  })) {
     return reply({ ok: false, error: "FORBIDDEN" }, 403)
   }
   const rl = await checkDurableRateLimit("payout-reconciliation-privileged", 20, 60_000, { onUnavailable: "deny" })

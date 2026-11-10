@@ -3,6 +3,8 @@ import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
 import { emitSocialNotification } from "@/lib/server/social/notifications"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -13,7 +15,13 @@ export async function POST(req: Request) {
     if (!auth?.userId) {
       return NextResponse.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 })
     }
-    const body = (await req.json().catch(() => ({}))) as { fromUserId?: string }
+    const __rateLimited = await enforceUserMutationRateLimit(auth.userId, "connections/accept:POST", 60, 60_000, { failClosed: false })
+    if (__rateLimited) return __rateLimited
+    const parsedBody = await readBoundedJson(req, 4_096)
+    if (!parsedBody.ok) {
+      return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400 })
+    }
+    const body = parsedBody.value as { fromUserId?: string }
     const fromUserId = String(body.fromUserId || "").trim()
     if (!fromUserId) {
       return NextResponse.json({ ok: false, error: "INVALID_PAIR" }, { status: 400 })

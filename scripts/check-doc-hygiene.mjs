@@ -33,6 +33,17 @@ const required = new Set([
   'docs/UPGRADE-WORKLOG-0.330.28.md',
   'docs/PRIORITY-6-SETTINGS-TRANSFORMATION-0.330.29.md',
   'docs/PRIORITY-8-MESSAGES-TRANSFORMATION-0.330.34.md',
+  'docs/PRIORITY_10_MESSENGER_COMMUNITY_TRANSFORMATION.md',
+  'docs/PRIORITY_10_FOUR_PHASE_EXECUTION_PLAN.md',
+  'docs/UPGRADE-WORKLOG-0.338.12.md',
+  'docs/UPGRADE-WORKLOG-0.338.13.md',
+  'docs/MIGRATION-STRUCTURAL-INVENTORY-2026-11-09.csv',
+  'docs/PHASE-3-API-ARCHITECTURE-INVENTORY-2026-11-09.csv',
+  'docs/PHASE-4-SOCIAL-COMMUNITY-GOVERNANCE-AUDIT-2026-11-09.md',
+  'docs/PHASE-6-ECONOMY-FINDINGS-2026-11-09.csv',
+  'docs/PHASE-6-GHC-LEDGER-REWARDS-ECONOMY-AUDIT-2026-11-09.md',
+  'docs/PHASE-9-APPLICATION-PERFORMANCE-UX-2026-11-09.md',
+  'docs/PHASE-10-RELEASE-ENGINEERING-ACCEPTANCE-2026-11-09.md',
   'docs/PHASE-9-MARKETPLACE-TRANSFORMATION-0.330.35.md',
   'docs/UPGRADE-WORKLOG-0.330.35.md',
   'docs/PHASE-9.2-SELLER-CENTRE-PRODUCT-OPTIONS-0.330.36.md',
@@ -125,7 +136,27 @@ const required = new Set([
   'docs/UPGRADE-WORKLOG-0.309.0.md',
   'docs/UPGRADE-WORKLOG-0.310.0.md',
   'docs/PHASE-24-FINAL-SOURCE-AND-MIGRATION-REVIEW-2026-11-04.md',
+  'docs/PHASE-3-OPERATOR-LIVE-ACCEPTANCE-0.330.50.md',
+  'docs/PI-RESERVED-FUNDS-DIAGNOSTIC-0.338.6.md',
+  'docs/UPGRADE-WORKLOG-0.338.6.md',
+  'docs/PROGRAMME-COMPLETION-REGISTER-2026-11-08.md',
+  'docs/UPGRADE-WORKLOG-0.330.50.md',
+  'docs/UPGRADE-WORKLOG-0.332.0.md',
+  'docs/UPGRADE-WORKLOG-0.333.0.md',
+  'docs/UPGRADE-WORKLOG-0.334.0.md',
+  'docs/UPGRADE-WORKLOG-0.335.0.md',
+  'docs/UPGRADE-WORKLOG-0.336.0.md',
+  'docs/UPGRADE-WORKLOG-0.338.0.md',
+  'docs/UPGRADE-WORKLOG-0.338.1.md',
+  'docs/UPGRADE-WORKLOG-0.338.2.md',
+  'docs/UPGRADE-WORKLOG-0.338.3.md',
+  'docs/UPGRADE-WORKLOG-0.338.4.md',
+  'docs/UPGRADE-WORKLOG-0.338.5.md',
+  'docs/operations/PHASE-I-LIVE-ACCEPTANCE-RUNBOOK.md',
   'docs/PHASE-23-MIGRATION-INTEGRITY-2026-11-04.md',
+  'docs/INDEPENDENT-MARKETPLACE-COMMUNITY-FINANCIAL-AUDIT-2026-11-09.md',
+  'docs/PRIORITY_9_MESSAGING_COMMUNITY_TRANSFORMATION.md',
+  'docs/UPGRADE-WORKLOG-0.338.10.md',
   'docs/PHASE-22-MARKETPLACE-ATOMIC-TRANSITIONS-2026-11-04.md',
   'docs/PHASE-21-PRIVATE-SURFACE-DURABLE-CONTROLS-2026-11-04.md',
   'docs/PHASE-1-12-SYSTEM-WIDE-ACCEPTANCE.md',
@@ -200,7 +231,7 @@ const walk=(dir)=>{
         // Non-required docs must be explicitly current; this prevents silent historical-document growth.
         // Allow: Pass48 baseline date, intermediate worklogs, and active Nov-2026 engineering notes.
         const currentWorklog = rel === `docs/UPGRADE-WORKLOG-${pkg.version}.md`
-        const datedCurrent = /2026-10-31|2026-11-0[1-5]|2026-11-08|0\.222\.0|0\.26[5-9]|0\.27[0-5]|0\.312\.0|0\.313\.\d+/.test(s) || /0\.27[0-5]\.\d/.test(s)
+        const datedCurrent = /2026-10-31|2026-11-0[1-5]|2026-11-08|2026-11-09|0\.222\.0|0\.26[5-9]|0\.27[0-5]|0\.312\.0|0\.313\.\d+/.test(s) || /0\.27[0-5]\.\d/.test(s)
         if(!currentWorklog && !datedCurrent) failures.push(`unclassified documentation: ${rel}`)
       }
     }

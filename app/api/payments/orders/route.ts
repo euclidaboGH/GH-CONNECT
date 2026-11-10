@@ -8,6 +8,7 @@ import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { getProduct } from "@/lib/gh-pay/catalog"
 import { genOrderId, saveOrder, listOrdersForUser, getOrder } from "@/lib/gh-pay/order-store"
 import type { GhPayOrder } from "@/lib/gh-pay/types"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -17,6 +18,8 @@ export async function POST(request: Request) {
   if (!auth) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
+  const __rateLimited = await enforceUserMutationRateLimit(auth.userId, "payments/orders:POST", 12, 60_000, { failClosed: true })
+  if (__rateLimited) return __rateLimited
 
   const parsedBody = await readBoundedJson(request, 8 * 1024)
     if (!parsedBody.ok) {

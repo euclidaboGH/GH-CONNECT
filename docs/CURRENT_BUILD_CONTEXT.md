@@ -4,8 +4,8 @@
 
 ## CURRENT BUILD CONTEXT
 
-- Current source release: **0.338.6** (lint / a11y / hooks hardening on top of the 0.330.49 Phase 3 baseline).
-- Current baseline: the complete repository root in release 0.330.33 as upgraded through 0.330.48; this latest complete project tree supersedes older archives, worklogs, mock-ups and copied third-party screens.
+- Current source release: **0.338.13** (Messenger/Community Phase 1 information-centre foundation and four-phase execution plan; derived from the user-authoritative 0.338.9 archive).
+- Current baseline: `GREENHAVEN-0.338.9-RESPONSIVE-UI-MARKETPLACE-COMMUNITY.zip`, with sequential working increments 0.338.10, 0.338.12 and 0.338.13. The 0.338.9 archive remains the user's source-of-truth input; later working archives are derived changes, not replacements supplied by the user. 0.338.13 adds actor-to-target nicknames, per-member quick-reaction/read-receipt preferences, read-receipt suppression, and GIN-indexed membership-authorized message search. Its migration is REVIEW_REQUIRED and unapplied pending database-history reconciliation and explicit operator approval.
 - Product: GreenHaven social platform and ecosystem. Keep the existing product identity, routes, data contracts and security boundaries unless a reviewed implementation explicitly changes them.
 - Visual direction: premium, modern, calm and accessible; deep emerald / teal / navy with restrained gold accents; light-mode-first. Screenshots are design references, not sources of banking features, balances, licenses, logos or provider capabilities.
 - Wallet: GHC and Pi are separate assets and separate ledgers. Never add them together, convert one into the other for display, fabricate balances, or treat local cache as financial authority. Server-confirmed balances must be clearly distinguished from stale, pending, locked and unavailable data.

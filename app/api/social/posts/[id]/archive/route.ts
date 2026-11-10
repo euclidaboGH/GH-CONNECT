@@ -8,6 +8,7 @@ import { socialDbConfigured } from "@/lib/server/social/rpc"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -19,6 +20,8 @@ export async function POST(request: Request, ctx: Ctx) {
   if (!auth) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
+  const __rateLimited = await enforceUserMutationRateLimit(auth.userId, "social/posts/[id]/archive:POST", 60, 60_000, { failClosed: false })
+  if (__rateLimited) return __rateLimited
   const { id } = await ctx.params
   const postId = String(id || "").trim()
   if (!postId) {

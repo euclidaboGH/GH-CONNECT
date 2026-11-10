@@ -61,6 +61,8 @@ const REACTIONS: PostReaction[] = [
 
 interface EnhancedPostCardProps {
   post: Post
+  /** Prioritize only the first visible feed card's primary media. */
+  priority?: boolean
   /** @deprecated Post likes are not used for matching; optional legacy signal */
   isLiked?: boolean
   isSaved: boolean
@@ -97,6 +99,7 @@ interface EnhancedPostCardProps {
 
 function EnhancedPostCardInner({
   post,
+  priority = false,
   isLiked = false,
   isSaved,
   isOwnPost = false,
@@ -888,6 +891,8 @@ function EnhancedPostCardInner({
               src={realImages[Math.min(imageIndex, realImages.length - 1)] || realImages[0]}
               alt={`Photo ${imageIndex + 1} of ${realImages.length}`}
               className="absolute inset-0 h-full w-full object-cover"
+              priority={priority}
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 720px"
               variant="post-media"
             />
             {realImages.length > 1 && (
@@ -906,7 +911,7 @@ function EnhancedPostCardInner({
           </div>
         )}
 
-        {typeof post.video === "string" && isDurableMediaUrl(post.video) ? <button type="button" onClick={handleVideoTap} className="relative mb-2 block aspect-video w-full overflow-hidden rounded-[1.15rem] bg-black text-left" aria-label="Play video full screen"><DurableVideo src={post.video} preload="metadata" muted playsInline className="absolute inset-0 h-full w-full object-contain" /><span className="absolute inset-0 flex items-center justify-center bg-black/15"><span className="flex h-14 w-14 items-center justify-center rounded-full border border-white/50 bg-black/50 text-2xl text-white shadow-lg">▶</span></span><span className="absolute bottom-2 left-2 rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-bold text-white">Play video</span></button> : null}
+        {typeof post.video === "string" && isDurableMediaUrl(post.video) ? <button type="button" onClick={handleVideoTap} className="relative mb-2 block aspect-video w-full overflow-hidden rounded-[1.15rem] bg-black text-left" aria-label="Play video full screen"><DurableVideo src={post.video} preload="none" muted playsInline className="absolute inset-0 h-full w-full object-contain" /><span className="absolute inset-0 flex items-center justify-center bg-black/15"><span className="flex h-14 w-14 items-center justify-center rounded-full border border-white/50 bg-black/50 text-2xl text-white shadow-lg">▶</span></span><span className="absolute bottom-2 left-2 rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-bold text-white">Play video</span></button> : null}
 
         {/* Quote repost */}
         {post.quoteOf && (

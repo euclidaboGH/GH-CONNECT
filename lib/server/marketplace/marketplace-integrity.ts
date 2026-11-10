@@ -1,4 +1,5 @@
 /**
+import { availableStock, canPurchaseQuantity, isOwnListing, MARKETPLACE_COMMISSION_BPS } from "@/lib/marketplace/essential-controls"
  * Phase 7 — Marketplace integrity helpers (buyer / seller / orders).
  * Financial totals always come from durable listing reservation RPCs — never the client.
  */

@@ -17,6 +17,14 @@ export const MOBILE_PAGE_SIZES = {
   comments: 16,
 } as const
 
+/** Keep the first feed paint small on constrained Android/WebView hardware. */
+export function getAdaptiveFeedPageSize(): number {
+  const profile = getDevicePerformanceProfile()
+  if (profile.lowPower) return 3
+  if (profile.hardwareConcurrency >= 8) return 7
+  return MOBILE_PAGE_SIZES.feed
+}
+
 export function paginateSlice<T>(
   items: T[],
   page: number,

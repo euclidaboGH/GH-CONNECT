@@ -3,6 +3,7 @@ import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { loadOrder, updateCommerceOrder, updateOrderFulfilment, type MarketplaceFulfilmentAction } from "@/lib/server/marketplace/order-store"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { parseMarketplaceFulfilmentInput } from "@/lib/marketplace/fulfilment"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -13,6 +14,8 @@ type CommerceResult = Awaited<ReturnType<typeof updateCommerceOrder>> | Awaited<
 export async function POST(request: Request, ctx: { params: Promise<{ orderId: string }> }) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: { "Cache-Control": "no-store" } })
+  const __rateLimited = await enforceUserMutationRateLimit(auth.userId, "marketplace/orders/[orderId]/commerce:POST", 12, 60_000, { failClosed: true })
+  if (__rateLimited) return __rateLimited
   const { orderId } = await ctx.params
   if (!orderId || orderId.length > 160) return NextResponse.json({ ok: false, error: "INVALID_ORDER_ID" }, { status: 400, headers: { "Cache-Control": "no-store" } })
   const order = await loadOrder(orderId)

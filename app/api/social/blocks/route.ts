@@ -7,6 +7,7 @@ import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+import { humanizeRelationshipError, sanitizeTargetUserId } from "@/lib/server/social/relationship-integrity"
 import { checkDurableRateLimit, appendSecurityEvent, requestCorrelationId, durableRateLimitStatus, durableRateLimitCode } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
@@ -26,13 +27,17 @@ export async function POST(request: Request) {
   const parsedBody = await readBoundedJson(request, 4096)
   if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400, headers: { "Cache-Control": "no-store" } })
   const body = parsedBody.value
-  const targetUserId = (typeof body.targetUserId === "string" ? body.targetUserId : typeof body.userId === "string" ? body.userId : "").trim()
-  if (!targetUserId) {
-    return NextResponse.json({ ok: false, error: "TARGET_REQUIRED" }, { status: 400 })
+  // Keep block targets under the same validation contract as follow/connect actions.
+  // The authenticated session remains the only source of the actor identity.
+  const rawTargetUserId = typeof body.targetUserId === "string" ? body.targetUserId : body.userId
+  const targetCheck = sanitizeTargetUserId(rawTargetUserId, auth.userId)
+  if (!targetCheck.ok) {
+    return NextResponse.json(
+      { ok: false, error: targetCheck.error, message: humanizeRelationshipError(targetCheck.error) },
+      { status: 400, headers: { "Cache-Control": "no-store, private" } },
+    )
   }
-  if (targetUserId === auth.userId) {
-    return NextResponse.json({ ok: false, error: "SELF" }, { status: 400 })
-  }
+  const targetUserId = targetCheck.targetUserId
   const block = body.block !== false && body.block !== "false"
 
   if (!socialDbConfigured()) {

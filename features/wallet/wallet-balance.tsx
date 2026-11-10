@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
-import { Eye, EyeOff, Loader2, RefreshCw } from "lucide-react"
+import { Eye, EyeOff, RefreshCw } from "lucide-react"
 import { GhcCoinIcon } from "@/components/ghc/ghc-coin-icon"
 import { ASSET_POLICY } from "@/lib/asset-separation"
 import { formatGhc } from "./wallet-format"
@@ -61,6 +61,7 @@ export function WalletBalanceCard({
   const [piLoading, setPiLoading] = useState(true)
   const [piFailed, setPiFailed] = useState(false)
   const [releasing, setReleasing] = useState(false)
+  const [showReserved, setShowReserved] = useState(false)
   const [releaseMsg, setReleaseMsg] = useState<string | null>(null)
   const [releaseItems, setReleaseItems] = useState<Array<{
     requestId: string
@@ -239,255 +240,198 @@ export function WalletBalanceCard({
 
   const piSelected = selectedRail === "pi"
   const ghcSelected = selectedRail === "ghc"
+  const online = walletOnline
+  const statusLabel = !online ? "Offline" : refreshing || (piSelected && piLoading) ? "Syncing" : (piSelected ? piSnapshot !== null : ghcVerified) ? "Live" : "Unconfirmed"
+  const statusTone = !online || statusLabel === "Unconfirmed" ? "bg-amber-400" : statusLabel === "Syncing" ? "bg-sky-400 animate-pulse" : "bg-emerald-400"
+  const glow = piSelected
+    ? "bg-[radial-gradient(circle_at_85%_0%,rgba(139,92,246,0.45),transparent_55%),radial-gradient(circle_at_0%_100%,rgba(56,189,248,0.18),transparent_50%)]"
+    : "bg-[radial-gradient(circle_at_85%_0%,rgba(16,185,129,0.42),transparent_55%),radial-gradient(circle_at_0%_100%,rgba(250,204,21,0.14),transparent_50%)]"
+  const reservedAmount = piSnapshot?.reserved ?? 0
+
+  const stats = piSelected
+    ? [
+        { label: "Withdrawable", full: "Eligible to withdraw", value: piSnapshot ? maskPi(piSnapshot.withdrawable) : "—" },
+        { label: "Pending", full: "Pending", value: piSnapshot ? maskPi(piSnapshot.pending) : "—" },
+        { label: "Reserved", full: "Reserved for requests", value: piSnapshot ? maskPi(piSnapshot.reserved) : "—" },
+      ]
+    : [
+        { label: "Pending", full: "Pending", value: ghcVerified ? mask(pending) : "—" },
+        { label: "Locked", full: "Locked", value: ghcVerified ? mask(locked) : "—" },
+        { label: "Escrow", full: "Escrow locked", value: ghcVerified ? mask(escrowLocked) : "—" },
+      ]
 
   return (
     <section
-      className="gh-reference-panel mx-3 mt-3 overflow-hidden rounded-[1.75rem] border border-white/15 bg-[linear-gradient(145deg,rgba(16,185,129,0.12),rgba(255,255,255,0.98)_38%,rgba(124,58,237,0.10))] shadow-[0_20px_55px_-28px_rgba(15,23,42,0.45)] ring-1 ring-black/[0.03] dark:bg-[linear-gradient(145deg,rgba(16,185,129,0.14),rgba(15,23,42,0.96)_42%,rgba(124,58,237,0.14))] dark:ring-white/[0.05]"
+      className="relative mx-3 mt-3 overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#060b16] text-white shadow-[0_26px_60px_-26px_rgba(2,6,23,0.85)]"
       aria-label="Unified PI and GHC wallet balances; Pi and GHC remain separate"
     >
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3 border-b border-border/40 bg-white/45 px-4 py-4 backdrop-blur-xl dark:bg-white/[0.025]">
-        <div className="min-w-0">
-          <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">Portfolio</p>
-          <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-            <p className="text-[11px] text-muted-foreground">
-              PI earnings · GHC utility · separate ledgers
-              {synced ? ` · ${synced}` : ""}
-            </p>
-            <span
-              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                !walletOnline
-                  ? "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-100"
-                  : refreshing
-                    ? "bg-sky-100 text-sky-900 dark:bg-sky-950/50 dark:text-sky-100"
-                    : ghcVerified
-                      ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-100"
-                      : "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-100"
-              }`}
-              role="status"
-              aria-live="polite"
-            >
-              {!walletOnline ? "Offline · last snapshot only" : refreshing ? "Syncing…" : ghcVerified ? "Confirmed" : "Not confirmed"}
-            </span>
+      {/* Ambient light + fine technical grid */}
+      <div className={`pointer-events-none absolute inset-0 transition-opacity duration-500 ${glow}`} aria-hidden />
+      <div
+        className="pointer-events-none absolute inset-0 opacity-70"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(255,255,255,0.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.035) 1px,transparent 1px)",
+          backgroundSize: "24px 24px",
+          WebkitMaskImage: "linear-gradient(to bottom, black, transparent 85%)",
+          maskImage: "linear-gradient(to bottom, black, transparent 85%)",
+        }}
+        aria-hidden
+      />
+
+      <div className="relative p-4 pb-3">
+        {/* Top bar */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2" role="status" aria-live="polite">
+            <span className={`h-2 w-2 rounded-full ${statusTone}`} aria-hidden />
+            <span className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-white/70">{statusLabel}</span>
+            {synced ? <span className="truncate text-[10px] tabular-nums text-white/40">· {synced}</span> : null}
           </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {piSelected ? (
+          <div className="flex shrink-0 items-center gap-2">
+            {piSelected ? (
+              <button
+                type="button"
+                onClick={() => void refreshPi()}
+                disabled={piLoading}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white/80 backdrop-blur transition hover:bg-white/15 active:scale-95 disabled:opacity-60"
+                aria-label="Refresh PI balance"
+                aria-busy={piLoading}
+              >
+                <RefreshCw size={15} className={piLoading ? "animate-spin" : ""} />
+              </button>
+            ) : null}
             <button
               type="button"
-              onClick={() => void refreshPi()}
-              disabled={piLoading}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border/70 bg-card/90 text-muted-foreground shadow-sm transition hover:bg-muted active:scale-95 disabled:opacity-60"
-              aria-label="Refresh Pi balance"
-              aria-busy={piLoading}
+              onClick={onToggleVisible}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white/80 backdrop-blur transition hover:bg-white/15 active:scale-95"
+              aria-label={balanceVisible ? "Hide balances" : "Show balances"}
+              aria-pressed={!balanceVisible}
             >
-              <RefreshCw size={16} className={piLoading ? "animate-spin" : ""} />
+              {balanceVisible ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
-          ) : null}
+          </div>
+        </div>
+
+        {/* Rail switcher — a segmented control, not duplicate cards */}
+        <div className="mt-3 grid grid-cols-2 gap-1 rounded-full border border-white/10 bg-black/30 p-1 backdrop-blur" role="group" aria-label="Choose wallet asset">
           <button
             type="button"
-            onClick={onToggleVisible}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border/70 bg-card/90 text-muted-foreground shadow-sm transition hover:bg-muted active:scale-95"
-            aria-label={balanceVisible ? "Hide balances" : "Show balances"}
-            aria-pressed={!balanceVisible}
+            aria-pressed={piSelected}
+            onClick={() => onSelectRail?.("pi")}
+            className={`flex h-10 items-center justify-center gap-2 rounded-full text-[12px] font-extrabold transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-600 focus-visible:ring-offset-2 focus-visible:ring-offset-[#060b16] ${
+              piSelected ? "bg-violet-600 text-white shadow-lg shadow-violet-900/50" : "text-white/60 hover:text-white"
+            }`}
           >
-            {balanceVisible ? <EyeOff size={17} /> : <Eye size={17} />}
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-[11px] font-black" aria-hidden>π</span>
+            Pi
+          </button>
+          <button
+            type="button"
+            aria-pressed={!piSelected}
+            onClick={() => onSelectRail?.("ghc")}
+            className={`flex h-10 items-center justify-center gap-2 rounded-full text-[12px] font-extrabold transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 focus-visible:ring-offset-[#060b16] ${
+              ghcSelected ? "bg-emerald-600 text-white shadow-lg shadow-emerald-900/50" : "text-white/60 hover:text-white"
+            }`}
+          >
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/20" aria-hidden>
+              <GhcCoinIcon size={12} className="text-white" title="" />
+            </span>
+            GHC
           </button>
         </div>
-      </div>
 
-      {/* Premium active-asset hero. The selected rail is displayed alone; PI and GHC are never combined. */}
-      <div className="mx-3 mt-3 overflow-hidden rounded-[1.45rem] border border-white/10 bg-[radial-gradient(circle_at_88%_12%,rgba(212,175,55,0.28),transparent_30%),linear-gradient(135deg,#062f35_0%,#0a3d62_58%,#075b50_100%)] p-4 text-white shadow-[0_20px_48px_-25px_rgba(6,47,53,0.8)]">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-white/65">{piSelected ? "Pi earnings balance" : "GreenHaven wallet"}</p>
-            <p className="mt-1 text-[11px] text-white/75">{piSelected ? "Pi · separate from GHC" : "GHC · GreenHaven Coin"}</p>
-          </div>
-          <span className="rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-white/90">
-            {piSelected ? (piLoading ? "Checking" : piFailed ? "Unavailable" : "Pi rail") : "GHC rail"}
-          </span>
-        </div>
-        <p className="mt-4 break-words text-[clamp(1.9rem,8vw,2.65rem)] font-black leading-none tracking-tight tabular-nums" aria-live="polite" aria-label={balanceVisible ? undefined : "Balance hidden"}>
-          {piSelected
-            ? piSnapshot
-              ? maskPi(piSnapshot.available)
-              : piLoading
-                ? <span className="inline-block h-9 w-40 animate-pulse rounded-xl bg-white/20 align-middle" aria-label="Loading balance" />
-                : "Unavailable"
-            : ghcVerified ? mask(balance) : "Unavailable"}
-        </p>
-        {piSelected && piSnapshot ? (
-          <p className="mt-3">
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold ${
-                piSnapshot.authorizationActive && piSnapshot.eligible && piSnapshot.withdrawable > 0
-                  ? "bg-emerald-400/20 text-emerald-100"
-                  : "bg-amber-300/20 text-amber-100"
-              }`}
-            >
-              <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
-              {!piSnapshot.piWalletLinked
-                ? "Link Pi identity to withdraw"
-                : !piSnapshot.authorizationActive
-                  ? "Authorize payouts to withdraw"
-                  : piSnapshot.eligible && piSnapshot.withdrawable > 0
-                    ? "Ready to withdraw"
-                    : "Not eligible to withdraw yet"}
-            </span>
+        {/* Balance */}
+        <div className="mt-4">
+          <p className="text-[10px] font-extrabold uppercase tracking-[0.22em] text-white/50">
+            {piSelected ? "Pi earnings" : "GreenHaven Credits"}
           </p>
-        ) : null}
-        <p className="mt-2 text-[10px] text-white/65">
-          {piSelected
-            ? piLoading
-              ? "Securely checking the authoritative earnings ledger"
-              : piFailed
-                ? "No fresh balance available. Use refresh to try again."
-                : piSnapshot?.piWalletLinked
-                  ? "Server-reported balance · Pi identity linked"
-                  : "Server-reported balance · Pi identity not linked"
-            : ghcVerified
-              ? "Available GHC balance · server-confirmed snapshot"
-              : "GHC balance not confirmed · retry when the ledger is available"}
-        </p>
-        <div className="mt-5 grid grid-cols-3 gap-2 border-t border-white/15 pt-3">
-          <div className="min-w-0">
-            <p className="text-[9px] uppercase tracking-wide text-white/55">{piSelected ? "Withdrawable" : "Pending"}</p>
-            <p className="mt-1 truncate text-[12px] font-bold tabular-nums text-white">
-              {piSelected ? (piSnapshot ? maskPi(piSnapshot.withdrawable) : "—") : ghcVerified ? mask(pending) : "—"}
-            </p>
-          </div>
-          <div className="min-w-0 border-l border-white/15 pl-3">
-            <p className="text-[9px] uppercase tracking-wide text-white/55">{piSelected ? "Pending" : "Locked"}</p>
-            <p className="mt-1 truncate text-[12px] font-bold tabular-nums text-white">
-              {piSelected ? (piSnapshot ? maskPi(piSnapshot.pending) : "—") : ghcVerified ? mask(locked) : "—"}
-            </p>
-          </div>
-          <div className="min-w-0 border-l border-white/15 pl-3">
-            <p className="text-[9px] uppercase tracking-wide text-white/55">{piSelected ? "Reserved" : "Escrow locked"}</p>
-            <p className="mt-1 truncate text-[12px] font-bold tabular-nums text-white">
-              {piSelected ? (piSnapshot ? maskPi(piSnapshot.reserved) : "—") : ghcVerified ? mask(escrowLocked) : "—"}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Asset switcher — each rail remains independently selectable and accounted. */}
-      <div className="grid grid-cols-2 gap-2.5 p-3" role="group" aria-label="Choose wallet asset">
-        <button
-          type="button"
-          aria-pressed={piSelected}
-          onClick={() => onSelectRail?.("pi")}
-          className={`relative flex min-h-[6.75rem] flex-col gap-2 rounded-[1.2rem] px-3 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-600 focus-visible:ring-offset-2 ${
-            piSelected
-              ? "bg-violet-100/90 shadow-[0_14px_30px_-18px_rgba(124,58,237,0.55)] ring-1 ring-violet-400/40 dark:bg-violet-950/60"
-              : "border border-border/55 bg-card/72 shadow-sm hover:bg-card"
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-violet-600 text-base font-black text-white shadow-sm" aria-hidden>
-              π
-            </span>
-            <div className="min-w-0">
-              <p className="text-[12px] font-bold text-foreground">Pi</p>
-              <p className="text-[10px] text-muted-foreground">Pi earnings</p>
-            </div>
-          </div>
-          <p className="text-[17px] font-black tabular-nums leading-none tracking-tight text-foreground">
-            {piLoading ? (
-              <Loader2 className="inline h-5 w-5 animate-spin text-muted-foreground" />
-            ) : piSnapshot ? (
-              maskPi(piSnapshot.available)
-            ) : piFailed ? (
-              "Unavailable"
-            ) : (
-              "Unavailable"
-            )}
+          <p
+            className="mt-1 break-words text-[clamp(2.1rem,10vw,2.9rem)] font-black leading-none tracking-tight tabular-nums"
+            aria-live="polite"
+            aria-label={balanceVisible ? undefined : "Balance hidden"}
+          >
+            {piSelected
+              ? piSnapshot
+                ? maskPi(piSnapshot.available)
+                : piLoading
+                  ? <span className="inline-block h-10 w-44 animate-pulse rounded-xl bg-white/15 align-middle" aria-label="Loading balance" />
+                  : "Unavailable"
+              : ghcVerified ? mask(balance) : "Unavailable"}
           </p>
-          <p className="text-[10px] leading-relaxed text-muted-foreground">
-            {piLoading
-              ? "Checking ledger · up to 10 seconds"
-              : piFailed
-                ? "PI balance unavailable — refresh to retry"
-                : piSnapshot?.piWalletLinked
-                  ? piSnapshot.authorizationActive
-                    ? piSnapshot.eligible
-                      ? "Pi identity linked · payout authorized"
-                      : "Pi identity linked · authorized · not currently eligible"
-                    : "Pi identity linked · authorize wallet to withdraw"
-                  : "Link your Pi identity to enable withdrawals"}
+          <p className="mt-1.5 text-[11px] text-white/50">
+            {piSelected
+              ? piLoading
+                ? "Checking ledger · up to 10 seconds"
+                : "Pi · separate from GHC"
+              : "GHC · GreenHaven Coin"}
           </p>
-          {piSelected ? (
-            <span className="absolute right-2 top-2 rounded-full bg-violet-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
-              Active
-            </span>
-          ) : null}
-        </button>
-
-        <button
-          type="button"
-          aria-pressed={!piSelected}
-          onClick={() => onSelectRail?.("ghc")}
-          className={`relative flex min-h-[6.75rem] flex-col gap-2 rounded-[1.2rem] px-3 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 ${
-            !piSelected
-              ? "bg-emerald-100/90 shadow-[0_14px_30px_-18px_rgba(5,150,105,0.55)] ring-1 ring-emerald-400/40 dark:bg-emerald-950/60"
-              : "border border-border/55 bg-card/72 shadow-sm hover:bg-card"
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 shadow-sm" aria-hidden>
-              <GhcCoinIcon size={18} className="text-white" title="" />
-            </span>
-            <div className="min-w-0">
-              <p className="text-[12px] font-bold text-foreground">GHC</p>
-              <p className="text-[10px] text-muted-foreground">GreenHaven Credits</p>
-            </div>
-          </div>
-          <p className="text-[17px] font-black tabular-nums leading-none tracking-tight text-foreground">
-            {ghcVerified ? (balanceVisible ? formatGhc(balance) : "••••") : "Unavailable"}
-          </p>
-          <p className="text-[10px] leading-relaxed text-muted-foreground">
-            {!ghcVerified
-              ? "Server confirmation required"
-              : pending > 0 || locked > 0
-                ? `${formatGhc(pending)} pending · ${formatGhc(locked)} locked`
-                : "Available to spend"}
-          </p>
-          {!piSelected ? (
-            <span className="absolute right-2 top-2 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
-              Active
-            </span>
-          ) : null}
-        </button>
-      </div>
-
-      {/* Meta strip for active rail */}
-      <div className="border-t border-border/60 bg-muted/20 px-4 py-2.5">
-        {piSelected ? (
-          <div className="space-y-2.5 text-[11px] text-muted-foreground">
-            <dl className="grid grid-cols-3 gap-2">
-              {[
-                { label: "Eligible to withdraw", value: piSnapshot?.withdrawable, tone: "text-emerald-700 dark:text-emerald-300" },
-                { label: "Pending", value: piSnapshot?.pending, tone: "text-foreground" },
-                { label: "Reserved for requests", value: piSnapshot?.reserved, tone: "text-violet-700 dark:text-violet-300" },
-              ].map((row) => (
-                <div key={row.label} className="rounded-xl border border-border/60 bg-card/70 px-2.5 py-2">
-                  <dt className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">{row.label}</dt>
-                  <dd className={`mt-0.5 truncate text-[13px] font-black tabular-nums ${row.tone}`}>
-                    {piSnapshot && typeof row.value === "number" ? maskPi(row.value) : "—"}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-            {piSnapshot && piSnapshot.reserved > 0 ? (
-              <p
-                role="note"
-                className="rounded-xl border border-violet-300/50 bg-violet-50/80 px-3 py-2 leading-relaxed text-violet-950 dark:border-violet-400/30 dark:bg-violet-950/40 dark:text-violet-100"
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            {piSelected && piSnapshot ? (
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold ${
+                  piSnapshot.authorizationActive && piSnapshot.eligible && piSnapshot.withdrawable > 0
+                    ? "bg-emerald-400/15 text-emerald-200 ring-1 ring-emerald-300/20"
+                    : "bg-amber-300/15 text-amber-100 ring-1 ring-amber-200/20"
+                }`}
               >
-                <strong>Reserved {maskPi(piSnapshot.reserved)}</strong> is held against Pi withdrawal requests; it has not disappeared, but it is not spendable while those requests remain active.
-                {piSnapshot.withdrawable <= 0
-                  ? " Your eligible-to-withdraw amount is currently zero. The server must complete or safely release an unstarted request before those funds can become available again."
-                  : " Your eligible-to-withdraw amount is shown separately and may differ from the total available balance because withdrawal eligibility and fees are checked by the server."}
-                <span className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
+                {!piSnapshot.piWalletLinked
+                  ? "Link your Pi identity to withdraw"
+                  : !piSnapshot.authorizationActive
+                    ? "Authorize payouts to withdraw"
+                    : piSnapshot.eligible && piSnapshot.withdrawable > 0
+                      ? "Ready to withdraw"
+                      : "Not eligible to withdraw yet"}
+              </span>
+            ) : null}
+            {piSelected && piFailed ? (
+              <span className="rounded-full bg-amber-300/15 px-2.5 py-1 text-[10px] font-bold text-amber-100 ring-1 ring-amber-200/20">
+                Couldn’t load · tap refresh
+              </span>
+            ) : null}
+            {!piSelected && ghcVerified ? (
+              <button
+                type="button"
+                onClick={onOpenPending}
+                className="rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-bold text-white/80 ring-1 ring-white/10 transition active:scale-95"
+              >
+                In {formatGhc(monthEarned)} · Out {formatGhc(monthSpent)} this month
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        {/* Stats */}
+        <dl className="mt-4 grid grid-cols-3 divide-x divide-white/10 rounded-2xl border border-white/10 bg-white/[0.05] backdrop-blur">
+          {stats.map((row) => (
+            <div key={row.label} className="min-w-0 px-3 py-2.5" title={row.full} aria-label={row.full}>
+              <dt className="text-[9px] font-bold uppercase tracking-[0.14em] text-white/45">{row.label}</dt>
+              <dd className="mt-0.5 truncate text-[13px] font-black tabular-nums text-white">{row.value}</dd>
+            </div>
+          ))}
+        </dl>
+        {piSelected ? (
+          <p className="mt-2 text-[10px] text-white/40">withdrawable · fees and eligibility apply · 3% withdrawal fee</p>
+        ) : null}
+
+        {/* Reserved: one quiet line, details on demand */}
+        {piSelected && reservedAmount > 0 ? (
+          <div className="mt-3 rounded-2xl border border-violet-300/20 bg-violet-400/10 px-3 py-2.5" role="note">
+            <button
+              type="button"
+              onClick={() => setShowReserved((v) => !v)}
+              aria-expanded={showReserved}
+              className="flex w-full items-center justify-between gap-2 text-left text-[11px] font-semibold text-violet-100"
+            >
+              <span>{maskPi(reservedAmount)} reserved for withdrawal</span>
+              <span className="text-violet-200/80 underline underline-offset-2">{showReserved ? "Hide" : "Details"}</span>
+            </button>
+            {showReserved ? (
+              <div className="mt-2 space-y-2 text-[11px] leading-relaxed text-violet-100/90">
+                <p>
+                  <strong>Reserved {maskPi(reservedAmount)}</strong> is held against Pi withdrawal requests; it has not disappeared, but it is not spendable while those requests remain active. It returns to Available if the payout is cancelled, or is settled once Pi confirms the payment.
+                </p>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <button
                     type="button"
                     onClick={() => void releaseReserved()}
@@ -497,11 +441,11 @@ export function WalletBalanceCard({
                     {releasing ? "Checking requests…" : "Check for releasable requests"}
                   </button>
                   {releaseMsg ? <span role="status">{releaseMsg}</span> : null}
-                </span>
+                </div>
                 {releaseItems.length > 0 ? (
-                  <ul className="mt-2 space-y-2" aria-label="Pi reservation explanations">
+                  <ul className="space-y-2" aria-label="Pi reservation explanations">
                     {releaseItems.map((item) => (
-                      <li key={item.requestId} className="rounded-lg border border-violet-300/40 bg-white/50 p-2 dark:bg-black/10">
+                      <li key={item.requestId} className="rounded-lg border border-white/10 bg-black/20 p-2">
                         <p className="font-semibold">{item.status.replaceAll("_", " ").toUpperCase()} · {item.requestId.slice(0, 8)}</p>
                         <p className="mt-0.5">{item.reason}</p>
                         <p className="mt-1"><strong>When it unlocks:</strong> {item.unlockCondition}</p>
@@ -509,44 +453,17 @@ export function WalletBalanceCard({
                     ))}
                   </ul>
                 ) : null}
-                <span className="block text-[10px] leading-relaxed text-violet-900/80 dark:text-violet-100/80">Safety rule: unstarted requests can be released immediately. Processing or uncertain requests remain reserved only while Pi's outcome is unresolved; this control cannot force-release them. The server releases them after authoritative cancellation with no transaction, or settles them after verified payment. A timeout alone never forfeits your earned balance.</span>
-              </p>
+                <p className="text-[10px] leading-relaxed text-violet-100/60">
+                  Safety rule: unstarted requests can be released immediately. Processing or uncertain requests remain reserved only while Pi's outcome is unresolved; this control cannot force-release them. The server releases them after authoritative cancellation with no transaction, or settles them after verified payment. A timeout alone never forfeits your earned balance.
+                </p>
+              </div>
             ) : null}
-            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-              <span className="flex flex-wrap gap-x-2">
-                <span>withdrawable · fees and eligibility apply</span>
-                <span className="font-semibold text-foreground/80">3% withdrawal fee</span>
-              </span>
-              <button
-                type="button"
-                onClick={() => void refreshPi()}
-                disabled={piLoading}
-                className="font-semibold text-violet-700 underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-50 dark:text-violet-300"
-                aria-label="Refresh PI balance"
-                aria-busy={piLoading}
-              >
-                {piLoading ? "Refreshing PI…" : "Refresh PI balance"}
-              </button>
-            </div>
           </div>
-        ) : (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-            <button type="button" onClick={onOpenPending} className="font-semibold text-emerald-700 underline-offset-2 hover:underline">
-              Pending {formatGhc(pending)}
-            </button>
-            <span>
-              Month in <strong className="text-foreground">{formatGhc(monthEarned)}</strong>
-            </span>
-            <span>
-              Month out <strong className="text-foreground">{formatGhc(monthSpent)}</strong>
-            </span>
-          </div>
-        )}
+        ) : null}
       </div>
 
-      {primaryActions ? (
-        <div className="border-t border-border/60 px-3 py-3">{primaryActions}</div>
-      ) : null}
+      {/* Actions live INSIDE the card so they never feel detached */}
+      {primaryActions ? <div className="relative border-t border-white/10 bg-black/25 px-3 py-3">{primaryActions}</div> : null}
 
       <p className="sr-only">
         GHC and Pi remain separate rails. PI and GHC are never added together. GHC utility and PI earnings remain separate assets and separate ledgers.

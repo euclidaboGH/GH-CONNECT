@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useMemo, useRef, useCallback, memo, type KeyboardEvent } from "react"
-import { Send, Smile, Paperclip, X, Search, MessageCircle, Pin, Archive, VolumeX, FileText, Play, Phone, Video } from "lucide-react"
+import { useState, useMemo, useRef, useCallback, useEffect, memo, type KeyboardEvent } from "react"
+import { Send, Smile, Paperclip, X, Search, MessageCircle, Pin, Archive, VolumeX, AudioLines, FileText, Play, Phone, Video, Images, Info } from "lucide-react"
 import type { Conversation } from "@/lib/ghc-types"
 import { timeAgo } from "@/lib/ghc-data"
 import { LazyImage } from "./lazy-image"
@@ -313,7 +313,20 @@ export function MessageInput({
   disabled: boolean
 }) {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const composerRef = useRef<HTMLTextAreaElement>(null)
   const sendLockRef = useRef(false)
+
+  // Keep the composer compact for short messages and grow it naturally for
+  // multi-line drafts. The hard visual cap prevents the keyboard from pushing
+  // the conversation history off-screen on mobile devices.
+  useEffect(() => {
+    const composer = composerRef.current
+    if (!composer) return
+    composer.style.height = "auto"
+    const nextHeight = Math.min(Math.max(composer.scrollHeight, 44), 120)
+    composer.style.height = `${nextHeight}px`
+    composer.style.overflowY = composer.scrollHeight > 120 ? "auto" : "hidden"
+  }, [messageText])
   const emitTypingUi = (active: boolean) => {
     try {
       window.dispatchEvent(new CustomEvent("ghc:message-typing", { detail: { active } }))
@@ -360,7 +373,15 @@ export function MessageInput({
   }, [])
 
   return (
-    <div className="relative z-40 min-w-0 shrink-0 border-t border-border/70 bg-card p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+    <div
+      className="relative z-40 min-w-0 shrink-0 border-t border-border/70 bg-card p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && showEmojiPicker) {
+          event.preventDefault()
+          setShowEmojiPicker(false)
+        }
+      }}
+    >
       {/* Emoji picker - only renders when visible */}
       {showEmojiPicker && <EmojiPickerGrid onEmojiSelect={handleEmojiSelect} />}
 
@@ -381,6 +402,7 @@ export function MessageInput({
 
         {/* Message input */}
         <textarea
+          ref={composerRef}
           value={messageText}
           onChange={(e) => onMessageChange(e.target.value)}
           onFocus={() => emitTypingUi(true)}
@@ -393,7 +415,7 @@ export function MessageInput({
           maxLength={8000}
           className="min-h-11 min-w-0 max-h-[120px] flex-1 resize-none rounded-2xl border border-border bg-muted px-3 py-2.5 text-[15px] leading-[1.45] transition focus:border-[var(--gh-green)] focus:bg-card focus:outline-none focus:ring-2 focus:ring-emerald-100 disabled:opacity-60"
           rows={1}
-          style={{ minHeight: "44px", maxHeight: "120px" }}
+          style={{ minHeight: "44px", maxHeight: "120px", overflowY: "hidden" }}
         />
 
         {/* Attachment button */}
@@ -575,8 +597,31 @@ function MessageBubbleBase({
                     </div>
                   ) : media.type === "file" ? (
                     <div className="flex items-center gap-2 px-3 py-2 text-xs"><FileText size={16} /><span className="truncate">{media.fileName || "Attached file"}</span></div>
+                  ) : media.type === "voice" ? (
+                    <div className="min-w-[220px] max-w-full px-3 py-2">
+                      <div className="mb-1 flex items-center gap-2 text-xs font-semibold text-foreground">
+                        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-emerald-600/10 text-emerald-700 dark:text-emerald-300" aria-hidden="true">
+                          <AudioLines size={14} />
+                        </span>
+                        <span>Voice message</span>
+                        {typeof media.duration === "number" && media.duration > 0 ? (
+                          <span className="ml-auto tabular-nums text-muted-foreground">{Math.floor(media.duration / 60)}:{String(Math.floor(media.duration % 60)).padStart(2, "0")}</span>
+                        ) : null}
+                      </div>
+                      {media.url ? (
+                        <audio
+                          className="h-9 w-full max-w-[280px]"
+                          controls
+                          preload="none"
+                          src={media.url}
+                          aria-label="Play voice message"
+                        />
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Audio is unavailable.</p>
+                      )}
+                    </div>
                   ) : (
-                    <div className="flex items-center gap-2 px-3 py-2 text-xs"><VolumeX size={16} /><span>Voice message</span></div>
+                    <div className="flex items-center gap-2 px-3 py-2 text-xs"><FileText size={16} /><span>{media.fileName || "Attachment"}</span></div>
                   )}
                 </div>
               ))}
@@ -817,6 +862,9 @@ export function ChatHeader({
   onBack,
   onCall,
   onVideo,
+  onSearch,
+  onSharedMedia,
+  onDetails,
   onOpenProfile,
   onBlock,
   onReport,
@@ -830,6 +878,9 @@ export function ChatHeader({
   onBack: () => void
   onCall?: () => void
   onVideo?: () => void
+  onSearch?: () => void
+  onSharedMedia?: () => void
+  onDetails?: () => void
   onOpenProfile?: () => void
   onBlock?: () => void
   onReport?: () => void
@@ -874,6 +925,39 @@ export function ChatHeader({
       </div>
 
       <div className="relative flex items-center gap-0.5">
+        {onDetails && (
+          <button
+            type="button"
+            onClick={onDetails}
+            className="flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground active:scale-95"
+            aria-label="Conversation information and settings"
+            title="Conversation information"
+          >
+            <Info size={19} strokeWidth={2} />
+          </button>
+        )}
+        {onSharedMedia && (
+          <button
+            type="button"
+            onClick={onSharedMedia}
+            className="flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground active:scale-95"
+            aria-label="View shared media"
+            title="Shared media"
+          >
+            <Images size={19} strokeWidth={2} />
+          </button>
+        )}
+        {onSearch && (
+          <button
+            type="button"
+            onClick={onSearch}
+            className="flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground active:scale-95"
+            aria-label="Search recent messages"
+            title="Search recent messages"
+          >
+            <Search size={19} strokeWidth={2} />
+          </button>
+        )}
         {onCall && !isCommunity && (
           <button
             type="button"

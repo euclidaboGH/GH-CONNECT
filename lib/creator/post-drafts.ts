@@ -4,14 +4,23 @@
  */
 
 import type { PostDraft } from "@/lib/ghc-types"
+import { IdentityService } from "@/lib/identity/identity-service"
 
-const KEY = "ghc.post-drafts.v1"
+const KEY_PREFIX = "ghc.post-drafts.v2:"
+const LEGACY_KEY = "ghc.post-drafts.v1"
 const MAX = 20
+
+function storageKey(): string {
+  const ownerId = String(IdentityService.getCurrentUserId() || "current-user").trim() || "current-user"
+  return `${KEY_PREFIX}${encodeURIComponent(ownerId)}`
+}
 
 function readRaw(): PostDraft[] {
   if (typeof window === "undefined") return []
   try {
-    const raw = window.localStorage.getItem(KEY)
+    const raw = window.localStorage.getItem(storageKey())
+    // The old v1 key had no owner identity. Never import it into an arbitrary
+    // signed-in account: that could expose one person's drafts to another.
     if (!raw) return []
     const parsed = JSON.parse(raw) as unknown
     if (!Array.isArray(parsed)) return []
@@ -39,10 +48,21 @@ function readRaw(): PostDraft[] {
 function writeRaw(list: PostDraft[]) {
   if (typeof window === "undefined") return
   try {
-    window.localStorage.setItem(KEY, JSON.stringify(list.slice(0, MAX)))
+    window.localStorage.setItem(storageKey(), JSON.stringify(list.slice(0, MAX)))
   } catch {
     /* */
   }
+}
+
+/** True only to explain that unowned legacy drafts were intentionally not imported. */
+export function hasUnscopedLegacyPostDrafts(): boolean {
+  if (typeof window === "undefined") return false
+  try {
+    const raw = window.localStorage.getItem(LEGACY_KEY)
+    if (!raw) return false
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed) && parsed.length > 0
+  } catch { return false }
 }
 
 export function listPostDrafts(): PostDraft[] {

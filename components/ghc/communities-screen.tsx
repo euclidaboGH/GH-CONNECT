@@ -821,7 +821,7 @@ export function CommunitiesScreen() {
       }
       if (typeof navigator !== "undefined" && !navigator.onLine) {
         addToast("You are offline — join when reconnected", "info")
-        return
+        return false
       }
       const ok = await joinCommunity(row.id)
       if (ok) {
@@ -874,20 +874,41 @@ export function CommunitiesScreen() {
 
   const handleAcceptCommunityInvitation = async (id: string): Promise<boolean> => {
     if (typeof acceptCommunityInvitation !== "function") return false
-    const ok = await acceptCommunityInvitation(id)
-    if (ok) {
-      setDirectory("my")
-      setSelectedCommunityId(id)
-      setHubKey((k) => k + 1)
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      addToast("You are offline — reconnect to accept this invitation", "info")
+      return false
     }
-    return ok
+    try {
+      const ok = await acceptCommunityInvitation(id)
+      if (ok) {
+        setDirectory("my")
+        setSelectedCommunityId(id)
+        setHubKey((k) => k + 1)
+      } else {
+        addToast("Could not accept this invitation. Please try again.", "error")
+      }
+      return ok
+    } catch {
+      addToast("Could not accept this invitation. Please try again.", "error")
+      return false
+    }
   }
 
   const handleDeclineCommunityInvitation = async (id: string): Promise<boolean> => {
     if (typeof declineCommunityInvitation !== "function") return false
-    const ok = await declineCommunityInvitation(id)
-    if (ok) setDirectoryTick((n) => n + 1)
-    return ok
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      addToast("You are offline — reconnect to decline this invitation", "info")
+      return false
+    }
+    try {
+      const ok = await declineCommunityInvitation(id)
+      if (ok) setDirectoryTick((n) => n + 1)
+      else addToast("Could not decline this invitation. Please try again.", "error")
+      return ok
+    } catch {
+      addToast("Could not decline this invitation. Please try again.", "error")
+      return false
+    }
   }
 
   const handleLeave = async (id: string, name: string) => {
@@ -896,7 +917,13 @@ export function CommunitiesScreen() {
         addToast("You are offline — leave when reconnected", "info")
         return
       }
-      const ok = await leaveCommunity(id)
+      let ok = false
+      try {
+        ok = await leaveCommunity(id)
+      } catch {
+        addToast("Could not leave this community. Please try again.", "error")
+        return
+      }
       if (ok) {
         // Mirror cache only after domain leave succeeds (Studio Class D)
         if (communityLocalCacheAllowed()) {

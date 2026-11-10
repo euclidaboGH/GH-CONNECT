@@ -2,13 +2,13 @@ GH-CONNECT VERIFIED SOURCE MANIFEST
 ==================================
 inventory_status=OK
 duplicate_version_prefixes=
-project_version=0.338.6
+project_version=0.338.16
 manifest_format_version=1
-canonical_migrations=198
+canonical_migrations=199
 classification_required=118
 classification_requires_approval=1
 classification_proposal=2
-classification_review_required=77
+classification_review_required=78
 source=supabase/migrations/*.sql
 
 IMPORTANT: This manifest inventories repository files only. It does NOT prove migrations are applied to any Supabase project.
@@ -52,7 +52,7 @@ ALL_MIGRATIONS_ORDERED_FOR_REVIEW:
 [REQUIRED] size=4390 path=supabase/migrations/20261022010028_gh_user_profiles_and_progress.sql
 [REQUIRED] size=5985 path=supabase/migrations/20261022010029_ghc_stage_pending.sql
 [REQUIRED] size=8753 path=supabase/migrations/20261022010030_ghc_stage_pending_limits.sql
-[REQUIRED] size=1787 path=supabase/migrations/20261022010031_ghc_ledger_rpc_acl.sql
+[REQUIRED] size=2059 path=supabase/migrations/20261022010031_ghc_ledger_rpc_acl.sql
 [REQUIRED] size=858 path=supabase/migrations/20261022010032_ghc_user_accounts_rls_lockdown.sql
 [REQUIRED] size=9517 path=supabase/migrations/20261022010033_gh_communities_core.sql
 [REQUIRED] size=6794 path=supabase/migrations/20261022010034_gh_pass5_soft_limits_polls.sql
@@ -87,9 +87,9 @@ ALL_MIGRATIONS_ORDERED_FOR_REVIEW:
 [REQUIRED] size=2602 path=supabase/migrations/20261022010063_gh_post_list_feed_stable_cursor.sql
 [REQUIRED] size=2951 path=supabase/migrations/20261022010064_gh_comment_stable_cursor.sql
 [REQUIRED] size=2258 path=supabase/migrations/20261022010065_ghc_wallet_snapshot_spendable.sql
-[REQUIRED] size=3106 path=supabase/migrations/20261022010066_ghpv_curator_calibration_apply.sql
-[REQUIRED] size=6891 path=supabase/migrations/20261022010067_ghpv_active_weight_set_semantics.sql
-[REQUIRED] size=8933 path=supabase/migrations/20261022010068_ghpv_settlement_engine.sql
+[REQUIRED] size=3170 path=supabase/migrations/20261022010066_ghpv_curator_calibration_apply.sql
+[REQUIRED] size=7147 path=supabase/migrations/20261022010067_ghpv_active_weight_set_semantics.sql
+[REQUIRED] size=9076 path=supabase/migrations/20261022010068_ghpv_settlement_engine.sql
 [REQUIRED] size=2211 path=supabase/migrations/20261022010069_match_signals_durable.sql
 [REQUIRED] size=7008 path=supabase/migrations/20261022010070_ghpv_calibration_bounds.sql
 [REQUIRED] size=10464 path=supabase/migrations/20261022010071_ghc_curation_rewards.sql
@@ -212,11 +212,12 @@ ALL_MIGRATIONS_ORDERED_FOR_REVIEW:
 [REVIEW_REQUIRED] size=6457 path=supabase/migrations/20261106150001_marketplace_listing_report_intake.sql
 [REVIEW_REQUIRED] size=5252 path=supabase/migrations/20261106170001_phase8_verified_mission_achievements.sql
 [REVIEW_REQUIRED] size=1441 path=supabase/migrations/20261107120001_withdrawal_pin_recovery_questions.sql
-[REVIEW_REQUIRED] size=5426 path=supabase/migrations/20261107130001_wallet_security_hardening.sql
+[REVIEW_REQUIRED] size=6192 path=supabase/migrations/20261107130001_wallet_security_hardening.sql
 [REVIEW_REQUIRED] size=1383 path=supabase/migrations/20261107160001_membership_active_tier_downgrade_guard.sql
 [REQUIRED] size=3282 path=supabase/migrations/20261107170001_phase7_durable_community_governance.sql
 [REVIEW_REQUIRED] size=25702 path=supabase/migrations/20261107180001_marketplace_sku_variants_atomic_inventory.sql
 [REVIEW_REQUIRED] size=20889 path=supabase/migrations/20261107190001_marketplace_fulfilment_tracking_timeline.sql
 [REVIEW_REQUIRED] size=15306 path=supabase/migrations/20261108110001_phase3_wallet_rewards_membership_concurrency_recovery.sql
 [REVIEW_REQUIRED] size=3438 path=supabase/migrations/20261108120001_gh_community_server_filter_search.sql
-[REVIEW_REQUIRED] size=9415 path=supabase/migrations/20261108150001_repair_pin_storage_and_payout_release.sql
+[REVIEW_REQUIRED] size=10337 path=supabase/migrations/20261108150001_repair_pin_storage_and_payout_release.sql
+[REVIEW_REQUIRED] size=11813 path=supabase/migrations/20261109100001_gh_messaging_phase1_controls_search.sql

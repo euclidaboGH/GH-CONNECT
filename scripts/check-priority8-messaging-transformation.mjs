@@ -59,7 +59,7 @@ check(messages.includes('validateOwnedMediaAttachments') && messages.includes('o
 check(messages.includes('clientMessageId') && store.includes('client_message_id'), 'message sends retain idempotency protection')
 check(messages.includes('checkDurableRateLimit') && messages.includes('{ onUnavailable: "deny" }'), 'message send/read rate limits fail closed on control-plane outage')
 check(prefs.includes('resolveAuthenticatedUser') && prefs.includes('auth.userId'), 'personal conversation preferences remain session-scoped')
-check(prefs.includes('setConversationPrefs'), 'pin/archive/mute preferences use the canonical server store')
+check(prefs.includes('gh_set_conversation_controls') && prefs.includes('p_actor_id: auth.userId'), 'pin/archive/mute preferences use the canonical server RPC with session-derived actor identity')
 check(conversations.includes('checkDurableRateLimit') && conversations.includes('onUnavailable: "deny"'), 'conversation creation uses durable fail-closed rate limiting')
 check(prefs.includes('checkDurableRateLimit') && prefs.includes('onUnavailable: "deny"'), 'inbox preference writes use durable fail-closed rate limiting')
 check(presence.includes('checkDurableRateLimit') && presence.includes('onUnavailable: "deny"'), 'conversation presence reads and writes use durable fail-closed rate limiting')

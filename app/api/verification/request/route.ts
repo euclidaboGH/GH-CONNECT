@@ -13,6 +13,8 @@ import {
   listRequestsForUser,
   type VerificationRequestType,
 } from "@/lib/server/verification/request-store"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -47,8 +49,14 @@ export async function POST(req: NextRequest) {
     if (!auth?.userId) {
       return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 })
     }
+    const __rateLimited = await enforceUserMutationRateLimit(auth.userId, "verification/request:POST", 10, 60_000, { failClosed: false })
+    if (__rateLimited) return __rateLimited
 
-    const body = await req.json().catch(() => ({}))
+    const parsedBody = await readBoundedJson(req, 16_384)
+    if (!parsedBody.ok && parsedBody.error === "REQUEST_TOO_LARGE") {
+      return NextResponse.json({ ok: false, error: "request_too_large" }, { status: 413 })
+    }
+    const body: Record<string, unknown> = parsedBody.ok ? parsedBody.value : {}
     const type = String(body?.type || "identity") as VerificationRequestType
     if (!ALLOWED.includes(type)) {
       return NextResponse.json({ ok: false, error: "invalid_type" }, { status: 400 })

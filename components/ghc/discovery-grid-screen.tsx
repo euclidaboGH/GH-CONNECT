@@ -513,7 +513,7 @@ export function DiscoveryGridScreen() {
       <header className="gh-page-header-slim gh-world-discovery-header border-b border-border/50 bg-card/95 backdrop-blur-md">
         <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
-            <h1 className="text-[15px] font-bold leading-none tracking-tight text-foreground">{t("discover")}</h1>
+            <h1 className="gh-type-title font-bold tracking-tight text-foreground">{t("discover")}</h1>
           </div>
           <div className="flex min-h-9 min-w-0 flex-[1.4] items-center gap-1.5 rounded-full border border-border/60 bg-muted/40 px-3 py-1.5 shadow-sm">
             <Search size={14} className="shrink-0 text-muted-foreground" aria-hidden />

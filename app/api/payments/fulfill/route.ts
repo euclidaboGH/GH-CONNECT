@@ -32,6 +32,7 @@ import {
   transitionOrder,
   claimOrderForPayment,
 } from "@/lib/server/marketplace/order-store"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -42,6 +43,8 @@ export async function POST(request: Request) {
     if (!auth) {
       return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
     }
+    const __rateLimited = await enforceUserMutationRateLimit(auth.userId, "payments/fulfill:POST", 30, 60_000, { failClosed: true })
+    if (__rateLimited) return __rateLimited
 
     const parsedBody = await readBoundedJson(request, 8 * 1024)
     if (!parsedBody.ok) {

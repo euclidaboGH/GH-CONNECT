@@ -5,17 +5,19 @@
  */
 import { readGhcServerEnv, hasPrivilegedDatabase } from "@/lib/server/economy/env"
 
-export const PI_ATOMIC_SCALE = 10_000_000 // 1e7
+export {
+  PI_ATOMIC_SCALE,
+  isValidPiAtomic,
+  piToAtomic,
+  atomicToPi,
+  floorPiToAtomic,
+  previewWithdrawalFeeAtomic,
+} from "@/lib/wallet/pi-atomic"
+import { isValidPiAtomic } from "@/lib/wallet/pi-atomic"
 
-export function piToAtomic(amount: number): number {
-  if (!Number.isFinite(amount) || amount <= 0) return 0
-  return Math.round(amount * PI_ATOMIC_SCALE)
-}
-
-export function atomicToPi(atomic: number | string): number {
-  const n = typeof atomic === "string" ? Number(atomic) : atomic
-  if (!Number.isFinite(n)) return 0
-  return n / PI_ATOMIC_SCALE
+function validLedgerIdentity(userId: unknown, uniqueRef: unknown): boolean {
+  return typeof userId === "string" && userId.trim().length > 0 && userId.trim().length <= 128
+    && typeof uniqueRef === "string" && uniqueRef.trim().length > 0 && uniqueRef.trim().length <= 128
 }
 
 type RpcFailure = { ok: false; status: number; code: string; message: string }
@@ -143,6 +145,9 @@ export async function postEarningsCredit(input: {
   reason?: string
   metadata?: Record<string, unknown>
 }): Promise<{ ok: boolean; duplicate?: boolean; entryId?: string; error?: string }> {
+  if (!validLedgerIdentity(input.userId, input.uniqueRef) || !isValidPiAtomic(input.amountAtomic)) {
+    return { ok: false, error: "INVALID_LEDGER_INPUT" }
+  }
   const result = await rpc<{
     ok?: boolean
     duplicate?: boolean
@@ -171,6 +176,9 @@ export async function reserveEarningsForPayout(input: {
   payoutRequestId: string
   reason?: string
 }): Promise<{ ok: boolean; duplicate?: boolean; entryId?: string; error?: string }> {
+  if (!validLedgerIdentity(input.userId, input.uniqueRef) || !isValidPiAtomic(input.amountAtomic) || !input.payoutRequestId?.trim()) {
+    return { ok: false, error: "INVALID_LEDGER_INPUT" }
+  }
   const result = await rpc<{
     ok?: boolean
     duplicate?: boolean
@@ -196,6 +204,9 @@ export async function settleEarningsPayout(input: {
   payoutRequestId: string
   reason?: string
 }): Promise<{ ok: boolean; duplicate?: boolean; entryId?: string; error?: string }> {
+  if (!validLedgerIdentity(input.userId, input.uniqueRef) || !isValidPiAtomic(input.amountAtomic) || !input.payoutRequestId?.trim()) {
+    return { ok: false, error: "INVALID_LEDGER_INPUT" }
+  }
   const result = await rpc<{
     ok?: boolean
     duplicate?: boolean
@@ -269,6 +280,9 @@ export async function releaseEarningsReservation(input: {
   payoutRequestId: string
   reason?: string
 }): Promise<{ ok: boolean; duplicate?: boolean; entryId?: string; error?: string }> {
+  if (!validLedgerIdentity(input.userId, input.uniqueRef) || !isValidPiAtomic(input.amountAtomic) || !input.payoutRequestId?.trim()) {
+    return { ok: false, error: "INVALID_LEDGER_INPUT" }
+  }
   const result = await rpc<{
     ok?: boolean
     duplicate?: boolean
@@ -284,12 +298,6 @@ export async function releaseEarningsReservation(input: {
   if (!result) return { ok: false, error: "EARNINGS_LEDGER_UNAVAILABLE" }
   if (result.ok !== true) return { ok: false, error: String(result.error || "RELEASE_FAILED") }
   return { ok: true, duplicate: result.duplicate === true, entryId: result.entryId }
-}
-
-/** Floor PI decimal to integer atomic units (Phase 6 rounding rule). */
-export function floorPiToAtomic(amount: number): number {
-  if (!Number.isFinite(amount) || amount <= 0) return 0
-  return Math.floor(amount * PI_ATOMIC_SCALE + 1e-12)
 }
 
 export type WithdrawalQuote = {
@@ -316,6 +324,7 @@ export async function quoteWithdrawal(input: {
   userId: string
   grossAtomic: number
 }): Promise<WithdrawalQuote> {
+  if (!input.userId?.trim() || !isValidPiAtomic(input.grossAtomic)) return { ok: false, error: "INVALID_LEDGER_INPUT" }
   const result = await rpc<WithdrawalQuote>("gh_earnings_quote_withdrawal", {
     p_user_id: String(input.userId || "").trim(),
     p_gross_atomic: input.grossAtomic,
@@ -348,6 +357,13 @@ export async function createPiEarningsPayoutRequest(input: {
   netAtomic: number
   network: "Pi Testnet"
 }): Promise<PiEarningsPayoutRequestResult> {
+  const validAmounts = isValidPiAtomic(input.grossAtomic) && isValidPiAtomic(input.feeAtomic, true)
+    && isValidPiAtomic(input.netAtomic) && input.feeAtomic < input.grossAtomic
+    && input.grossAtomic === input.feeAtomic + input.netAtomic
+  if (!input.userId?.trim() || !input.idempotencyKey?.trim() || !input.requestFingerprint?.trim()
+    || !validAmounts || input.network !== "Pi Testnet") {
+    return { ok: false, error: "INVALID_PAYOUT_REQUEST" }
+  }
   const result = await rpc<PiEarningsPayoutRequestResult>("gh_pi_earnings_payout_create", {
     p_user_id: input.userId,
     p_idempotency_key: input.idempotencyKey,
@@ -360,20 +376,6 @@ export async function createPiEarningsPayoutRequest(input: {
   if (!result) return { ok: false, error: "EARNINGS_LEDGER_UNAVAILABLE" }
   return result
 }
-
-/** Compute 3% fee in atomic units (ceil) without DB — for UI preview only; authority is quoteWithdrawal. */
-export function previewWithdrawalFeeAtomic(grossAtomic: number, feeBps = 300): {
-  grossAtomic: number
-  feeAtomic: number
-  netAtomic: number
-} {
-  const gross = Math.floor(Number(grossAtomic) || 0)
-  if (gross <= 0) return { grossAtomic: 0, feeAtomic: 0, netAtomic: 0 }
-  const fee = Math.floor((gross * feeBps + 9999) / 10000)
-  const safeFee = Math.min(fee, Math.max(0, gross - 1))
-  return { grossAtomic: gross, feeAtomic: safeFee, netAtomic: gross - safeFee }
-}
-
 
 /** Releases the user's payout reservations that never reached the provider back to Available. */
 export type PiPayoutReservationExplanation = {

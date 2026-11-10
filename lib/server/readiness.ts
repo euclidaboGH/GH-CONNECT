@@ -376,7 +376,7 @@ export function evaluateReadiness(opts?: {
     status,
     service: "gh-connect",
     version: process.env.npm_package_version || APP_RELEASE_VERSION,
-    programmePhase: "10-platform-acceptance",
+    programmePhase: "10-platform-acceptance; phase2-db-integrity-source-complete",
     environment: {
       nodeEnv,
       vercelEnv: vercelEnv || "local",

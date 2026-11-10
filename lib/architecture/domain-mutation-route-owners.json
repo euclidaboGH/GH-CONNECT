@@ -1,0 +1,169 @@
+{
+  "description": "Single accountable domain owner for each mutating HTTP route. Longest prefix wins. This is a route ownership registry, not proof of a single underlying SQL writer.",
+  "rules": [
+    {
+      "prefix": "/api/economy/earnings",
+      "owner": "walletPiEarnings"
+    },
+    {
+      "prefix": "/api/economy/rewards",
+      "owner": "rewards"
+    },
+    {
+      "prefix": "/api/economy/missions",
+      "owner": "rewards"
+    },
+    {
+      "prefix": "/api/economy/notifications",
+      "owner": "notifications"
+    },
+    {
+      "prefix": "/api/economy/public-id",
+      "owner": "identity"
+    },
+    {
+      "prefix": "/api/economy",
+      "owner": "walletGhc"
+    },
+    {
+      "prefix": "/api/admin/creator-rewards",
+      "owner": "rewards"
+    },
+    {
+      "prefix": "/api/admin/marketplace",
+      "owner": "trustSafety"
+    },
+    {
+      "prefix": "/api/admin/treasury",
+      "owner": "walletGhc"
+    },
+    {
+      "prefix": "/api/operator/operational/membership",
+      "owner": "membership"
+    },
+    {
+      "prefix": "/api/operator/operational/payout",
+      "owner": "walletPiEarnings"
+    },
+    {
+      "prefix": "/api/operator/operational/refunds",
+      "owner": "payments"
+    },
+    {
+      "prefix": "/api/operator/operational/disputes",
+      "owner": "marketplace"
+    },
+    {
+      "prefix": "/api/social/notifications",
+      "owner": "notifications"
+    },
+    {
+      "prefix": "/api/profile/achievements",
+      "owner": "rewards"
+    },
+    {
+      "prefix": "/api/profile",
+      "owner": "identity"
+    },
+    {
+      "prefix": "/api/social",
+      "owner": "feed"
+    },
+    {
+      "prefix": "/api/ads",
+      "owner": "payments"
+    },
+    {
+      "prefix": "/api/system",
+      "owner": "notifications"
+    },
+    {
+      "prefix": "/api/analytics",
+      "owner": "notifications"
+    },
+    {
+      "prefix": "/api/verification",
+      "owner": "identity"
+    },
+    {
+      "prefix": "/api/matching",
+      "owner": "feed"
+    },
+    {
+      "prefix": "/api/engagement",
+      "owner": "rewards"
+    },
+    {
+      "prefix": "/api/referral",
+      "owner": "rewards"
+    },
+    {
+      "prefix": "/api/connections",
+      "owner": "feed"
+    },
+    {
+      "prefix": "/api/reports",
+      "owner": "trustSafety"
+    },
+    {
+      "prefix": "/api/governance",
+      "owner": "trustSafety"
+    },
+    {
+      "prefix": "/api/webhooks",
+      "owner": "payments"
+    },
+    {
+      "prefix": "/api/marketplace",
+      "owner": "marketplace"
+    },
+    {
+      "prefix": "/api/payments",
+      "owner": "payments"
+    },
+    {
+      "prefix": "/api/membership",
+      "owner": "membership"
+    },
+    {
+      "prefix": "/api/identity",
+      "owner": "identity"
+    },
+    {
+      "prefix": "/api/auth",
+      "owner": "identity"
+    },
+    {
+      "prefix": "/api/account",
+      "owner": "identity"
+    },
+    {
+      "prefix": "/api/media",
+      "owner": "media"
+    },
+    {
+      "prefix": "/api/notifications",
+      "owner": "notifications"
+    },
+    {
+      "prefix": "/api/communities",
+      "owner": "communities"
+    },
+    {
+      "prefix": "/api/messaging",
+      "owner": "messaging"
+    },
+    {
+      "prefix": "/api/operator/operational/membership-renew",
+      "owner": "membership"
+    },
+    {
+      "prefix": "/api/operator/operational/membership-expire",
+      "owner": "membership"
+    },
+    {
+      "prefix": "/api/operator/operational/payout-corrections",
+      "owner": "walletPiEarnings"
+    }
+  ]
+}

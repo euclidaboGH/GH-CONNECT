@@ -10,7 +10,7 @@ const feedRoute = readFileSync("app/api/social/feed/route.ts", "utf8")
 const checks = [
   ["feed rejects RPC business-error envelopes instead of returning a false durable empty state", feedRoute.includes('payload.ok !== true') && feedRoute.includes('error: "FEED_PAYLOAD_INVALID"') && feedRoute.includes('status: 503')],
   ["feed filter selection persists and restores Saved", feed.includes('v === "saved"') && feed.includes('localStorage.setItem("ghc.feedFilter", activeFilter)')],
-  ["filter changes reset page window and scroll position", /handleFeedFilterChange[\s\S]*setDisplayedPostsCount\(MOBILE_PAGE_SIZES\.feed\)[\s\S]*scrollTo\(\{ top: 0/.test(feed)],
+  ["filter changes reset page window and scroll position", /handleFeedFilterChange[\s\S]*setDisplayedPostsCount\((?:MOBILE_PAGE_SIZES\.feed|getAdaptiveFeedPageSize\(\))\)[\s\S]*scrollTo\(\{ top: 0/.test(feed)],
   ["server cursor pagination consumes canonical API cursor", feed.includes("refreshFeed({ append: true, limit: 20 })") && readFileSync("contexts/ghc-context.tsx", "utf8").includes("feedCursorRef.current = nextCursor") && readFileSync("contexts/ghc-context.tsx", "utf8").includes("before: requestedCursor?.before")],
   ["pagination uses a synchronous lock against duplicate observer/button events", feed.includes("loadMoreLockRef.current || isLoadingMore") && feed.includes("loadMoreLockRef.current = true") && feed.includes("loadMoreLockRef.current = false")],
   ["manual pagination fallback remains visible", feed.includes('onClick={() => void loadMorePosts()}')],

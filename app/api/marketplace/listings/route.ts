@@ -29,6 +29,7 @@ import { parseMarketplaceAvailability } from "@/lib/marketplace/checkout-contrac
 import { normalizeProductOptions } from "@/lib/marketplace/product-options"
 import { normalizeProductVariants } from "@/lib/marketplace/product-variants"
 import { parseFilterQuery } from "@/lib/filtering/filter-contract"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -50,6 +51,8 @@ export async function POST(request: Request) {
   if (!auth) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
+  const __rateLimited = await enforceUserMutationRateLimit(auth.userId, "marketplace/listings:POST", 12, 60_000, { failClosed: true })
+  if (__rateLimited) return __rateLimited
   if (!listingsDurable()) {
     return NextResponse.json(
       {

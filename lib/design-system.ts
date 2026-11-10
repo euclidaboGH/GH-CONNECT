@@ -9,7 +9,10 @@ export const space = {
   2: "var(--gh-space-2)", // 8px
   3: "var(--gh-space-3)", // 12px
   4: "var(--gh-space-4)", // 16px
-  5: "var(--gh-space-5)", // 24px
+  5: "var(--gh-space-5)", // 24px (legacy product scale)
+  6: "var(--gh-space-6)", // 32px
+  7: "var(--gh-space-7)", // 40px
+  8: "var(--gh-space-8)", // 48px
 } as const
 
 export const radius = {
@@ -21,6 +24,9 @@ export const radius = {
 
 /** Layout insets */
 export const layout = {
+  appShellMax: "var(--gh-shell-max)",
+  pageGutter: "var(--gh-page-gutter)",
+  contentMax: "var(--gh-shell-content-max)",
   bottomNavHeight: "var(--gh-bottom-nav-height)",
   /** nav + safe-area + 16px — every scroll root */
   bottomContentInset: "var(--gh-bottom-content-inset)",
@@ -71,29 +77,32 @@ export const ds = {
 } as const
 
 // Legacy exports (kept for existing imports)
+// Semantic CSS variables already contain complete color values (hex or OKLCH).
+// Wrapping them in hsl() produces invalid CSS and silently breaks consumers.
 export const colors = {
-  primary: "hsl(var(--primary))",
-  background: "hsl(var(--background))",
-  foreground: "hsl(var(--foreground))",
-  muted: "hsl(var(--muted))",
-  border: "hsl(var(--border))",
-  destructive: "hsl(var(--destructive))",
+  primary: "var(--primary)",
+  background: "var(--background)",
+  foreground: "var(--foreground)",
+  muted: "var(--muted)",
+  border: "var(--border)",
+  destructive: "var(--destructive)",
 }
 
 export const spacing = {
-  1: "0.25rem",
-  2: "0.5rem",
-  3: "0.75rem",
-  4: "1rem",
-  5: "1.5rem",
-  6: "2rem",
-  8: "2rem",
+  1: "var(--gh-space-1)",
+  2: "var(--gh-space-2)",
+  3: "var(--gh-space-3)",
+  4: "var(--gh-space-4)",
+  5: "var(--gh-space-5)",
+  6: "var(--gh-space-6)",
+  7: "var(--gh-space-7)",
+  8: "var(--gh-space-8)",
 }
 
 export const borderRadius = {
-  sm: "0.75rem",
-  md: "1rem",
-  lg: "1.25rem",
+  sm: "var(--gh-radius-sm)",
+  md: "var(--gh-radius-md)",
+  lg: "var(--gh-radius-lg)",
   full: "9999px",
 }
 
@@ -103,10 +112,10 @@ export const shadows = {
 }
 
 export const typography = {
-  display: { fontSize: "1.25rem", fontWeight: "800" },
-  title: { fontSize: "1rem", fontWeight: "700" },
-  body: { fontSize: "0.875rem", fontWeight: "400" },
-  meta: { fontSize: "0.6875rem", fontWeight: "500" },
+  display: { fontSize: "var(--gh-type-display)", lineHeight: "var(--gh-leading-display)", fontWeight: "800" },
+  title: { fontSize: "var(--gh-type-title)", lineHeight: "var(--gh-leading-title)", fontWeight: "700" },
+  body: { fontSize: "var(--gh-type-body)", lineHeight: "var(--gh-leading-body)", fontWeight: "400" },
+  meta: { fontSize: "var(--gh-type-meta)", lineHeight: "var(--gh-leading-meta)", fontWeight: "500" },
 }
 
 export const zIndex = {
@@ -132,9 +141,9 @@ export const breakpoints = {
 }
 
 export const components = {
-  button: { minHeight: "44px", minWidth: "44px" },
-  card: { borderRadius: "16px", padding: "1rem" },
-  modal: { maxWidth: "448px", borderRadius: "16px" },
+  button: { minHeight: "var(--gh-control-height)", minWidth: "var(--gh-control-height)" },
+  card: { borderRadius: "var(--gh-radius-md)", padding: "var(--gh-card-padding)" },
+  modal: { maxWidth: "var(--gh-dialog-max-width)", borderRadius: "var(--gh-radius-lg)" },
 }
 
 export const piBrowser = {

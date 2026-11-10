@@ -2,9 +2,9 @@
  * Phase 4 — marketplace platform commission (seller proceeds).
  * Server-authoritative basis points; never trust client-reported fees.
  *
- * Env:
- *   GHC_MARKETPLACE_PLATFORM_FEE_BPS — 0–10000 (default 500 = 5%)
- *   GHC_MARKETPLACE_MIN_PLATFORM_FEE_MINOR — optional floor in minor units (default 0)
+ * Until the database-backed fee policy is reconciled, the only safe policy is
+ * the immutable 500 bps / 5% policy used by the proceeds snapshot migration.
+ * Runtime environment overrides are deliberately ignored to prevent app/SQL drift.
  */
 
 export type CommissionSplit = {
@@ -15,14 +15,10 @@ export type CommissionSplit = {
   currency: string
 }
 
-function clampBps(raw: unknown): number {
-  const n = Number(raw)
-  if (!Number.isFinite(n) || n < 0) return 500
-  return Math.min(10_000, Math.floor(n))
-}
+const CANONICAL_PLATFORM_FEE_BPS = 500
 
 export function platformFeeBps(): number {
-  return clampBps(process.env.GHC_MARKETPLACE_PLATFORM_FEE_BPS ?? 500)
+  return CANONICAL_PLATFORM_FEE_BPS
 }
 
 /**
@@ -34,29 +30,27 @@ export function platformFeeBps(): number {
 export function splitMarketplaceCommission(input: {
   grossAmount: number
   currency: string
-  /** Override bps for tests; production uses env */
-  feeBps?: number
 }): CommissionSplit | { ok: false; error: string } {
   const gross = Number(input.grossAmount)
   if (!Number.isFinite(gross) || gross < 0) {
     return { ok: false, error: "INVALID_GROSS" }
   }
   const currency = String(input.currency || "GHC").toUpperCase().slice(0, 8)
-  const bps = input.feeBps !== undefined ? clampBps(input.feeBps) : platformFeeBps()
+  const bps = platformFeeBps()
 
-  // Work in 1e4 scale to avoid float drift, then floor fee
-  const grossMinor = Math.round(gross * 10000)
-  const feeMinor = Math.floor((grossMinor * bps) / 10_000)
-  const minFeeEnv = Number(process.env.GHC_MARKETPLACE_MIN_PLATFORM_FEE_MINOR || 0)
-  const minFee = Number.isFinite(minFeeEnv) && minFeeEnv > 0 ? Math.floor(minFeeEnv) : 0
-  const platformFeeMinorScaled = Math.min(grossMinor, Math.max(feeMinor, minFee > 0 ? minFee * 100 : feeMinor))
-  const sellerMinorScaled = grossMinor - platformFeeMinorScaled
+  // Keep the same eight-decimal scale as gh_marketplace_order_proceeds.numeric(18,8).
+  // BigInt arithmetic prevents the app-side fee from rounding differently than the
+  // immutable database proceeds snapshot for prices with more than four decimals.
+  const grossScaled = BigInt(gross.toFixed(8).replace('.', ''))
+  const feeScaled = (grossScaled * BigInt(bps)) / 10_000n
+  const platformFeeScaled = grossScaled < feeScaled ? grossScaled : feeScaled
+  const sellerScaled = grossScaled - platformFeeScaled
 
   return {
-    grossMinor: grossMinor / 10000,
+    grossMinor: Number(grossScaled) / 100_000_000,
     platformFeeBps: bps,
-    platformFeeMinor: platformFeeMinorScaled / 10000,
-    sellerProceedsMinor: sellerMinorScaled / 10000,
+    platformFeeMinor: Number(platformFeeScaled) / 100_000_000,
+    sellerProceedsMinor: Number(sellerScaled) / 100_000_000,
     currency,
   }
 }
@@ -65,6 +59,6 @@ export function commissionPolicyPublic() {
   return {
     platformFeeBps: platformFeeBps(),
     note: "Platform fee is taken from gross marketplace order; seller receives the remainder after successful payment verification.",
-    envKey: "GHC_MARKETPLACE_PLATFORM_FEE_BPS",
+    platformFeePolicy: "fixed_500_bps_until_database_policy_reconciliation",
   }
 }

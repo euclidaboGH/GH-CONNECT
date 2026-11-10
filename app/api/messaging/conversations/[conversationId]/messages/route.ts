@@ -131,7 +131,7 @@ export async function POST(request: Request, ctx: Ctx) {
     }
     const clientMessageId =
       typeof body?.clientMessageId === "string" ? body.clientMessageId.trim() : null
-    if (clientMessageId !== null && (!clientMessageId || clientMessageId.length > 180 || /[\u0000-\u001f\u007f]/.test(clientMessageId))) {
+    if (clientMessageId !== null && (!clientMessageId || clientMessageId.length > 80 || /[\u0000-\u001f\u007f]/.test(clientMessageId))) {
       return NextResponse.json({ ok: false, error: "INVALID_CLIENT_MESSAGE_ID" }, { status: 400, headers: { "Cache-Control": "no-store" } })
     }
     const replyToMessageId =

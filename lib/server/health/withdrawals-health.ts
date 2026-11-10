@@ -712,6 +712,7 @@ function evaluatePayoutGates(): WithdrawalsPayoutGate[] {
     flagGate("PI_EARNINGS_PAYOUT_EXECUTION_ENABLED", "true"),
     flagGate("PI_A2U_ENABLED", "true"),
     flagGate("PI_A2U_TESTNET_ONLY", "true"),
+    flagGate("PI_EARNINGS_AUTO_EXECUTE", "true"),
     flagGate("PI_ENV", "production"),
     secretGate("GH_PIN_PROOF_SECRET", 32),
     secretGate("PI_EARNINGS_EXECUTOR_KEY", 16, "GHC_A2U_ADMIN_KEY"),

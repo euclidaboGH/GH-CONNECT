@@ -22,7 +22,8 @@ import {
   EmptyMessagesState,
 } from "./message-components"
 import type { Conversation, Message } from "@/lib/ghc-types"
-import { Users, MessageCircle, ArrowRight, ShieldCheck, Sparkles } from "lucide-react"
+import { Users, MessageCircle, ArrowRight, ShieldCheck, Sparkles, Search, Images, X, FileText, AudioLines, Info } from "lucide-react"
+import { LazyImage } from "./lazy-image"
 import { navigateTo } from "@/lib/navigation/navigate"
 import { isDurableMessagingEnabled } from "@/lib/messaging/durable-flag"
 import { apiTouchConversationPresence, apiEnsureConversationMember } from "@/lib/messaging/server-messaging-sync"
@@ -120,6 +121,15 @@ export function MessageScreen() {
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
   const [replyToId, setReplyToId] = useState<string | null>(null)
   const [replyPreview, setReplyPreview] = useState<string | null>(null)
+  const [messageSearchOpen, setMessageSearchOpen] = useState(false)
+  const [messageSearchQuery, setMessageSearchQuery] = useState("")
+  const [serverSearchResults, setServerSearchResults] = useState<Message[] | null>(null)
+  const [serverSearchTotal, setServerSearchTotal] = useState(0)
+  const [serverSearchLoading, setServerSearchLoading] = useState(false)
+  const [serverSearchError, setServerSearchError] = useState("")
+  const [sharedMediaOpen, setSharedMediaOpen] = useState(false)
+  const [conversationDetailsOpen, setConversationDetailsOpen] = useState(false)
+  const messageSearchInputRef = useRef<HTMLInputElement>(null)
   const [peerPresence, setPeerPresence] = useState<PeerPresence | null>(null)
   const [threadContext, setThreadContext] = useState<{ type?: string; orderId?: string; listingId?: string } | null>(null)
   const [presenceSynced, setPresenceSynced] = useState(false)
@@ -554,6 +564,52 @@ export function MessageScreen() {
     return allMessages.slice(-windowSize)
   }, [allMessages, windowSize])
 
+  // Full-history search is executed by the membership-checked, GIN-indexed server RPC.
+  useEffect(() => {
+    const q = messageSearchQuery.trim()
+    if (!messageSearchOpen || q.length < 2 || !selectedId || !isDurableMessagingEnabled()) {
+      setServerSearchResults(null); setServerSearchTotal(0); setServerSearchError(""); setServerSearchLoading(false)
+      return
+    }
+    const controller = new AbortController()
+    setServerSearchLoading(true); setServerSearchError("")
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/messaging/conversations/${encodeURIComponent(selectedId)}/search?q=${encodeURIComponent(q)}&limit=50&offset=0`, { cache: "no-store", signal: controller.signal })
+        const payload = await response.json().catch(() => null)
+        if (!response.ok || !payload?.ok || !Array.isArray(payload.results)) throw new Error(payload?.error || "SEARCH_UNAVAILABLE")
+        const mapped: Message[] = payload.results.map((row: Record<string, unknown>) => ({
+          id: String(row.id), senderId: String(row.sender_id), text: String(row.body || ""),
+          createdAt: Date.parse(String(row.created_at)) || Date.now(),
+          status: (row.status === "delivered" || row.status === "read" || row.status === "failed" ? row.status : "sent"),
+          isEdited: Boolean(row.edited_at), editedAt: row.edited_at ? Date.parse(String(row.edited_at)) : undefined,
+        }))
+        if (!controller.signal.aborted) { setServerSearchResults(mapped); setServerSearchTotal(Number(payload.total) || mapped.length) }
+      } catch (error) {
+        if (!controller.signal.aborted) { setServerSearchResults([]); setServerSearchTotal(0); setServerSearchError(error instanceof Error ? error.message : "SEARCH_FAILED") }
+      } finally { if (!controller.signal.aborted) setServerSearchLoading(false) }
+    }, 250)
+    return () => { window.clearTimeout(timer); controller.abort() }
+  }, [messageSearchOpen, messageSearchQuery, selectedId])
+
+  const visibleMessages = useMemo(() => {
+    const q = messageSearchQuery.trim()
+    if (!q) return messages
+    if (isDurableMessagingEnabled()) return serverSearchResults || []
+    const normalized = q.toLocaleLowerCase()
+    return messages.filter((message) => String(message.text || "").toLocaleLowerCase().includes(normalized))
+  }, [messages, messageSearchQuery, serverSearchResults])
+
+  // Shared media is intentionally derived from the already-loaded message window.
+  // A complete archive requires a paginated, membership-checked server endpoint.
+  const sharedMedia = useMemo(() => messages.flatMap((message) =>
+    (Array.isArray(message.mediaAttachments) ? message.mediaAttachments : []).map((media) => ({
+      ...media,
+      messageId: message.id,
+      createdAt: message.createdAt,
+    }))
+  ), [messages])
+
   useEffect(() => {
     if (!selectedId || selected?.id !== selectedId || markedRef.current === selectedId) return
     markedRef.current = selectedId
@@ -577,6 +633,8 @@ export function MessageScreen() {
       setDraft("")
       setReplyToId(null)
       setReplyPreview(null)
+      setMessageSearchOpen(false)
+      setMessageSearchQuery("")
       setWindowSize(MESSAGE_WINDOW)
       markedRef.current = null
     })
@@ -602,6 +660,8 @@ export function MessageScreen() {
       setSelectedId(null)
       setReplyToId(null)
       setReplyPreview(null)
+      setMessageSearchOpen(false)
+      setMessageSearchQuery("")
       setWindowSize(MESSAGE_WINDOW)
     })
   }, [stopTyping])
@@ -672,16 +732,34 @@ export function MessageScreen() {
   }, [draft, selectedId, sending, sendMessage, replyToMessage, replyToId, isOffline, allMessages, stopTyping])
 
   useEffect(() => {
+    if (!messageSearchOpen) return
+    const frame = requestAnimationFrame(() => messageSearchInputRef.current?.focus())
+    return () => cancelAnimationFrame(frame)
+  }, [messageSearchOpen])
+
+  useEffect(() => {
     if (!selectedId) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault()
-        closeThread()
+      if (e.key !== "Escape") return
+      e.preventDefault()
+      if (sharedMediaOpen) {
+        setSharedMediaOpen(false)
+        return
       }
+      if (conversationDetailsOpen) {
+        setConversationDetailsOpen(false)
+        return
+      }
+      if (messageSearchOpen) {
+        setMessageSearchOpen(false)
+        setMessageSearchQuery("")
+        return
+      }
+      closeThread()
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [selectedId, closeThread])
+  }, [selectedId, closeThread, messageSearchOpen, sharedMediaOpen, conversationDetailsOpen])
 
   const goMatches = useCallback(() => {
     if (!navigateTo("matches")) {
@@ -707,7 +785,7 @@ export function MessageScreen() {
     const isCommunity = isCommunityConversation(selected)
 
     return (
-      <div className="gh-world-messages gh-messages-shell flex h-full min-h-0 flex-col bg-background text-foreground contain-content" role="region" aria-label="Conversation thread">
+      <div className="gh-world-messages gh-messages-shell relative flex h-full min-h-0 flex-col bg-background text-foreground contain-content" role="region" aria-label="Conversation thread">
         <ChatHeader
           participantName={selected.groupName || selected.participantName || "Chat"}
           participantPhoto={selected.groupPhoto || selected.participantPhoto || ""}
@@ -716,6 +794,12 @@ export function MessageScreen() {
           lastSeenLabel={presenceSynced ? formatLastSeen(peerPresence?.lastSeenAt) : "Last seen unavailable"}
           isCommunity={isCommunity}
           onBack={closeThread}
+          onSearch={() => {
+            setMessageSearchOpen((open) => !open)
+            setMessageSearchQuery("")
+          }}
+          onSharedMedia={() => setSharedMediaOpen(true)}
+          onDetails={() => setConversationDetailsOpen(true)}
           onOpenProfile={() => {
             if (isCommunity) return
             try {
@@ -729,6 +813,98 @@ export function MessageScreen() {
             }
           }}
         />
+        {conversationDetailsOpen ? (
+          <div className="absolute inset-0 z-[64] flex flex-col bg-background/95 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="gh-conversation-details-title">
+            <div className="flex shrink-0 items-center justify-between border-b border-border bg-card px-4 py-3">
+              <div className="min-w-0">
+                <h2 id="gh-conversation-details-title" className="text-sm font-bold text-foreground">Conversation information</h2>
+                <p className="text-[11px] text-muted-foreground">Details and available conversation actions</p>
+              </div>
+              <button type="button" onClick={() => setConversationDetailsOpen(false)} className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground hover:bg-muted" aria-label="Close conversation information">
+                <X size={19} />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4" style={{ WebkitOverflowScrolling: "touch" }}>
+              <section className="rounded-2xl border border-border bg-card p-4">
+                <div className="flex items-center gap-3">
+                  <LazyImage src={selected.groupPhoto || selected.participantPhoto || "/placeholder.svg?width=80&height=80"} alt="" className="h-14 w-14 rounded-full object-cover" />
+                  <div className="min-w-0">
+                    <h3 className="truncate text-base font-bold text-foreground">{selected.groupName || selected.participantName || "Conversation"}</h3>
+                    <p className="text-xs text-muted-foreground">{isCommunity ? "Community conversation" : selected.conversationType === "group" ? "Group conversation" : "Direct conversation"}</p>
+                    {!isCommunity && selected.conversationType !== "group" ? <p className="text-[11px] text-muted-foreground">{presenceSynced && peerPresence?.online ? "Active now" : formatLastSeen(peerPresence?.lastSeenAt)}</p> : null}
+                  </div>
+                </div>
+              </section>
+              <section className="rounded-2xl border border-border bg-card p-4">
+                <div className="mb-3 flex items-center gap-2 text-sm font-bold text-foreground"><Users size={16} /> Participants</div>
+                <p className="text-sm text-foreground">{selected.conversationType === "group" || isCommunity ? `${Array.isArray(selected.memberIds || selected.members) ? (selected.memberIds || selected.members || []).length : 0} participant IDs available in this conversation` : "You and one other participant"}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Private participant details are only shown where the current conversation data provides them.</p>
+              </section>
+              <section className="rounded-2xl border border-border bg-card p-4">
+                <div className="mb-2 flex items-center gap-2 text-sm font-bold text-foreground"><Info size={16} /> Conversation activity</div>
+                <div className="flex items-center justify-between py-1.5 text-xs"><span className="text-muted-foreground">Messages currently loaded</span><strong className="text-foreground">{messages.length}</strong></div>
+                <div className="flex items-center justify-between py-1.5 text-xs"><span className="text-muted-foreground">Shared items currently loaded</span><strong className="text-foreground">{sharedMedia.length}</strong></div>
+                <div className="flex items-center justify-between py-1.5 text-xs"><span className="text-muted-foreground">Last activity</span><strong className="text-right text-foreground">{selected.lastMessageTime ? new Date(selected.lastMessageTime).toLocaleString() : "Unavailable"}</strong></div>
+              </section>
+              <section className="rounded-2xl border border-border bg-card p-4">
+                <div className="mb-2 flex items-center gap-2 text-sm font-bold text-foreground"><ShieldCheck size={16} /> Privacy and safety</div>
+                <p className="text-xs leading-relaxed text-muted-foreground">Conversation access continues to follow authenticated membership checks. Blocking, reporting and read-receipt preference controls are not presented as configured here unless their durable settings are confirmed.</p>
+              </section>
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => { setConversationDetailsOpen(false); setSharedMediaOpen(true) }} className="rounded-xl border border-border bg-card px-3 py-3 text-sm font-semibold text-foreground hover:bg-muted"><Images size={16} className="mr-2 inline" />Shared media</button>
+                {!isCommunity ? <button type="button" onClick={() => { setConversationDetailsOpen(false); window.dispatchEvent(new CustomEvent("ghc:open-profile", { detail: { userId: selected.participantId, name: selected.participantName } })) }} className="rounded-xl border border-border bg-card px-3 py-3 text-sm font-semibold text-foreground hover:bg-muted">View profile</button> : null}
+              </div>
+              <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">This is the Phase 1 information-centre foundation. Durable nicknames, quick-reaction defaults, read-receipt preferences, contact sharing and group-creation workflows will only be enabled after their member-scoped persistence and privacy contracts pass review.</p>
+            </div>
+          </div>
+        ) : null}
+        {sharedMediaOpen ? (
+          <div className="absolute inset-0 z-[65] flex flex-col bg-background/95 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="gh-shared-media-title">
+            <div className="flex shrink-0 items-center justify-between border-b border-border bg-card px-4 py-3">
+              <div className="min-w-0">
+                <h2 id="gh-shared-media-title" className="text-sm font-bold text-foreground">Shared media</h2>
+                <p className="text-[11px] text-muted-foreground">{sharedMedia.length} items in the loaded conversation history</p>
+              </div>
+              <button type="button" onClick={() => setSharedMediaOpen(false)} className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground hover:bg-muted" aria-label="Close shared media">
+                <X size={19} />
+              </button>
+            </div>
+            {sharedMedia.length ? (
+              <div className="min-h-0 flex-1 overflow-y-auto p-3" style={{ WebkitOverflowScrolling: "touch" }}>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {sharedMedia.map((media, index) => (
+                    <div key={`${media.id || media.url || "media"}-${index}`} className="min-w-0 overflow-hidden rounded-xl border border-border bg-card">
+                      {media.type === "image" || media.type === "gif" ? (
+                        <a href={media.url} target="_blank" rel="noopener noreferrer" className="block">
+                          <LazyImage src={media.thumbnail || media.url} alt={media.fileName || "Shared image"} className="aspect-square w-full object-cover" />
+                        </a>
+                      ) : media.type === "video" ? (
+                        <video className="aspect-square w-full bg-black object-contain" controls preload="metadata" src={media.url} />
+                      ) : media.type === "voice" ? (
+                        <div className="flex aspect-square flex-col justify-center gap-3 p-3">
+                          <div className="flex items-center gap-2 text-xs font-semibold"><AudioLines size={16} /> Voice message</div>
+                          <audio controls preload="none" src={media.url} className="w-full" aria-label="Play shared voice message" />
+                        </div>
+                      ) : (
+                        <a href={media.url} target="_blank" rel="noopener noreferrer" className="flex aspect-square flex-col items-center justify-center gap-2 p-3 text-center text-xs font-semibold text-foreground">
+                          <FileText size={28} className="text-muted-foreground" />
+                          <span className="line-clamp-3 break-all">{media.fileName || "Shared file"}</span>
+                        </a>
+                      )}
+                      <p className="truncate border-t border-border px-2 py-1.5 text-[10px] text-muted-foreground">{media.fileName || media.type || "Attachment"}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
+                <Images size={34} className="mb-3 text-muted-foreground" />
+                <p className="text-sm font-bold text-foreground">No shared media in this loaded history</p>
+                <p className="mt-1 max-w-xs text-xs text-muted-foreground">Photos, videos, voice notes and files shared in messages will appear here. Older items may require loading earlier messages.</p>
+              </div>
+            )}
+          </div>
+        ) : null}
               {threadContext?.type === "marketplace_order" || threadContext?.orderId ? (
                 <div className="shrink-0 border-b border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-950 dark:text-amber-100">
                   <p className="font-bold">Marketplace order chat</p>
@@ -743,6 +919,31 @@ export function MessageScreen() {
         <div className="sr-only" role="status" aria-live="polite">
           {statusMsg || (sending ? "Sending message" : "")}
         </div>
+
+        {messageSearchOpen ? (
+          <div className="shrink-0 border-b border-border/70 bg-card px-3 py-2" role="search" aria-label="Search conversation history">
+            <label htmlFor="gh-message-search" className="sr-only">Search recent messages</label>
+            <div className="flex items-center gap-2">
+              <Search size={16} className="shrink-0 text-muted-foreground" aria-hidden="true" />
+              <input
+                ref={messageSearchInputRef}
+                id="gh-message-search"
+                type="search"
+                value={messageSearchQuery}
+                onChange={(event) => setMessageSearchQuery(event.target.value.slice(0, 120))}
+                placeholder="Search entire conversation…"
+                maxLength={120}
+                className="min-h-10 min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                autoComplete="off"
+              />
+              <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground" aria-live="polite">
+                {messageSearchQuery.trim() ? (serverSearchLoading ? "Searching…" : `${serverSearchTotal} found`) : `${messages.length} loaded`}
+              </span>
+              <button type="button" onClick={() => { setMessageSearchOpen(false); setMessageSearchQuery("") }} className="min-h-9 min-w-9 rounded-lg text-muted-foreground hover:bg-muted" aria-label="Close message search">×</button>
+            </div>
+            <p className="mt-1 pl-6 text-[10px] text-muted-foreground">Searches indexed message history on the server. Results are limited to this conversation.</p>{serverSearchError ? <p className="mt-1 pl-6 text-[10px] text-destructive" role="alert">Search unavailable: {serverSearchError}</p> : null}
+          </div>
+        ) : null}
 
         {isOffline ? (
           <div
@@ -769,20 +970,22 @@ export function MessageScreen() {
               Load earlier ({allMessages.length - windowSize} more)
             </button>
           )}
-          {messages.length === 0 ? (
+          {visibleMessages.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center px-6 text-center">
               <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 dark:bg-emerald-950/40">
                 <MessageCircle size={28} className="text-emerald-600" />
               </div>
-              <p className="text-[14px] font-bold text-foreground">No messages yet</p>
+              <p className="text-[14px] font-bold text-foreground">{messageSearchQuery.trim() ? "No matching messages" : "No messages yet"}</p>
               <p className="mt-1 text-[12px] text-muted-foreground">
-                {isCommunity
-                  ? "Be the first to say hello in this community chat."
-                  : `Say hello to ${selected.participantName || "them"}.`}
+                {messageSearchQuery.trim()
+                  ? "Try another word or clear your search."
+                  : isCommunity
+                    ? "Be the first to say hello in this community chat."
+                    : `Say hello to ${selected.participantName || "them"}.`}
               </p>
             </div>
           ) : (
-            messages.map((msg) => (
+            visibleMessages.map((msg) => (
               <MessageBubble
                 key={msg.id}
                 message={msg}
@@ -967,7 +1170,7 @@ export function MessageScreen() {
       <header className="shrink-0 border-b border-border/50 bg-card/95 px-3 pb-1.5 pt-[max(0.25rem,env(safe-area-inset-top))] backdrop-blur-md">
         <div className="flex items-center justify-between gap-2">
           <div>
-            <h1 className="text-[16px] font-bold leading-tight tracking-tight text-foreground">{msg("messagesTitle")}</h1>
+            <h1 className="gh-type-title font-bold tracking-tight text-foreground">{msg("messagesTitle")}</h1>
             <p className="text-[11px] leading-tight text-muted-foreground">
               {msg("messagesSubtitle")}
             </p>

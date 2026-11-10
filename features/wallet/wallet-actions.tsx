@@ -43,7 +43,7 @@ export function WalletPrimaryActions({
         {
           id: "withdraw",
           label: "Withdraw",
-          hint: "To your Pi wallet",
+          hint: "To Pi wallet",
           icon: <ArrowUpRight size={20} strokeWidth={2.25} />,
           onClick: onSend,
           tone: "violet",
@@ -100,24 +100,17 @@ export function WalletPrimaryActions({
 
   return (
     <div className="space-y-2" role="group" aria-label={isPi ? "PI wallet actions" : "GHC wallet actions"}>
-      <div className="flex items-center justify-between gap-2 px-0.5">
-        <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
-          {embedded ? (isPi ? "Pi" : "GHC") : isPi ? "Pi actions" : "GHC actions"}
-        </p>
-        <span
-          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-            isPi
-              ? "bg-violet-100 text-violet-800 dark:bg-violet-950/50 dark:text-violet-200"
-              : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200"
-          }`}
-        >
-          {isPi ? "π selected" : "₲ selected"}
-        </span>
-      </div>
+      {embedded ? null : (
+        <div className="flex items-center justify-between gap-2 px-0.5">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+            {isPi ? "Pi actions" : "GHC actions"}
+          </p>
+        </div>
+      )}
       <div
         className={
           embedded
-            ? `grid gap-1.5 ${isPi ? "grid-cols-2" : "grid-cols-4"}`
+            ? `grid gap-2 ${isPi ? "grid-cols-2" : "grid-cols-4"}`
             : `grid gap-2 rounded-2xl border border-border/70 bg-card p-2.5 shadow-[var(--gh-card-shadow)] ${
                 isPi ? "grid-cols-2" : "grid-cols-4"
               }`
@@ -134,17 +127,21 @@ export function WalletPrimaryActions({
               disabled={disabled}
               onClick={a.onClick}
               className={`group flex min-h-[4.25rem] items-center gap-3 rounded-2xl px-3.5 py-3 text-left transition active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
-                primary ? `${tone.solid} shadow-lg` : `border border-border/70 bg-card ${tone.soft}`
+                primary
+                  ? `${tone.solid} shadow-lg`
+                  : embedded
+                    ? "border border-white/15 bg-white/10 text-white"
+                    : `border border-border/70 bg-card ${tone.soft}`
               }`}
               aria-label={`${a.label}: ${a.hint}`}
               data-testid={a.id === "withdraw" ? "wallet-primary-withdraw" : undefined}
             >
-              <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${primary ? tone.chip : "bg-white/70 dark:bg-white/10"}`}>
+              <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${primary || embedded ? tone.chip : "bg-white/70 dark:bg-white/10"}`}>
                 {a.icon}
               </span>
-              <span className="min-w-0">
-                <span className="block text-[14px] font-extrabold leading-tight">{a.label}</span>
-                <span className="mt-0.5 block truncate text-[11px] font-medium opacity-80">{a.hint}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block whitespace-nowrap text-[14px] font-extrabold leading-tight">{a.label}</span>
+                <span className="mt-0.5 block truncate text-[11px] font-medium opacity-75">{a.hint}</span>
               </span>
             </button>
           ) : (
@@ -158,13 +155,13 @@ export function WalletPrimaryActions({
             >
               <span
                 className={`flex h-12 w-12 items-center justify-center rounded-full transition group-active:scale-95 ${
-                  primary ? `${tone.solid} shadow-lg` : tone.soft
+                  primary ? `${tone.solid} shadow-lg` : embedded ? "border border-white/15 bg-white/10 text-white" : tone.soft
                 }`}
               >
                 {a.icon}
               </span>
-              <span className="text-[12px] font-extrabold leading-none text-foreground">{a.label}</span>
-              <span className="max-w-full truncate px-0.5 text-[10px] font-medium text-muted-foreground">{a.hint}</span>
+              <span className={`whitespace-nowrap text-[12px] font-extrabold leading-none ${embedded ? "text-white" : "text-foreground"}`}>{a.label}</span>
+              <span className={`max-w-full truncate px-0.5 text-[10px] font-medium ${embedded ? "text-white/55" : "text-muted-foreground"}`}>{a.hint}</span>
             </button>
           )
         })}

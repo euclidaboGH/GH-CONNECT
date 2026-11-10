@@ -5,7 +5,6 @@
  */
 
 import { NextResponse } from "next/server"
-import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { revokeOtherSessionsForUser } from "@/lib/server/identity/session-store"
 import { requireAccountSecurityContext } from "@/lib/server/identity/auth-integrity"
 import { requireRecentStepUp, revokeStepUpsForSession } from "@/lib/server/identity/step-up-store"
@@ -18,19 +17,10 @@ export const dynamic = "force-dynamic"
 export async function POST(request: Request) {
   try {
     pruneRateLimitBuckets()
-    const auth = await resolveAuthenticatedUser(request.headers)
-    if (!auth) {
-      return NextResponse.json(
-        { ok: false, error: "AUTH_REQUIRED" },
-        { status: 401, headers: { "Cache-Control": "no-store" } }
-      )
-    }
-    if (auth.source !== "gh_session" || !auth.sessionId) {
-      return NextResponse.json(
-        { ok: false, error: "SESSION_REQUIRED" },
-        { status: 403, headers: { "Cache-Control": "no-store" } }
-      )
-    }
+    // Central gate enforces both a gh_session and durable session storage in production.
+    const security = await requireAccountSecurityContext(request.headers)
+    if (!security.ok) return security.response
+    const auth = security.auth
 
     const rl = checkRateLimit(`sessions_revoke_others:${auth.userId}`, 5, 60_000)
     if (!rl.ok) {

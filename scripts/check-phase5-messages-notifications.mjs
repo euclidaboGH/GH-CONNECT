@@ -30,6 +30,7 @@ test('messaging integrity fails closed without durable store in production', /ME
 test('conversation membership is enforced before treating member as authorized', /requireConversationMember/.test(integrity) && /isMember/.test(integrity))
 test('appendMessage rejects empty body and non-members', /EMPTY_BODY/.test(store) && /FORBIDDEN/.test(store))
 test('appendMessage supports clientMessageId idempotency', /clientMessageId/.test(store) && /idempotent/.test(store))
+test('message route rejects idempotency keys longer than the store’s 80-character contract', /clientMessageId.length > 80/.test(messagesRoute) && /slice\(0, 80\)/.test(store))
 test('unified notification list binds recipient to authenticated server user id parameter', /p_recipient_user_id/.test(unified))
 test('unified mark-read is server-side only for recipient', /gh_notification_inbox_mark_read/.test(unified))
 test('notifications API requires auth and rate-limits mark-read', /AUTH_REQUIRED/.test(notifRoute) && /checkRateLimit/.test(notifRoute))

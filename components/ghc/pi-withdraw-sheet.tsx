@@ -11,7 +11,7 @@
 
 import { PinRecoveryPanel } from "./pin-recovery-panel"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Loader2, ShieldCheck, X, Wallet } from "lucide-react"
+import { Eye, EyeOff, Loader2, ShieldCheck, X, Wallet } from "lucide-react"
 import { apiRequest } from "@/lib/client/api-request"
 import { userFacingError } from "@/lib/ux/user-facing-errors"
 import { fetchWalletAuthorizationStatus, requestPiWalletConsent } from "@/lib/client/pi-wallet-consent"
@@ -78,6 +78,9 @@ type AuthSnap = {
   authorizationActive: boolean
   mappedUsername: string | null
   hasMapping: boolean
+  /** Linked Pi app UID when the server reports one (never shown in full when sensitive). */
+  piAppUid?: string | null
+  uidMatches?: boolean
 }
 
 const PI_SCALE = 10_000_000 // must equal PI_ATOMIC_SCALE in lib/wallet/pi-amount.ts
@@ -120,9 +123,27 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
   const [pinConfigured, setPinConfigured] = useState<boolean | null>(null)
   const [pinStatusError, setPinStatusError] = useState<string | null>(null)
   const [pinInput, setPinInput] = useState("")
+  const [showPin, setShowPin] = useState(false)
   const [pinBusy, setPinBusy] = useState(false)
 
-  const maxPi = typeof availablePi === "number" && Number.isFinite(availablePi) ? Math.max(0, availablePi) : 0
+  // Sticky max: once we have a positive withdrawable figure for this open session,
+  // do not regress to 0 when the parent briefly re-hydrates with null (looks like a reserve wipe).
+  const incomingMax =
+    typeof availablePi === "number" && Number.isFinite(availablePi) ? Math.max(0, availablePi) : null
+  const stickyMaxRef = useRef<number>(0)
+  if (open && incomingMax !== null && incomingMax > 0) {
+    stickyMaxRef.current = incomingMax
+  }
+  if (!open) {
+    stickyMaxRef.current = 0
+  }
+  const maxPi = incomingMax !== null && incomingMax > 0
+    ? incomingMax
+    : stickyMaxRef.current > 0
+      ? stickyMaxRef.current
+      : incomingMax === 0
+        ? 0
+        : stickyMaxRef.current
   const latestMaxPiRef = useRef(maxPi)
   latestMaxPiRef.current = maxPi
   const loadAuthRef = useRef<(() => Promise<boolean>) | null>(null)
@@ -134,21 +155,46 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
   const loadAuth = useCallback(async (): Promise<boolean> => {
     setAuthLoading(true)
     try {
-      // Database-backed status; a browser flag is never trusted.
-      const res = await fetchWalletAuthorizationStatus()
+      // Database-backed status; a browser flag is never trusted. Bound the wait so the sheet cannot hang.
+      const res = await Promise.race([
+        fetchWalletAuthorizationStatus(),
+        new Promise<{ ok: false; code: string }>((resolve) =>
+          setTimeout(() => resolve({ ok: false, code: "AUTH_STATUS_TIMEOUT" }), 10_000),
+        ),
+      ])
       if (res.ok) {
         const active = res.status.authorizationActive === true && res.status.uidMatchesAuthorization === true
         setAuth({
           authorizationActive: active,
           mappedUsername: res.status.mappedUsername || linkedUsername || null,
-          hasMapping: res.status.hasMapping,
+          hasMapping: res.status.hasMapping === true,
+          piAppUid: res.status.authorizedPiAppUid || null,
+          uidMatches: res.status.uidMatchesAuthorization === true,
         })
         return active
       }
-      setAuth({ authorizationActive: false, mappedUsername: linkedUsername || null, hasMapping: false })
+      setAuth({
+        authorizationActive: false,
+        mappedUsername: linkedUsername || null,
+        hasMapping: false,
+        piAppUid: null,
+        uidMatches: false,
+      })
+      if (!res.ok && "code" in res && res.code === "AUTH_STATUS_TIMEOUT") {
+        setConsentError({
+          message: "Could not verify wallet authorization in time. Check your connection and try again.",
+          retryable: true,
+        })
+      }
       return false
     } catch {
-      setAuth({ authorizationActive: false, mappedUsername: linkedUsername || null, hasMapping: false })
+      setAuth({
+        authorizationActive: false,
+        mappedUsername: linkedUsername || null,
+        hasMapping: false,
+        piAppUid: null,
+        uidMatches: false,
+      })
       return false
     } finally {
       setAuthLoading(false)
@@ -159,6 +205,9 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
   useEffect(() => {
     if (!open) {
       wasOpenRef.current = false
+      // Never keep a typed PIN around once the sheet is closed.
+      setPinInput("")
+      setShowPin(false)
       return
     }
     // Initialise once per open transition. Balance and linked-identity hydration must
@@ -353,6 +402,8 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
         authorizationActive: true,
         mappedUsername: result.status.mappedUsername || destination,
         hasMapping: true,
+        piAppUid: result.status.authorizedPiAppUid || null,
+        uidMatches: result.status.uidMatchesAuthorization === true,
       })
       setConsentDone(true)
       try {
@@ -441,6 +492,9 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
           return
         }
         pinProof = String(vBody?.pinProof || "")
+        // The PIN has done its job: never keep it on screen or in memory beyond verification.
+        setPinInput("")
+        setShowPin(false)
       }
     } finally {
       setPinBusy(false)
@@ -494,11 +548,30 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
         return
       }
       intentRef.current = null
-      setMsg(
-        body.status
-          ? `Request accepted (${body.status}). Server worker settles on Testnet when funded — this app never invents a paid result.`
-          : "Withdrawal request accepted. Settlement runs on the server when Testnet A2U is enabled and funded.",
-      )
+      setPinInput("")
+      setShowPin(false)
+      let finalMsg =
+        "Withdrawal request accepted. Your Pi is reserved while the payout is processed."
+      if (body.requestId) {
+        setMsg("Request accepted. Sending your Pi…")
+        const run = await apiRequest<{ ok?: boolean; status?: string; error?: string; retryable?: boolean }>(
+          "/api/economy/earnings/withdrawals/process",
+          { method: "POST", body: { requestId: body.requestId }, timeoutMs: 90_000 },
+        )
+        const r = run.data
+        if (r?.ok && r.status === "paid") {
+          finalMsg = "Withdrawal complete. Your Pi has been sent to your wallet."
+        } else if (r?.ok && r.status === "released") {
+          finalMsg = "The payout was cancelled and your Pi was returned to your available balance."
+        } else if (r?.error === "PI_EARNINGS_AUTO_EXECUTE_DISABLED") {
+          finalMsg = "Request accepted. Automatic payout is not switched on for this deployment yet, so your Pi stays reserved."
+        } else if (r?.error === "PI_SERVER_CREDENTIALS_MISSING") {
+          finalMsg = "Request accepted, but the payout wallet is not configured yet. Your Pi stays reserved; use \"Check for releasable requests\" to return it."
+        } else {
+          finalMsg = "Request accepted. The payout is still being confirmed; your Pi stays reserved until Pi confirms the result."
+        }
+      }
+      setMsg(finalMsg)
       try {
         window.dispatchEvent(new CustomEvent("ghc:earnings-refresh"))
         window.dispatchEvent(new CustomEvent("ghc:wallet-refresh"))
@@ -614,7 +687,7 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
 
           {(feePreview || quote) && (
             <div className="rounded-2xl border border-border/60 bg-muted/30 px-3 py-3 text-[12px]">
-              <p className="font-semibold text-foreground">Review</p>
+              <p className="font-semibold text-foreground" title="Fee estimate only. Funds are reserved only after you confirm with your PIN.">Review</p>
               <div className="mt-2 space-y-1 text-muted-foreground">
                 <p className="flex justify-between">
                   <span>Gross</span>
@@ -647,7 +720,35 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
               <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking payout consent…
             </p>
           ) : needsConsent ? (
-            <div className="rounded-2xl border border-violet-300/70 bg-violet-50/90 px-3 py-3 dark:border-violet-800 dark:bg-violet-950/40" data-wallet-consent-dialog>
+            
+          {/* Identity map: GreenHaven account vs linked Pi wallet */}
+          <div className="rounded-lg border border-violet-100 bg-violet-50/60 px-3 py-2 text-xs text-violet-900 space-y-1" role="status">
+            <p className="font-medium text-violet-950">Identity for this withdrawal</p>
+            <p>GreenHaven session: signed-in account (server verified)</p>
+            <p>
+              Linked Pi username:{" "}
+              <span className="font-medium">@{destination || "not linked yet"}</span>
+              {auth?.hasMapping === false ? " — mapping required before authorization" : ""}
+            </p>
+            {auth?.piAppUid ? (
+              <p className="font-mono text-[10px] text-violet-800/80 break-all">
+                Pi app UID (linked): {String(auth.piAppUid).slice(0, 8)}…{String(auth.piAppUid).slice(-4)}
+              </p>
+            ) : null}
+            <p>
+              Authorization:{" "}
+              {authLoading
+                ? "checking…"
+                : auth?.authorizationActive
+                  ? "active for this linked identity"
+                  : "not active — complete consent below"}
+            </p>
+            <p className="text-violet-800/90">
+              Payouts only go to the KYC-approved Pi wallet bound to this linked identity. GreenHaven never asks for a raw wallet address in this sheet.
+            </p>
+          </div>
+
+<div className="rounded-2xl border border-violet-300/70 bg-violet-50/90 px-3 py-3 dark:border-violet-800 dark:bg-violet-950/40" data-wallet-consent-dialog>
               <p className="flex items-center gap-1.5 text-[13px] font-bold text-violet-950 dark:text-violet-100">
                 <ShieldCheck className="h-4 w-4" /> Authorize your Pi wallet for withdrawals
               </p>
@@ -728,17 +829,28 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
                   ) : null}
                 </div>
               ) : (
-                <input
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={6}
-                  autoComplete="one-time-code"
-                  value={pinInput}
-                  onChange={(e) => setPinInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                  className="w-full rounded-2xl border border-border/70 bg-background px-4 py-2.5 text-sm font-semibold tracking-[0.3em] text-foreground outline-none focus:border-violet-500"
-                  placeholder="••••••"
-                  aria-label="Enter withdrawal PIN"
-                />
+                <div className="relative">
+                  <input
+                    type={showPin ? "text" : "password"}
+                    inputMode="numeric"
+                    maxLength={6}
+                    autoComplete="off"
+                    value={pinInput}
+                    onChange={(e) => setPinInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    className="w-full rounded-2xl border border-border/70 bg-background py-2.5 pl-4 pr-12 text-sm font-semibold tracking-[0.3em] text-foreground outline-none focus:border-violet-500"
+                    placeholder="••••••"
+                    aria-label="Enter withdrawal PIN"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPin((v) => !v)}
+                    className="absolute right-1.5 top-1/2 inline-flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted active:scale-95"
+                    aria-label={showPin ? "Hide PIN" : "Show PIN"}
+                    aria-pressed={showPin}
+                  >
+                    {showPin ? <EyeOff size={17} /> : <Eye size={17} />}
+                  </button>
+                </div>
               )}
               {pinConfigured === true ? (
                 <PinRecoveryPanel onPinReset={() => { setPinInput(""); setMsg("PIN reset. Enter your new PIN to continue.") }} />
@@ -782,7 +894,7 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
             )}
           </button>
           <p className="text-center text-[10px] text-muted-foreground">
-            Request only — server A2U worker pays when Testnet is enabled and funded. No fabricated success.
+            Your Pi is reserved first, then sent by the secure payout service. Success is shown only after Pi confirms it.
           </p>
         </div>
       </div>

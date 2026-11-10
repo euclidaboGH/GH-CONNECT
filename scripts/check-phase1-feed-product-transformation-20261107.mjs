@@ -9,10 +9,10 @@ const verify = packageJson.scripts?.['verify:static'] || ''
 const checks = [
   ['saved feed lane is restored from device preference', source.includes('v === "saved"')],
   ['selected feed lane is persisted without server authority', source.includes('localStorage.setItem("ghc.feedFilter", activeFilter)')],
-  ['changing feed lanes resets pagination and returns to the top', /handleFeedFilterChange[\s\S]*setDisplayedPostsCount\(MOBILE_PAGE_SIZES\.feed\)[\s\S]*scrollTo\(\{ top: 0/.test(source)],
+  ['changing feed lanes resets pagination and returns to the top', /handleFeedFilterChange[\s\S]*setDisplayedPostsCount\((?:MOBILE_PAGE_SIZES\.feed|getAdaptiveFeedPageSize\(\))\)[\s\S]*scrollTo\(\{ top: 0/.test(source)],
   ['topic discovery is derived only from currently ranked feed content', source.includes('rankedPosts.slice(0, 40)')],
   ['topic discovery normalizes and bounds hashtag labels', source.includes('.replace(/^#/, "").trim().toLowerCase()') && source.includes('{2,32}$/u.test(tag)')],
-  ['topic selection opens feed search rather than fabricating discovery results', source.includes('setSearchQuery(`#${topic}`); setIsSearchOpen(true)')],
+  ['topic selection filters the ranked feed in place rather than fabricating discovery results', source.includes('setSelectedTopic((current) => current === topic ? null : topic)') && source.includes('includedTopics: selectedTopic ? [selectedTopic] : []')],
   ['topic rail is accessible and keyboard-operable', source.includes('aria-label="Topics in your feed"') && source.includes('role="group" aria-label="Explore feed topics"')],
   ['shared composer explains the creation journey', composer.includes('Start a conversation') && composer.includes('Share an update, idea or moment')],
   ['shared composer makes audience choice explicit before publishing', composer.includes('Choose your audience in the composer before you publish')],

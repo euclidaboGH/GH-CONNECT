@@ -5,10 +5,10 @@
  * This route is privileged, serialized globally, idempotent, and reconciles the provider
  * transaction before the seller payout can become paid.
  */
-import { createHash, randomUUID, timingSafeEqual } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { assertPayoutWalletAuthorization } from "@/lib/server/identity/wallet-authorization"
 import { findMatchingIncompleteA2u, enqueueA2uReview } from "@/lib/server/payments/a2u-orchestration"
@@ -16,6 +16,7 @@ import { resolvePiSandbox } from "@/lib/pi-env"
 import type { PiBackendPayment } from "pi-backend"
 
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+import { operatorKeyAuthorized, SHARED_WORKER_KEY_MIN_BYTES } from "@/lib/server/security/operator-key"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -24,9 +25,11 @@ function reply(body: unknown, status = 200) {
   return NextResponse.json(body, { status, headers: { "Cache-Control": "private, no-store, max-age=0", Pragma: "no-cache" } })
 }
 function authorized(request: Request): boolean {
-  const expected = Buffer.from(String(process.env.GHC_A2U_ADMIN_KEY || ""), "utf8")
-  const supplied = Buffer.from(String(request.headers.get("x-ghc-a2u-admin-key") || ""), "utf8")
-  return expected.length > 0 && supplied.length === expected.length && timingSafeEqual(supplied, expected)
+  return operatorKeyAuthorized(request, {
+    headers: ["x-ghc-a2u-admin-key"],
+    envNames: ["GHC_A2U_ADMIN_KEY"],
+    minBytes: SHARED_WORKER_KEY_MIN_BYTES,
+  })
 }
 function amountMatches(expected: number, actual: unknown): boolean {
   const n = typeof actual === "number" ? actual : typeof actual === "string" ? Number(actual) : NaN
@@ -61,8 +64,8 @@ export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return reply({ ok: false, error: "AUTH_REQUIRED" }, 401)
   if (!authorized(request)) return reply({ ok: false, error: "FORBIDDEN" }, 403)
-  const rl = checkRateLimit("a2u-create-privileged", 3, 60_000)
-  if (!rl.ok) return reply({ ok: false, error: "RATE_LIMITED", retryAfterSec: rl.retryAfterSec }, 429)
+  const rl = await checkDurableRateLimit("a2u-create-privileged", 3, 60_000, { onUnavailable: "deny" })
+  if (!rl.ok) return reply({ ok: false, error: durableRateLimitCode(rl), retryAfterSec: rl.retryAfterSec }, durableRateLimitStatus(rl))
 
   // A2U is currently Testnet-only. Never infer a safe network from deployment defaults.
   if (process.env.PI_A2U_ENABLED !== "true" || process.env.PI_A2U_TESTNET_ONLY !== "true" || !resolvePiSandbox() || process.env.PI_ENV !== "production") {

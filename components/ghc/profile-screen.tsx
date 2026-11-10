@@ -684,7 +684,7 @@ export function ProfileScreen({
   return (
     <div className="gh-profile-shell gh-world-profile flex h-full min-h-0 w-full flex-col bg-background text-foreground contain-content" role="region" aria-label={msg("profileTitle")}>
       <header className="gh-page-header-slim gh-world-profile-header flex w-full shrink-0 items-center justify-between border-b border-border/50 bg-card/95 px-3 pb-1 pt-[max(0.25rem,env(safe-area-inset-top))] backdrop-blur-md">
-        <h1 className="text-[15px] font-bold tracking-tight text-foreground">{msg("profileTitle")}</h1>
+        <h1 className="gh-type-title font-bold tracking-tight text-foreground">{msg("profileTitle")}</h1>
         <div className="flex items-center gap-0">
           <PremiumSurfaceActions />
           <button

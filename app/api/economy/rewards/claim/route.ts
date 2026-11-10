@@ -16,6 +16,7 @@ import {
   getProcessGhcStore,
 } from "@/lib/server/economy/store"
 import { checkDurableRateLimit, durableRateLimitStatus, durableRateLimitCode } from "@/lib/server/security/control-plane"
+import { readBoundedText } from "@/lib/server/http/read-bounded-text"
 
 const MAX_REWARD_CLAIM_BODY_BYTES = 4_096
 
@@ -32,7 +33,13 @@ export async function POST(request: Request) {
   if (Number.isFinite(declaredLength) && declaredLength > MAX_REWARD_CLAIM_BODY_BYTES) {
     return jsonErr("REQUEST_TOO_LARGE", "Reward claim request body is too large", 413)
   }
-  const rawBody = await request.text().catch(() => "")
+  const boundedBody = await readBoundedText(request, MAX_REWARD_CLAIM_BODY_BYTES)
+  if (!boundedBody.ok) {
+    return boundedBody.error === "REQUEST_TOO_LARGE"
+      ? jsonErr("REQUEST_TOO_LARGE", "Reward claim request body is too large", 413)
+      : jsonErr("INVALID_BODY", "Reward claim request body is invalid", 400)
+  }
+  const rawBody = boundedBody.text
   if (Buffer.byteLength(rawBody, "utf8") > MAX_REWARD_CLAIM_BODY_BYTES) {
     return jsonErr("REQUEST_TOO_LARGE", "Reward claim request body is too large", 413)
   }

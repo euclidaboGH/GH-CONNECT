@@ -2,7 +2,11 @@
 -- 20261022010067_ghpv_active_weight_set_semantics.sql
 -- GHPV-1A fix: active per-reviewer weight (set/replace), not cumulative API adds.
 -- Does NOT mint GHC. Does NOT settle judgments. Does NOT change gh_post_curations.
--- Depends on: 20261013 (quality state), 20261014 (record RPC name).
+-- Depends on canonical repository foundations:
+--   20261022010036_gh_social_core.sql (gh_posts)
+--   20261022010045_gh_post_curation.sql (gh_post_curations)
+--   20261022010061_ghpv_judgment_infrastructure.sql (gh_content_quality_state)
+--   20261022010062_ghpv_curation_weight_and_settle.sql (RPC contract being replaced)
 -- =============================================================================
 
 CREATE TABLE IF NOT EXISTS public.gh_ghpv_active_weights (

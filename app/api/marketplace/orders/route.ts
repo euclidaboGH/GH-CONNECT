@@ -14,7 +14,7 @@ import {
   listOrdersForUserDurable,
   type ServerMarketOrder,
 } from "@/lib/server/marketplace/order-store"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
 import { humanizeMarketplaceOrderError } from "@/lib/server/marketplace/marketplace-integrity"
 
 export const runtime = "nodejs"
@@ -26,13 +26,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: { "Cache-Control": "no-store, private" } })
   }
 
-  const rl = checkRateLimit(`marketplace-order-create:${auth.userId}`, 20, 60_000)
-  if (!rl.ok) {
-    return NextResponse.json(
-      { ok: false, error: "RATE_LIMITED", message: "Too many checkout attempts. Please wait and retry." },
-      { status: 429, headers: { "Cache-Control": "no-store, private", "Retry-After": String(rl.retryAfterSec) } }
-    )
-  }
+  const rateLimited = await enforceUserMutationRateLimit(auth.userId, "marketplace/orders:POST", 20, 60_000, { failClosed: true })
+  if (rateLimited) return rateLimited
 
   const parsed = await readBoundedJson(request, 16 * 1024)
   if (!parsed.ok) {

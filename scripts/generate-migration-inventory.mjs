@@ -33,6 +33,7 @@ const reviewRequired = new Set([
   '20261107190001_marketplace_fulfilment_tracking_timeline.sql',
   '20261108120001_gh_community_server_filter_search.sql',
   '20261108150001_repair_pin_storage_and_payout_release.sql',
+  '20261109100001_gh_messaging_phase1_controls_search.sql',
   '20261027010002_gh_media_asset_create_immutable_identity.sql',
   '20261027010003_gh_media_upload_finalize_identity.sql',
   '20261027010004_ghc_transfer_request_idempotency_intent.sql',

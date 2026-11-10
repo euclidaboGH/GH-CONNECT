@@ -37,6 +37,7 @@ export type WalletAuthorizationStatus = {
   uidMatchesAuthorization: boolean
   hasMapping: boolean
   mappedUsername: string | null
+  authorizedPiAppUid?: string | null
 }
 
 export type WalletConsentResult =
@@ -93,6 +94,7 @@ export async function fetchWalletAuthorizationStatus(signal?: AbortSignal): Prom
       uidMatchesAuthorization?: boolean
       hasMapping?: boolean
       mappedUsername?: string | null
+      authorizedPiAppUid?: string | null
     } | null
     if (!res.ok || body?.ok !== true) {
       return { ok: false, code: res.status === 401 ? "AUTH_REQUIRED" : normalizeCode(body?.error ?? "WALLET_AUTHORIZATION_UNAVAILABLE") }
@@ -105,6 +107,7 @@ export async function fetchWalletAuthorizationStatus(signal?: AbortSignal): Prom
         uidMatchesAuthorization: uidMatches,
         hasMapping: body.hasMapping === true,
         mappedUsername: body.mappedUsername ?? null,
+        authorizedPiAppUid: body.authorizedPiAppUid ?? null,
       },
     }
   } catch {

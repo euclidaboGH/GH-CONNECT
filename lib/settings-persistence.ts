@@ -5,7 +5,7 @@
 
 /** Keys that must never appear in a settings export payload. */
 const FORBIDDEN_EXPORT_KEY_RE =
-  /(password|secret|token|pin|private.?key|mnemonic|seed|authorization|cookie|session|api.?key|service.?role)/i
+  /(password|secret|token|pin|private.?key|mnemonic|seed|authorization|cookie|session|api.?key|service.?role|vapid|webhook|recovery.?code|access.?token|refresh.?token|bearer|jwt|signing.?key)/i
 
 export function isExportableSettingsKey(key: string): boolean {
   const k = String(key || "").trim()

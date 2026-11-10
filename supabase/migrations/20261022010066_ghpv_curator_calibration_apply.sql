@@ -1,5 +1,6 @@
 -- GHPV-3: persist curator calibration updates (no GHC).
--- Depends on 20261013 gh_curator_calibration.
+-- Depends on 20261022010061_ghpv_judgment_infrastructure.sql, which creates
+-- public.gh_curator_calibration.
 
 CREATE TABLE IF NOT EXISTS public.gh_ghpv_calibration_applies (
   idempotency_key text PRIMARY KEY,

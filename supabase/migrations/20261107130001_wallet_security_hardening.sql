@@ -1,4 +1,8 @@
--- REVIEW_REQUIRED — Wallet security hardening (apply after 20261105200001 and 20261107120001).
+-- REVIEW_REQUIRED — Wallet security hardening.
+-- Requires 20261030010002_pi_earnings_payout_requests.sql,
+-- 20261105170001_phase3_earnings_ledger_integrity_hardening.sql,
+-- 20261105200001_withdrawal_pin_security.sql, and
+-- 20261107120001_withdrawal_pin_recovery_questions.sql.
 -- 1) gh_withdrawal_pins.user_id: app user ids are text and Pi-auth users are not guaranteed to exist in
 --    auth.users, so the uuid FK can make PIN creation fail. Convert to text, drop FK.
 -- 2) Atomic PIN attempt accounting (row lock) so parallel guesses cannot exceed the attempt limit.
@@ -7,19 +11,44 @@
 BEGIN;
 
 DO $$
-DECLARE c text;
+DECLARE
+  v_table regclass;
+  v_constraint record;
 BEGIN
-  FOR c IN SELECT conname FROM pg_constraint
-    WHERE conrelid = 'public.gh_withdrawal_pins'::regclass AND contype = 'f' LOOP
-    EXECUTE format('ALTER TABLE public.gh_withdrawal_pins DROP CONSTRAINT %I', c);
+  -- Remove only the legacy user_id foreign key to auth.users. Preserve every
+  -- unrelated FK so future integrity rules are not silently discarded.
+  FOREACH v_table IN ARRAY ARRAY[
+    to_regclass('public.gh_withdrawal_pins'),
+    to_regclass('public.gh_withdrawal_pin_recovery')
+  ] LOOP
+    IF v_table IS NULL THEN
+      CONTINUE;
+    END IF;
+
+    FOR v_constraint IN
+      SELECT DISTINCT c.conname
+      FROM pg_catalog.pg_constraint AS c
+      JOIN pg_catalog.pg_attribute AS a
+        ON a.attrelid = c.conrelid
+       AND a.attnum = ANY (c.conkey)
+      WHERE c.conrelid = v_table
+        AND c.contype = 'f'
+        AND c.confrelid = to_regclass('auth.users')
+        AND a.attname = 'user_id'
+    LOOP
+      EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I', v_table, v_constraint.conname);
+    END LOOP;
   END LOOP;
-  FOR c IN SELECT conname FROM pg_constraint
-    WHERE conrelid = 'public.gh_withdrawal_pin_recovery'::regclass AND contype = 'f' LOOP
-    EXECUTE format('ALTER TABLE public.gh_withdrawal_pin_recovery DROP CONSTRAINT %I', c);
-  END LOOP;
+
+  IF to_regclass('public.gh_withdrawal_pins') IS NOT NULL THEN
+    ALTER TABLE public.gh_withdrawal_pins
+      ALTER COLUMN user_id TYPE text USING user_id::text;
+  END IF;
+  IF to_regclass('public.gh_withdrawal_pin_recovery') IS NOT NULL THEN
+    ALTER TABLE public.gh_withdrawal_pin_recovery
+      ALTER COLUMN user_id TYPE text USING user_id::text;
+  END IF;
 END $$;
-ALTER TABLE public.gh_withdrawal_pins ALTER COLUMN user_id TYPE text USING user_id::text;
-ALTER TABLE public.gh_withdrawal_pin_recovery ALTER COLUMN user_id TYPE text USING user_id::text;
 ALTER TABLE public.gh_withdrawal_pins ADD COLUMN IF NOT EXISTS reset_cooldown_until timestamptz NULL;
 
 -- Counts the attempt BEFORE the hash is compared; returns hash material only if not locked/cooling down.

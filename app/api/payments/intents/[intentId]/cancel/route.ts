@@ -4,6 +4,7 @@ import {
   loadPaymentIntent,
   transitionIntent,
 } from "@/lib/server/payments/intent-store"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -16,6 +17,8 @@ export async function POST(
   if (!auth) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
+  const __rateLimited = await enforceUserMutationRateLimit(auth.userId, "payments/intents/[intentId]/cancel:POST", 12, 60_000, { failClosed: true })
+  if (__rateLimited) return __rateLimited
   const { intentId } = await ctx.params
   // Durable-only: never fall back to process memory when storage is unavailable
   const intent = (await loadPaymentIntent(intentId))

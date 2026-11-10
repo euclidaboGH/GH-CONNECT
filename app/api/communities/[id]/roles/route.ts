@@ -7,7 +7,9 @@ import { NextResponse } from "next/server"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
-import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
+import { nonDurableWriteResponse } from "@/lib/server/production-guard"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
+import { sanitizeCommunityId } from "@/lib/server/community/community-integrity"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -19,8 +21,10 @@ export async function POST(request: Request, ctx: Ctx) {
   if (!auth) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
+  const __rateLimited = await enforceUserMutationRateLimit(auth.userId, "communities/[id]/roles:POST", 60, 60_000, { failClosed: true })
+  if (__rateLimited) return __rateLimited
   const { id } = await ctx.params
-  const communityId = String(id || "").trim()
+  const communityId = sanitizeCommunityId(id)
   const parsedBody = await readBoundedJson(request, 8192)
   if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400 })
   const body = parsedBody.value
@@ -28,7 +32,7 @@ export async function POST(request: Request, ctx: Ctx) {
   const role = String(body.role || "").trim().toLowerCase()
   // Ownership transfer is not available via this endpoint — prevents client owner injection
   const ALLOWED = new Set(["member", "moderator", "admin"])
-  if (!communityId || !targetUserId || !role) {
+  if (!communityId || !targetUserId || targetUserId.length > 160 || /[\u0000-\u001f\u007f]/.test(targetUserId) || !role) {
     return NextResponse.json({ ok: false, error: "INVALID" }, { status: 400 })
   }
   if (!ALLOWED.has(role)) {

@@ -15,6 +15,7 @@ import {
 } from "@/lib/server/identity/pi-identity-store"
 import { upsertServerProfile } from "@/lib/server/identity/profile-store"
 import { recordPioneerActivity } from "@/lib/server/engagement/pioneer-activity"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -28,6 +29,8 @@ export async function POST(request: Request) {
         { status: 401 }
       )
     }
+    const __rateLimited = await enforceUserMutationRateLimit(auth.userId, "auth/onboarding-complete:POST", 60, 60_000, { failClosed: false })
+    if (__rateLimited) return __rateLimited
 
     let ghUserId = auth.userId
     const byPi = await getByPiAppUid(auth.userId)

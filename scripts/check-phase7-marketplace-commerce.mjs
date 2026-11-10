@@ -25,7 +25,7 @@ test('order errors are humanized for own-buy and stock', /CANNOT_BUY_OWN/.test(i
 test('own-listing detector is explicit', /isOwnListingSeller/.test(integrity))
 test('order create ignores client price seller currency totals', /void body\.unitPrice/.test(orders) && /void body\.sellerId/.test(orders))
 test('order create requires stable idempotency key', /IDEMPOTENCY_KEY/.test(orders))
-test('order create is rate limited per authenticated buyer', /marketplace-order-create:/.test(orders))
+test('order create uses durable fail-closed per-buyer throttling', /enforceUserMutationRateLimit\(auth\.userId, \"marketplace\/orders:POST\"/.test(orders) && /failClosed: true/.test(orders))
 test('order create returns humanized message on failure', /humanizeMarketplaceOrderError/.test(orders))
 test('durable reservation is required for order create', /createReservedOrder/.test(orderStore) && /DURABLE_RESERVATION_REQUIRED/.test(orderStore))
 test('payment claim and release RPCs exist for stock fencing', /claimOrderForPayment/.test(orderStore) && /releaseOrderPaymentClaim/.test(orderStore))

@@ -13,10 +13,17 @@ Allowed states only: `Not started` | `Audited` | `Implemented, awaiting verifica
 | 7 | Marketplace | Implemented, awaiting verification | Humanized orders; live stock/payment Testnet open |
 | 8 | Profile & Matching | Implemented, awaiting verification | Relationship integrity; cross-account E2E open |
 | 9 | Settings & Filters | Implemented, awaiting verification | Safe export; filter primitives |
-| 10 | Platform-wide acceptance | Implemented, awaiting verification | Meta-gate source-only; production NOT APPROVED |
+| 10 | Platform-wide acceptance | Implemented, awaiting verification | Phase 10 release closure is now wired into prebuild, complete static verification and CI; Node 24.15.0 build, live services, Testnet and device/operator evidence remain open; production NOT APPROVED |
 
 No workstream may move to **Verified complete** from static checks alone.
 
 
 ## Maintenance
 - 0.338.0 gap-fill 20. States unchanged.
+
+## Phase 2 database integrity (2026-11-09 / 0.338.14)
+- State: **Implemented, awaiting verification**
+- Source closeout: `docs/PHASE-2-DATABASE-INTEGRITY-CLOSEOUT-2026-11-09.md`
+- Gate: `scripts/check-phase2-database-integrity-closeout.mjs`
+- Remote migration apply, Testnet/Mainnet history reconciliation and disposable PostgreSQL rehearsal remain open.
+- Production remains **NOT APPROVED**.

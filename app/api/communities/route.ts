@@ -7,7 +7,7 @@ import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { nonDurableReadResponse, nonDurableWriteResponse } from "@/lib/server/production-guard"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
 import { feesRequireSettlement, quoteCommunityCreateFee } from "@/lib/server/fees/pilot-fee-policy"
 import { settlePilotFee } from "@/lib/server/fees/settle-pilot-fee"
 import { ensureCommunityConversation } from "@/lib/server/messaging/message-store"
@@ -126,10 +126,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
 
-  const rl = checkRateLimit(`community-create:${auth.userId}`, 5, 60_000)
-  if (!rl.ok) {
-    return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429 })
-  }
+  const rateLimited = await enforceUserMutationRateLimit(auth.userId, "communities:POST", 5, 60_000, { failClosed: true })
+  if (rateLimited) return rateLimited
 
   const parsedBody = await readBoundedJson(request, 16 * 1024)
   if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400, headers: { "Cache-Control": "no-store" } })

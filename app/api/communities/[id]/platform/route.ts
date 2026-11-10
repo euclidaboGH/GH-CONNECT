@@ -2,7 +2,8 @@ import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { nonDurableReadResponse, nonDurableWriteResponse } from "@/lib/server/production-guard"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
+import { sanitizeCommunityId } from "@/lib/server/community/community-integrity"
 
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 
@@ -26,7 +27,7 @@ export async function GET(request: Request, ctx: Ctx) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   const { id } = await ctx.params
-  const communityId = String(id || "").trim()
+  const communityId = sanitizeCommunityId(id)
   if (!communityId) return NextResponse.json({ ok: false, error: "INVALID_ID" }, { status: 400 })
   if (!socialDbConfigured()) {
     const nd = nonDurableReadResponse("Community platform", { community: null })
@@ -48,15 +49,15 @@ export async function POST(request: Request, ctx: Ctx) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   const { id } = await ctx.params
-  const communityId = String(id || "").trim()
+  const communityId = sanitizeCommunityId(id)
   if (!communityId) return NextResponse.json({ ok: false, error: "INVALID_ID" }, { status: 400 })
   const parsedBody = await readBoundedJson(request, 64 * 1024)
   if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400 })
   const body = parsedBody.value as Record<string, unknown>
   const action = String(body.action || "").trim()
   if (!ALLOWED.has(action)) return NextResponse.json({ ok: false, error: "INVALID_ACTION" }, { status: 400 })
-  const rl = checkRateLimit(`community-platform:${auth.userId}:${communityId}:${action}`, 30, 60_000)
-  if (!rl.ok) return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429 })
+  const rateLimited = await enforceUserMutationRateLimit(auth.userId, `communities/[id]/platform:${action}`, 30, 60_000, { failClosed: true })
+  if (rateLimited) return rateLimited
   if (!socialDbConfigured()) {
     const nd = nonDurableWriteResponse("Community platform write", { extra: { action } })
     return NextResponse.json(nd.body, { status: nd.status })

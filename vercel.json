@@ -8,7 +8,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "frame-ancestors 'self' https://sandbox.minepi.com https://app-cdn.minepi.com https://minepi.com https://*.minepi.com https://*.pinet.com https://socialchain.app https://*.socialchain.app"
+          "value": "frame-ancestors 'self' https://sandbox.minepi.com https://app-cdn.minepi.com https://minepi.com https://*.minepi.com https://*.pinet.com https://socialchain.app https://*.socialchain.app; object-src 'none'; base-uri 'self'; form-action 'self'"
         },
         {
           "key": "X-Content-Type-Options",
@@ -28,7 +28,7 @@
         },
         {
           "key": "Strict-Transport-Security",
-          "value": "max-age=31536000"
+          "value": "max-age=63072000; includeSubDomains"
         },
         {
           "key": "X-Permitted-Cross-Domain-Policies",
