@@ -25,6 +25,7 @@ const notif = r('components/ghc/notification-bell.tsx')
 const video = r('components/ghc/short-video-screen.tsx')
 const qr = e('components/ghc/receive-ghc-flow.tsx') ? r('components/ghc/receive-ghc-flow.tsx') : ''
 const pkg = JSON.parse(r('package.json'))
+const release = r('lib/app-release.ts')
 const cartSep = e('lib/commerce/cart-wallet-separation.ts') ? r('lib/commerce/cart-wallet-separation.ts') : ''
 const resPol = e('lib/wallet/withdrawal-reservation-policy.ts') ? r('lib/wallet/withdrawal-reservation-policy.ts') : ''
 
@@ -58,7 +59,7 @@ ok('QR svg local-only annotation', !qr || /generated locally/.test(qr))
 ok('sticky max withdraw still present', /stickyMaxRef/.test(withdraw))
 ok('cart wallet separation module retained', /SURFACE_CART/.test(cartSep))
 ok('reservation policy quote false', /RESERVE_ON_QUOTE = false/.test(resPol))
-ok('package version 0.338.19', pkg.version === '0.338.19')
+ok('package version matches release metadata', release.includes(`APP_RELEASE_VERSION = \"${pkg.version}\"`))
 
 console.log(`\nHigh-risk 20 upgrades: ${pass}/${pass + fail}`)
 process.exit(fail ? 1 : 0)

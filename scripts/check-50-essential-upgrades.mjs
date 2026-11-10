@@ -91,7 +91,7 @@ add(5, 'P09', 'Five-item bottom navigation contract documented', /BOTTOM_NAV_ITE
 add(5, 'P10', 'CI does not auto-apply migrations', !/supabase\s+db\s+push/.test(ci))
 
 // Release hygiene (counted inside section totals above; soft check)
-const versionOk = pkg.version === '0.338.19' && release.includes('0.338.19')
+const versionOk = release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`)
 
 let failed = 0
 for (const c of checks) {
@@ -100,9 +100,9 @@ for (const c of checks) {
 }
 console.log(`\n50 essential upgrades: ${checks.length - failed}/${checks.length} passed`)
 if (!versionOk) {
-  console.error('FAIL release version is not 0.338.19')
+  console.error('FAIL app release version does not match package.json')
   failed++
 } else {
-  console.log('PASS release version is 0.338.19')
+  console.log('PASS app release version matches package.json')
 }
 if (checks.length !== 50 || failed) process.exit(1)

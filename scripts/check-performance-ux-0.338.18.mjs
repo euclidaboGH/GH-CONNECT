@@ -12,6 +12,7 @@ const logo = r('components/ghc/brand-logo.tsx')
 const wallet = r('features/wallet/wallet-screen.tsx')
 const sheet = r('components/ghc/pi-withdraw-sheet.tsx')
 const pkg = JSON.parse(r('package.json'))
+const release = r('lib/app-release.ts')
 
 ok('search debounce constant', /SEARCH_DEBOUNCE_MS = 280/.test(ux))
 ok('media idle prefetch budget', /MEDIA_IDLE_PREFETCH_MAX = 6/.test(ux))
@@ -27,7 +28,7 @@ ok('post card content-visibility', /contentVisibility/.test(post) || /content-vi
 ok('brand logo lazy loading', /loading:\s*["']lazy["']/.test(logo))
 ok('wallet clears before hydrate', /setPiWithdrawAvailable\(null\)/.test(wallet) && /setPiWithdrawUser\(null\)/.test(wallet))
 ok('sheet sticky max retained', /stickyMaxRef/.test(sheet))
-ok('package 0.338.19', pkg.version === '0.338.19')
+ok('package version matches release metadata', release.includes(`APP_RELEASE_VERSION = \"${pkg.version}\"`))
 
-console.log(`\nPerformance UX 0.338.19: ${pass}/${pass + fail}`)
+console.log(`\nPerformance UX: ${pass}/${pass + fail}`)
 process.exit(fail ? 1 : 0)

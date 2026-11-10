@@ -28,7 +28,7 @@ const releaseClosure = read('scripts/check-phase10-release-closure.mjs')
 const ci = read('.github/workflows/ci.yml')
 
 // Phase 1 — source-of-truth and issue traceability.
-add(1, 'P1-A', 'Package, app release and consolidated audit agree on 0.338.19', pkg.version === '0.338.19' && release.includes('0.338.19') && sourceTruth.includes('gh-connect@0.338.19'))
+add(1, 'P1-A', 'Package, app release and consolidated audit agree on current package version', release.includes(`APP_RELEASE_VERSION = \"${pkg.version}\"`) && sourceTruth.includes(`gh-connect@${pkg.version}`))
 add(1, 'P1-B', 'Consolidated register preserves external blockers and production no-go', /Production remains NOT APPROVED/.test(sourceTruth) && /Testnet and Mainnet migration histories/.test(sourceTruth))
 // Phase 2 — migration integrity and deployment safety.
 add(2, 'P2-A', '199 canonical migration versions are unique and 14-digit', migrationFiles.length === 199 && migrationVersions.every((v) => /^\d{14}$/.test(v)) && new Set(migrationVersions).size === migrationVersions.length)
