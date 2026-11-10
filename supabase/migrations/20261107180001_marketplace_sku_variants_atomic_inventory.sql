@@ -273,8 +273,20 @@ END $$;
 
 -- The legacy reservation RPC must never bypass variant stock for a listing that
 -- has active SKUs. Preserve its old behavior only for non-variant listings.
-ALTER FUNCTION public.gh_marketplace_order_create_reserved(jsonb,text)
-  RENAME TO gh_marketplace_order_create_reserved_pre_variant;
+DO $$
+BEGIN
+  IF to_regprocedure('public.gh_marketplace_order_create_reserved(jsonb,text)') IS NOT NULL
+     AND to_regprocedure('public.gh_marketplace_order_create_reserved_pre_variant(jsonb,text)') IS NULL THEN
+    ALTER FUNCTION public.gh_marketplace_order_create_reserved(jsonb,text)
+      RENAME TO gh_marketplace_order_create_reserved_pre_variant;
+  ELSIF to_regprocedure('public.gh_marketplace_order_create_reserved(jsonb,text)') IS NULL
+        AND to_regprocedure('public.gh_marketplace_order_create_reserved_pre_variant(jsonb,text)') IS NOT NULL THEN
+    NULL; -- already renamed by an earlier idempotent application
+  ELSE
+    RAISE EXCEPTION 'MARKETPLACE_RESERVED_RPC_RENAME_STATE_CONFLICT';
+  END IF;
+END;
+$$;
 CREATE OR REPLACE FUNCTION public.gh_marketplace_order_create_reserved(p_row jsonb,p_idempotency_key text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE

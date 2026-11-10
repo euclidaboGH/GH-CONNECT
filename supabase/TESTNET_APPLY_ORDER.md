@@ -1,9 +1,9 @@
 # GreenHaven Testnet migration review order
 
 **Generated from:** `supabase/migrations/*.sql` and the canonical classification policy in `scripts/generate-migration-inventory.mjs`.
-**Current source inventory:** 201 migrations.
+**Current source inventory:** 207 migrations.
 
-> **This is a review order, not permission to apply.** It does not prove remote migration history, database compatibility, or Testnet/Mainnet readiness. Never run `supabase db push` while any pending migration is held for review, approval, validation, or marked proposal. Supabase CLI does not enforce these classifications.
+> **This is a review order, not permission to apply.** It does not prove remote migration history, database compatibility, or Testnet/Mainnet readiness. See docs/TESTNET-RECONCILIATION-2026-11-10.md for the latest direct Testnet snapshot and custom migration-history entries. Never run `supabase db push` while any pending migration is held for review, approval, validation, or marked proposal. Supabase CLI does not enforce these classifications.
 
 ## Required operator procedure
 
@@ -221,6 +221,12 @@ The rows are sorted by the canonical migration identifier for review. Dependenci
 | 199 | `20261109100001_gh_messaging_phase1_controls_search.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
 | 200 | `20261110100001_withdrawal_rpc_acl_and_recovery_atomicity.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
 | 201 | `20261110110001_wallet_recovery_reset_lock_race_guard.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
+| 202 | `20261110110002_marketplace_orders_list_rpc_alias_fix.sql` | REQUIRED | REVIEW_THEN_APPLY |
+| 203 | `20261110160001_security_definer_rpc_server_only_acl_hardening.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
+| 204 | `20261110170001_function_search_path_hardening.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
+| 205 | `20261110180001_remove_verified_duplicate_indexes.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
+| 206 | `20261110190001_rls_policy_dedup_and_initplan_optimization.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
+| 207 | `20261110200001_supporting_foreign_key_indexes.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
 
 ## Classification meanings
 

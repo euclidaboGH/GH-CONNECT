@@ -5,6 +5,7 @@ const moderation = read('app/api/governance/moderation-log/route.ts')
 const reports = read('app/api/governance/reports/route.ts')
 const store = read('lib/server/community/governance-store.ts')
 const migration = read('supabase/migrations/20261107170001_phase7_durable_community_governance.sql')
+const communityPlatform = read('supabase/migrations/20261023030001_gh_community_platform_v2.sql')
 const hub = read('components/ghc/premium-community-hub.tsx')
 const checks = [
   ['moderation history is server-readable only to authenticated moderators', moderation.includes('export async function GET') && moderation.includes('requireCommunityModerator') && moderation.includes('listModerationEntries')],
@@ -14,7 +15,7 @@ const checks = [
   ['reports support durable server creation and moderation resolution', reports.includes('createGovernanceReport') && reports.includes('resolveGovernanceReport') && reports.includes('listGovernanceReports') && reports.includes('if (!result?.ok)')],
   ['moderator UI hydrates durable history and report queues', hub.includes('/api/governance/moderation-log?communityId=') && hub.includes('/api/governance/reports?communityId=') && hub.includes('serverGovernanceReports ?? listCommunityReports')],
   ['client roles cannot directly mutate governance records', migration.includes('USING (false) WITH CHECK (false)') && migration.includes('REVOKE ALL ON TABLE public.gh_community_reports FROM anon, authenticated')],
-  ['report and audit tables have operational indexes', migration.includes('idx_gh_community_reports_status_created') && migration.includes('idx_gh_community_moderation_actor_created')],
+  ['report and audit tables have operational indexes', !migration.includes('idx_gh_community_reports_status_created') && communityPlatform.includes('idx_gh_community_reports_queue') && migration.includes('idx_gh_community_moderation_actor_created')],
   ['community tabs meet 44px touch target and honor reduced motion', hub.includes('min-h-11') && hub.includes('motion-reduce:transition-none') && hub.includes('min-w-11')],
   ['community content region is keyboard focusable and named', hub.includes('role="region" aria-label={`${community.name} community content`} tabIndex={0}')],
 ]

@@ -8,6 +8,7 @@ import { assertPayoutWalletAuthorization } from "@/lib/server/identity/wallet-au
 import { resolvePiSandbox } from "@/lib/pi-env"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import type { PiBackendPayment } from "pi-backend"
+import { enqueueA2uReview } from "@/lib/server/payments/a2u-orchestration"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -73,6 +74,7 @@ export async function POST(request:Request) {
   if(!begin?.ok) return reply({ok:false,error:begin?.error||"EXECUTION_CLAIM_FAILED",retryable:begin?.error==="EXECUTION_BUSY"},begin?.error==="EXECUTION_BUSY"?409:503)
   if(begin.duplicate&&begin.status==="paid") return reply({ok:true,duplicate:true,status:"paid",requestId})
   let uncertain=true
+  let failureCode="PI_PROVIDER_OUTCOME_UNCERTAIN"
   let heartbeatLost=false
   let heartbeatBusy=false
   const heartbeatTimer=setInterval(()=>{
@@ -92,8 +94,34 @@ export async function POST(request:Request) {
       const incomplete=await sdk.getIncompleteServerPayments()
       const match=incomplete.find(p=>p.direction==="app_to_user"&&p.network==="Pi Testnet"&&p.user_uid===begin.recipientUid&&amountMatches(p.amount,begin.netPi)&&String(p.metadata?.direction||"")==="a2u"&&String(p.metadata?.payoutRequestId||"")===requestId)
       if(match?.identifier) paymentId=match.identifier
-      else if(incomplete.length) return reply({ok:false,error:"UNRELATED_INCOMPLETE_A2U_REQUIRES_OPERATOR_REVIEW",retryable:false},409)
-      else {
+      else if(incomplete.length) {
+        // Pi's app wallet has one global incomplete A2U lane. Do not cancel or
+        // submit an unrelated payment here: its originating domain must recover it.
+        const blocker=incomplete[0]
+        const blockerId=String(blocker?.identifier||"").trim()
+        const blockerTxid=String(blocker?.transaction?.txid||"").trim()
+        const blockerDomain=String(blocker?.metadata?.domain||blocker?.metadata?.payoutKind||"unknown").replace(/[^A-Za-z0-9_.:-]/g,"").slice(0,64)
+        const blockerRequest=String(blocker?.metadata?.payoutRequestId||"").replace(/[^A-Za-z0-9_.:-]/g,"").slice(0,80)
+        failureCode="UNRELATED_INCOMPLETE_A2U_PAYMENT"
+        const queued=await enqueueA2uReview({
+          sourceKind:"other",
+          sourceRequestId:requestId,
+          userId:auth.userId,
+          reasonCode:failureCode,
+          providerPaymentId:blockerId||undefined,
+          txid:blockerTxid||undefined,
+          amountAtomic:Number(row.net_atomic),
+          detail:`blocked_domain=${blockerDomain};blocked_request=${blockerRequest};tx_present=${Boolean(blockerTxid)};developer_completed=${blocker?.status?.developer_completed===true}`,
+        }).catch(()=>({ok:false as const,error:"REVIEW_QUEUE_UNAVAILABLE"}))
+        console.warn("[pi-earnings-payout] unrelated incomplete A2U blocks new payout",{
+          requestRef:requestId.slice(0,8),
+          blockerPaymentPresent:Boolean(blockerId),
+          blockerTxPresent:Boolean(blockerTxid),
+          blockerDomain,
+          reviewQueued:queued.ok,
+        })
+        return reply({ok:false,error:"UNRELATED_INCOMPLETE_A2U_REQUIRES_OPERATOR_REVIEW",retryable:false,reviewQueued:queued.ok},409)
+      } else {
         // Revalidate ownership immediately before creating a provider-side payment.
         const active=await rpc<{ok:boolean}>(base,key,"gh_pi_earnings_payout_heartbeat_execution",{p_request_id:requestId,p_lease_token:lease})
         if(!active?.ok||heartbeatLost) throw new Error("EXECUTION_LEASE_LOST_BEFORE_CREATE")
@@ -147,9 +175,15 @@ export async function POST(request:Request) {
     uncertain=false
     return reply({ok:true,requestId,status:"paid",network:"Pi Testnet",providerPaymentId:paymentId,txid,grossAtomic:row.gross_atomic,feeAtomic:row.fee_atomic,netAtomic:row.net_atomic})
   } catch(error) {
-    return reply({ok:false,error:"PI_EARNINGS_EXECUTION_UNCERTAIN",detail:error instanceof Error?error.message.slice(0,160):"unknown",retryable:true,reservationRetained:true,requestId},503)
+    const rawCode=error instanceof Error?error.message:""
+    failureCode=/^[A-Z0-9_]{3,120}$/.test(rawCode)?rawCode:"PI_PROVIDER_OUTCOME_UNCERTAIN"
+    console.error("[pi-earnings-payout] provider execution did not reach verified settlement",{
+      requestRef:requestId.slice(0,8),
+      diagnosticCode:failureCode,
+    })
+    return reply({ok:false,error:"PI_EARNINGS_EXECUTION_UNCERTAIN",diagnosticCode:failureCode,retryable:true,reservationRetained:true,requestId},503)
   } finally {
     clearInterval(heartbeatTimer)
-    await rpc(base,key,"gh_pi_earnings_payout_end_execution",{p_request_id:requestId,p_lease_token:lease,p_uncertain:uncertain,p_failure_code:"PI_PROVIDER_OUTCOME_UNCERTAIN"}).catch(()=>null)
+    await rpc(base,key,"gh_pi_earnings_payout_end_execution",{p_request_id:requestId,p_lease_token:lease,p_uncertain:uncertain,p_failure_code:failureCode}).catch(()=>null)
   }
 }

@@ -20,94 +20,135 @@ DO $$ BEGIN
   END IF;
 END $$;
 
-CREATE TABLE IF NOT EXISTS public.gh_marketplace_order_events (
-  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  order_id text NOT NULL REFERENCES public.gh_marketplace_orders(id) ON DELETE RESTRICT,
-  actor_id text NOT NULL,
-  actor_role text NOT NULL CHECK (actor_role IN ('buyer','seller','system','operator')),
-  event_type text NOT NULL CHECK (length(event_type) BETWEEN 1 AND 64),
-  note text,
-  metadata jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(metadata)='object'),
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS idx_gh_marketplace_order_events_timeline
-  ON public.gh_marketplace_order_events(order_id, created_at ASC, id ASC);
+-- Phase 21 already created the canonical immutable order-event journal.
+-- Reuse its existing actor_source/before_state/after_state contract; do not
+-- create a second incompatible event-table shape or a duplicate event trigger.
+DO $$ BEGIN
+  IF to_regclass('public.gh_marketplace_order_events') IS NULL THEN
+    RAISE EXCEPTION 'MARKETPLACE_ORDER_EVENT_JOURNAL_MISSING: apply Phase 21 journal migration first';
+  END IF;
+END $$;
+
 ALTER TABLE public.gh_marketplace_order_events ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS gh_marketplace_order_events_no_client ON public.gh_marketplace_order_events;
 CREATE POLICY gh_marketplace_order_events_no_client ON public.gh_marketplace_order_events
   FOR ALL USING (false) WITH CHECK (false);
 REVOKE ALL ON public.gh_marketplace_order_events FROM PUBLIC, anon, authenticated, service_role;
 
-CREATE OR REPLACE FUNCTION public.gh_marketplace_order_events_immutable()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
-BEGIN
-  RAISE EXCEPTION 'MARKETPLACE_ORDER_EVENTS_APPEND_ONLY';
-END $$;
-DROP TRIGGER IF EXISTS gh_marketplace_order_events_immutable ON public.gh_marketplace_order_events;
-CREATE TRIGGER gh_marketplace_order_events_immutable
-  BEFORE UPDATE OR DELETE ON public.gh_marketplace_order_events
-  FOR EACH ROW EXECUTE FUNCTION public.gh_marketplace_order_events_immutable();
-REVOKE ALL ON FUNCTION public.gh_marketplace_order_events_immutable() FROM PUBLIC, anon, authenticated, service_role;
-
--- Capture new order creation and subsequent payment/order/delivery state changes,
--- including state updates performed by existing payment RPCs.
-CREATE OR REPLACE FUNCTION public.gh_marketplace_order_event_capture()
+-- Extend the existing database-authored event capture to include fulfilment
+-- details while preserving its original allowed event_type and actor_source values.
+CREATE OR REPLACE FUNCTION public.gh_marketplace_record_order_event()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 DECLARE
-  v_actor text:=NULLIF(current_setting('gh.marketplace_actor_id',true),'');
-  v_role text:='system';
-  v_note text;
+  v_before jsonb;
+  v_after jsonb;
+  v_actor text;
+  v_source text;
+  v_type text;
 BEGIN
   IF TG_OP='INSERT' THEN
-    v_actor:=coalesce(v_actor,NEW.buyer_id);
-    v_role:=CASE WHEN v_actor=NEW.buyer_id THEN 'buyer' WHEN v_actor=NEW.seller_id THEN 'seller' ELSE 'system' END;
-    INSERT INTO public.gh_marketplace_order_events(order_id,actor_id,actor_role,event_type,metadata)
-      VALUES(NEW.id,v_actor,v_role,'order_created',jsonb_build_object('listingId',NEW.listing_id,'variantSku',NEW.variant_sku,'quantity',NEW.quantity,'currency',NEW.currency,'totalAmount',NEW.total_amount));
-    RETURN NEW;
+    v_before := '{}'::jsonb;
+    v_after := jsonb_build_object(
+      'status',NEW.status,'payment_status',NEW.payment_status,'escrow_status',NEW.escrow_status,
+      'delivery_status',NEW.delivery_status,'currency',NEW.currency,'total_amount',NEW.total_amount,
+      'variant_id',NEW.variant_id,'variant_sku',NEW.variant_sku,'variant_label',NEW.variant_label,
+      'fulfilment_method',NEW.fulfilment_method,'shipping_carrier',NEW.shipping_carrier,
+      'tracking_number',NEW.tracking_number,'tracking_url',NEW.tracking_url,
+      'estimated_delivery_at',NEW.estimated_delivery_at,'dispatched_at',NEW.dispatched_at
+    );
+    v_type := 'ORDER_CREATED';
+  ELSE
+    v_before := jsonb_build_object(
+      'status',OLD.status,'payment_status',OLD.payment_status,'escrow_status',OLD.escrow_status,
+      'delivery_status',OLD.delivery_status,'fulfilment_method',OLD.fulfilment_method,
+      'shipping_carrier',OLD.shipping_carrier,'tracking_number',OLD.tracking_number,
+      'tracking_url',OLD.tracking_url,'estimated_delivery_at',OLD.estimated_delivery_at,
+      'dispatched_at',OLD.dispatched_at,'delivered_at',OLD.delivered_at,
+      'buyer_note',OLD.buyer_note,'seller_note',OLD.seller_note,
+      'dispute_reason',OLD.dispute_reason,'cancellation_reason',OLD.cancellation_reason
+    );
+    v_after := jsonb_build_object(
+      'status',NEW.status,'payment_status',NEW.payment_status,'escrow_status',NEW.escrow_status,
+      'delivery_status',NEW.delivery_status,'fulfilment_method',NEW.fulfilment_method,
+      'shipping_carrier',NEW.shipping_carrier,'tracking_number',NEW.tracking_number,
+      'tracking_url',NEW.tracking_url,'estimated_delivery_at',NEW.estimated_delivery_at,
+      'dispatched_at',NEW.dispatched_at,'delivered_at',NEW.delivered_at,
+      'buyer_note',NEW.buyer_note,'seller_note',NEW.seller_note,
+      'dispute_reason',NEW.dispute_reason,'cancellation_reason',NEW.cancellation_reason
+    );
+    IF v_before=v_after THEN RETURN NEW; END IF;
+    IF OLD.status IS DISTINCT FROM NEW.status AND NEW.status='disputed' THEN
+      v_type := 'DISPUTE_OPENED';
+    ELSIF OLD.status IS DISTINCT FROM NEW.status AND NEW.status='completed' THEN
+      v_type := 'ORDER_COMPLETED';
+    ELSIF OLD.status IS DISTINCT FROM NEW.status AND NEW.status='cancelled' THEN
+      v_type := 'ORDER_CANCELLED';
+    ELSIF OLD.status IS DISTINCT FROM NEW.status AND (OLD.status='disputed' OR NEW.status='disputed') THEN
+      v_type := 'DISPUTE_STATE_CHANGED';
+    ELSIF OLD.payment_status IS DISTINCT FROM NEW.payment_status THEN
+      v_type := 'PAYMENT_STATE_CHANGED';
+    ELSIF OLD.delivery_status IS DISTINCT FROM NEW.delivery_status
+       OR OLD.fulfilment_method IS DISTINCT FROM NEW.fulfilment_method
+       OR OLD.shipping_carrier IS DISTINCT FROM NEW.shipping_carrier
+       OR OLD.tracking_number IS DISTINCT FROM NEW.tracking_number
+       OR OLD.tracking_url IS DISTINCT FROM NEW.tracking_url
+       OR OLD.estimated_delivery_at IS DISTINCT FROM NEW.estimated_delivery_at
+       OR OLD.dispatched_at IS DISTINCT FROM NEW.dispatched_at THEN
+      v_type := 'DELIVERY_STATE_CHANGED';
+    ELSIF OLD.escrow_status IS DISTINCT FROM NEW.escrow_status THEN
+      v_type := 'ESCROW_STATE_CHANGED';
+    ELSE
+      v_type := 'ORDER_STATE_CHANGED';
+    END IF;
   END IF;
 
-  v_actor:=coalesce(v_actor,'system:marketplace-state-change');
-  v_role:=CASE WHEN v_actor=NEW.buyer_id THEN 'buyer' WHEN v_actor=NEW.seller_id THEN 'seller' ELSE 'system' END;
-  v_note:=coalesce(NULLIF(NEW.buyer_note,''),NULLIF(NEW.seller_note,''),NULLIF(NEW.dispute_reason,''),NULLIF(NEW.cancellation_reason,''));
+  v_actor := NULLIF(current_setting('gh.marketplace_actor_id',true),'');
+  IF v_actor IS NOT NULL THEN
+    v_source := 'service_context';
+  ELSE
+    v_actor := NULLIF(current_setting('request.jwt.claim.sub',true),'');
+    IF v_actor IS NOT NULL THEN
+      v_source := 'authenticated_claim';
+    ELSIF current_user='service_role' OR session_user='service_role' THEN
+      v_actor := 'service_role';
+      v_source := 'service_context';
+    ELSE
+      v_source := 'unknown';
+    END IF;
+  END IF;
 
-  IF OLD.payment_status IS DISTINCT FROM NEW.payment_status THEN
-    INSERT INTO public.gh_marketplace_order_events(order_id,actor_id,actor_role,event_type,note,metadata)
-      VALUES(NEW.id,v_actor,v_role,'payment_'||left(coalesce(NEW.payment_status,'unknown'),48),NULL,jsonb_build_object('method',NEW.payment_method,'currency',NEW.currency,'totalAmount',NEW.total_amount));
-  END IF;
-  IF OLD.status IS DISTINCT FROM NEW.status THEN
-    INSERT INTO public.gh_marketplace_order_events(order_id,actor_id,actor_role,event_type,note,metadata)
-      VALUES(NEW.id,v_actor,v_role,
-        CASE WHEN NEW.status='fulfilling' THEN 'fulfilment_started' WHEN NEW.status='completed' THEN 'order_completed' WHEN NEW.status='cancelled' THEN 'order_cancelled' WHEN NEW.status='disputed' THEN 'dispute_opened' ELSE 'order_'||left(coalesce(NEW.status,'updated'),48) END,
-        v_note,jsonb_build_object('paymentStatus',NEW.payment_status));
-  END IF;
-  IF OLD.delivery_status IS DISTINCT FROM NEW.delivery_status THEN
-    INSERT INTO public.gh_marketplace_order_events(order_id,actor_id,actor_role,event_type,note,metadata)
-      VALUES(NEW.id,v_actor,v_role,
-        CASE WHEN NEW.delivery_status='processing' THEN 'fulfilment_processing' WHEN NEW.delivery_status='shipped' THEN 'dispatched' WHEN NEW.delivery_status='delivered' THEN 'delivered' WHEN NEW.delivery_status='service_active' THEN 'service_activated' WHEN NEW.delivery_status='completed' THEN 'delivery_completed' ELSE 'delivery_'||left(coalesce(NEW.delivery_status,'updated'),40) END,
-        v_note,jsonb_build_object('method',NEW.fulfilment_method,'carrier',NEW.shipping_carrier,'trackingNumber',NEW.tracking_number,'trackingUrl',NEW.tracking_url,'estimatedDeliveryAt',NEW.estimated_delivery_at,'dispatchedAt',NEW.dispatched_at));
-  END IF;
+  INSERT INTO public.gh_marketplace_order_events(
+    order_id,event_type,actor_id,actor_source,before_state,after_state
+  ) VALUES (NEW.id,v_type,v_actor,v_source,v_before,v_after);
   RETURN NEW;
-END $$;
-DROP TRIGGER IF EXISTS gh_marketplace_order_event_capture ON public.gh_marketplace_orders;
-CREATE TRIGGER gh_marketplace_order_event_capture
-  AFTER INSERT OR UPDATE OF status,payment_status,delivery_status ON public.gh_marketplace_orders
-  FOR EACH ROW EXECUTE FUNCTION public.gh_marketplace_order_event_capture();
-REVOKE ALL ON FUNCTION public.gh_marketplace_order_event_capture() FROM PUBLIC, anon, authenticated, service_role;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.gh_marketplace_record_order_event() FROM PUBLIC, anon, authenticated, service_role;
 
--- Import legacy audit rows as system history; do not invent buyer/seller attribution.
-INSERT INTO public.gh_marketplace_order_events(order_id,actor_id,actor_role,event_type,note,metadata,created_at)
-SELECT o.id,'system:legacy-audit-import','system',
-       left(coalesce(nullif(regexp_replace(lower(coalesce(entry->>'action','')), '[^a-z0-9_]+', '_', 'g'), ''), 'historical_update'),64),
-       NULLIF(left(coalesce(entry->>'detail',''),500),''),
-       jsonb_build_object('legacyAudit',true),
+-- Keep the existing INSERT trigger and replace the UPDATE trigger with a wider
+-- column list so fulfilment-only changes are also captured.
+DROP TRIGGER IF EXISTS trg_gh_marketplace_order_event_update ON public.gh_marketplace_orders;
+CREATE TRIGGER trg_gh_marketplace_order_event_update
+AFTER UPDATE OF status,payment_status,escrow_status,delivery_status,fulfilment_method,
+  shipping_carrier,tracking_number,tracking_url,estimated_delivery_at,dispatched_at
+ON public.gh_marketplace_orders
+FOR EACH ROW EXECUTE FUNCTION public.gh_marketplace_record_order_event();
+
+-- Import legacy audit entries into the existing immutable journal without
+-- inventing buyer/seller attribution or introducing new event_type values.
+INSERT INTO public.gh_marketplace_order_events(order_id,actor_id,actor_source,event_type,before_state,after_state,created_at)
+SELECT o.id,'system:legacy-audit-import','service_context','ORDER_STATE_CHANGED','{}'::jsonb,
+       jsonb_build_object('legacyAudit',true,'legacyAuditAction',left(coalesce(entry->>'action','historical_update'),64),
+         'legacyAuditDetail',left(coalesce(entry->>'detail',''),500)),
        CASE WHEN coalesce(entry->>'at','') ~ '^[0-9]+(\.[0-9]+)?$' AND length(entry->>'at')<=16 AND (entry->>'at')::numeric BETWEEN 0 AND 32503680000000
             THEN to_timestamp((entry->>'at')::numeric/1000) ELSE o.created_at END
 FROM public.gh_marketplace_orders o
 CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(o.audit)='array' THEN o.audit ELSE '[]'::jsonb END) AS items(entry)
 WHERE NOT EXISTS (
   SELECT 1 FROM public.gh_marketplace_order_events e
-  WHERE e.order_id=o.id AND e.actor_id='system:legacy-audit-import' AND e.metadata->>'legacyAudit'='true'
-    AND e.event_type=left(coalesce(nullif(regexp_replace(lower(coalesce(entry->>'action','')), '[^a-z0-9_]+', '_', 'g'), ''), 'historical_update'),64)
+  WHERE e.order_id=o.id AND e.actor_id='system:legacy-audit-import'
+    AND e.after_state->>'legacyAudit'='true'
+    AND e.after_state->>'legacyAuditAction'=left(coalesce(entry->>'action','historical_update'),64)
     AND e.created_at=CASE WHEN coalesce(entry->>'at','') ~ '^[0-9]+(\.[0-9]+)?$' AND length(entry->>'at')<=16 AND (entry->>'at')::numeric BETWEEN 0 AND 32503680000000
                           THEN to_timestamp((entry->>'at')::numeric/1000) ELSE o.created_at END
 );
@@ -219,7 +260,14 @@ BEGIN
   IF NOT FOUND THEN RETURN jsonb_build_object('ok',false,'error','NOT_FOUND'); END IF;
   IF r.buyer_id<>trim(coalesce(p_actor_id,'')) AND r.seller_id<>trim(coalesce(p_actor_id,'')) THEN RETURN jsonb_build_object('ok',false,'error','FORBIDDEN'); END IF;
   RETURN jsonb_build_object('ok',true,'events',coalesce((
-    SELECT jsonb_agg(jsonb_build_object('id',e.id,'actorRole',e.actor_role,'eventType',e.event_type,'note',e.note,'metadata',e.metadata,'createdAt',extract(epoch from e.created_at)*1000) ORDER BY e.created_at,e.id)
+    SELECT jsonb_agg(jsonb_build_object(
+      'id',e.id,
+      'actorRole',CASE WHEN e.actor_id=r.buyer_id THEN 'buyer' WHEN e.actor_id=r.seller_id THEN 'seller' WHEN e.actor_source='service_context' THEN 'system' ELSE 'operator' END,
+      'eventType',lower(e.event_type),
+      'note',coalesce(e.after_state->>'buyer_note',e.after_state->>'seller_note',e.after_state->>'dispute_reason',e.after_state->>'cancellation_reason'),
+      'metadata',jsonb_build_object('actorSource',e.actor_source,'before',e.before_state,'after',e.after_state),
+      'createdAt',extract(epoch from e.created_at)*1000
+    ) ORDER BY e.created_at,e.id)
     FROM (SELECT * FROM public.gh_marketplace_order_events WHERE order_id=r.id ORDER BY created_at DESC,id DESC LIMIT 200) e
   ),'[]'::jsonb));
 END $$;

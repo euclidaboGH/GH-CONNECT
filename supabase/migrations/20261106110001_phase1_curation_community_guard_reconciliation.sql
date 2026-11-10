@@ -1,6 +1,6 @@
 -- Phase 1 deep completion: align curation eligibility with canonical post visibility,
 -- serialize per-user daily limits, and make community-feed cursor ordering deterministic.
--- No wallet, GHC issuance, Pi payment, reward settlement, or client privilege changes.
+-- No wallet, GHC issuance, Pi payment, or reward settlement. Harden the internal GHPV writer to server-only access.
 
 CREATE INDEX IF NOT EXISTS idx_gh_curator_activity_user_day_author
   ON public.gh_curator_activity_events (user_id, created_at DESC, author_id);
@@ -188,6 +188,13 @@ BEGIN
   );
 END;
 $$;
+
+-- The GHPV weight writer is an internal helper called only from the atomic
+-- server-side curation wrapper. Do not expose it as a standalone PostgREST RPC:
+-- it accepts user/post identifiers and would bypass canonical visibility,
+-- daily quota serialization and mandatory activity auditing.
+REVOKE ALL ON FUNCTION public.gh_ghpv_record_curation_weight(text, text, text, numeric, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.gh_ghpv_record_curation_weight(text, text, text, numeric, text) TO service_role;
 
 REVOKE ALL ON FUNCTION public.gh_post_curation_set_with_reward(text, text, text, numeric, numeric, text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.gh_post_curation_set_with_reward(text, text, text, numeric, numeric, text) TO service_role;

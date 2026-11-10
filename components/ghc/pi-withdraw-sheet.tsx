@@ -566,7 +566,9 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
         } else if (r?.error === "PI_EARNINGS_AUTO_EXECUTE_DISABLED") {
           finalMsg = "Request accepted. Automatic payout is not switched on for this deployment yet, so your Pi stays reserved."
         } else if (r?.error === "PI_SERVER_CREDENTIALS_MISSING") {
-          finalMsg = "Request accepted, but the payout wallet is not configured yet. Your Pi stays reserved; use \"Check for releasable requests\" to return it."
+          finalMsg = "Request accepted, but the payout wallet is not configured yet. Your Pi stays reserved; use 'Check for releasable requests' to return it."
+        } else if (r?.error === "UNRELATED_INCOMPLETE_A2U_REQUIRES_OPERATOR_REVIEW") {
+          finalMsg = "A previous Pi app-wallet payout is still incomplete and must be reconciled before another transfer can start. Your request remains safely reserved; no duplicate transfer was created."
         } else {
           finalMsg = "Request accepted. The payout is still being confirmed; your Pi stays reserved until Pi confirms the result."
         }

@@ -29,7 +29,7 @@ const checklist = existsSync(join(root, "docs/OPERATOR_CHECKLIST_WALLET_A2U_TEST
 test("requests flag defaults fail-closed in env example", /PI_EARNINGS_PAYOUT_REQUESTS_ENABLED=0/.test(envEx))
 test("execution flag defaults fail-closed", /PI_EARNINGS_PAYOUT_EXECUTION_ENABLED=0/.test(envEx))
 test("A2U flag defaults fail-closed", /PI_A2U_ENABLED=0/.test(envEx))
-test("A2U testnet-only default present", /PI_A2U_TESTNET_ONLY=1/.test(envEx))
+test("A2U testnet-only flag uses the exact string expected by runtime gates", /PI_A2U_TESTNET_ONLY=true/.test(envEx))
 test("withdrawals POST gated on requests flag + testnet", /PI_EARNINGS_PAYOUT_REQUESTS_ENABLED/.test(withdrawRoute) && /PI_NETWORK/.test(withdrawRoute) && /testnet/.test(withdrawRoute))
 test("withdrawable includes walletAuthorization snapshot", /walletAuthorization/.test(withdrawable) && /getWalletAuthorization/.test(withdrawable))
 test("authorization POST never trusts client recipient body", /getByGhUserId/.test(authRoute) && /body:\s*"\{\}"/.test(dash) === false ? /JSON\.stringify\(\{\}\)/.test(dash) || /body:\s*"\{\}"/.test(authRoute) || true : true)

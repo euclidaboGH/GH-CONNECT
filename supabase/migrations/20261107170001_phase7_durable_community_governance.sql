@@ -1,7 +1,7 @@
 -- Phase 7 closeout: server-authoritative governance audit writes.
 -- Role is rechecked in the same transaction as each moderation append.
-CREATE INDEX IF NOT EXISTS idx_gh_community_reports_status_created
-  ON public.gh_community_reports (community_id, status, created_at DESC);
+-- idx_gh_community_reports_queue from 20261023030001 already covers
+-- (community_id, status, created_at DESC); do not create a duplicate.
 CREATE INDEX IF NOT EXISTS idx_gh_community_moderation_actor_created
   ON public.gh_community_moderation_log (actor_id, created_at DESC);
 ALTER TABLE public.gh_community_moderation_log ENABLE ROW LEVEL SECURITY;

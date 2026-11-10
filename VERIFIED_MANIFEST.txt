@@ -2,13 +2,13 @@ GH-CONNECT VERIFIED SOURCE MANIFEST
 ==================================
 inventory_status=OK
 duplicate_version_prefixes=
-project_version=0.338.20
+project_version=0.338.24
 manifest_format_version=1
-canonical_migrations=201
-classification_required=118
+canonical_migrations=207
+classification_required=119
 classification_requires_approval=1
 classification_proposal=2
-classification_review_required=80
+classification_review_required=85
 source=supabase/migrations/*.sql
 
 IMPORTANT: This manifest inventories repository files only. It does NOT prove migrations are applied to any Supabase project.
@@ -50,7 +50,7 @@ ALL_MIGRATIONS_ORDERED_FOR_REVIEW:
 [REQUIRED] size=1542 path=supabase/migrations/20261022010026_verification_requests_durable.sql
 [REQUIRED] size=3937 path=supabase/migrations/20261022010027_gh_messaging_durable.sql
 [REQUIRED] size=4390 path=supabase/migrations/20261022010028_gh_user_profiles_and_progress.sql
-[REQUIRED] size=5985 path=supabase/migrations/20261022010029_ghc_stage_pending.sql
+[REQUIRED] size=5861 path=supabase/migrations/20261022010029_ghc_stage_pending.sql
 [REQUIRED] size=8753 path=supabase/migrations/20261022010030_ghc_stage_pending_limits.sql
 [REQUIRED] size=2059 path=supabase/migrations/20261022010031_ghc_ledger_rpc_acl.sql
 [REQUIRED] size=858 path=supabase/migrations/20261022010032_ghc_user_accounts_rls_lockdown.sql
@@ -205,7 +205,7 @@ ALL_MIGRATIONS_ORDERED_FOR_REVIEW:
 [REQUIRED] size=1258 path=supabase/migrations/20261105200001_withdrawal_pin_security.sql
 [REVIEW_REQUIRED] size=5667 path=supabase/migrations/20261106080001_gh_reputation_intelligence_refresh_recovery.sql
 [REVIEW_REQUIRED] size=4361 path=supabase/migrations/20261106090001_gh_community_post_feed_canonical.sql
-[REVIEW_REQUIRED] size=11694 path=supabase/migrations/20261106110001_phase1_curation_community_guard_reconciliation.sql
+[REVIEW_REQUIRED] size=12260 path=supabase/migrations/20261106110001_phase1_curation_community_guard_reconciliation.sql
 [REVIEW_REQUIRED] size=10906 path=supabase/migrations/20261106123001_phase9_membership_lifecycle_and_renewal_guard.sql
 [REVIEW_REQUIRED] size=6107 path=supabase/migrations/20261106130001_gh_story_view_privacy_and_read_performance.sql
 [REVIEW_REQUIRED] size=7503 path=supabase/migrations/20261106143001_phase9_membership_pi_renewal_strict_provider_guard.sql
@@ -214,12 +214,18 @@ ALL_MIGRATIONS_ORDERED_FOR_REVIEW:
 [REVIEW_REQUIRED] size=1441 path=supabase/migrations/20261107120001_withdrawal_pin_recovery_questions.sql
 [REVIEW_REQUIRED] size=6192 path=supabase/migrations/20261107130001_wallet_security_hardening.sql
 [REVIEW_REQUIRED] size=1383 path=supabase/migrations/20261107160001_membership_active_tier_downgrade_guard.sql
-[REQUIRED] size=3282 path=supabase/migrations/20261107170001_phase7_durable_community_governance.sql
-[REVIEW_REQUIRED] size=25702 path=supabase/migrations/20261107180001_marketplace_sku_variants_atomic_inventory.sql
-[REVIEW_REQUIRED] size=20889 path=supabase/migrations/20261107190001_marketplace_fulfilment_tracking_timeline.sql
+[REQUIRED] size=3281 path=supabase/migrations/20261107170001_phase7_durable_community_governance.sql
+[REVIEW_REQUIRED] size=26292 path=supabase/migrations/20261107180001_marketplace_sku_variants_atomic_inventory.sql
+[REVIEW_REQUIRED] size=22005 path=supabase/migrations/20261107190001_marketplace_fulfilment_tracking_timeline.sql
 [REVIEW_REQUIRED] size=15306 path=supabase/migrations/20261108110001_phase3_wallet_rewards_membership_concurrency_recovery.sql
 [REVIEW_REQUIRED] size=3438 path=supabase/migrations/20261108120001_gh_community_server_filter_search.sql
 [REVIEW_REQUIRED] size=10337 path=supabase/migrations/20261108150001_repair_pin_storage_and_payout_release.sql
 [REVIEW_REQUIRED] size=11813 path=supabase/migrations/20261109100001_gh_messaging_phase1_controls_search.sql
 [REVIEW_REQUIRED] size=11863 path=supabase/migrations/20261110100001_withdrawal_rpc_acl_and_recovery_atomicity.sql
 [REVIEW_REQUIRED] size=2672 path=supabase/migrations/20261110110001_wallet_recovery_reset_lock_race_guard.sql
+[REQUIRED] size=1568 path=supabase/migrations/20261110110002_marketplace_orders_list_rpc_alias_fix.sql
+[REVIEW_REQUIRED] size=1179 path=supabase/migrations/20261110160001_security_definer_rpc_server_only_acl_hardening.sql
+[REVIEW_REQUIRED] size=424 path=supabase/migrations/20261110170001_function_search_path_hardening.sql
+[REVIEW_REQUIRED] size=425 path=supabase/migrations/20261110180001_remove_verified_duplicate_indexes.sql
+[REVIEW_REQUIRED] size=1920 path=supabase/migrations/20261110190001_rls_policy_dedup_and_initplan_optimization.sql
+[REVIEW_REQUIRED] size=1528 path=supabase/migrations/20261110200001_supporting_foreign_key_indexes.sql

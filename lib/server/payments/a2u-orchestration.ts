@@ -9,6 +9,7 @@
  * - Testnet-only for this release path
  */
 import type { PiBackendPayment } from "pi-backend"
+import { resolvePiSandbox } from "@/lib/pi-env"
 import { readGhcServerEnv, hasPrivilegedDatabase } from "@/lib/server/economy/env"
 
 export type A2uSourceKind = "cashback" | "seller_marketplace" | "creator" | "other"
@@ -188,4 +189,70 @@ export function canMarkA2uPaid(input: {
     return { ok: false, error: "TXID_UNVERIFIED" }
   }
   return { ok: true }
+}
+
+
+/**
+ * Read-only Testnet inspection of Pi's single incomplete server-side A2U payment.
+ * Operator-only callers may use this to identify the global blocker before deciding
+ * which domain-owned workflow must recover it. This function never cancels, submits,
+ * completes, or settles a provider payment.
+ */
+export async function inspectPiIncompleteServerPayments(): Promise<{
+  ok: boolean
+  state: "ready" | "not_configured" | "testnet_gate_closed" | "provider_unavailable"
+  items?: Array<{
+    providerPaymentId: string
+    direction: string
+    network: string
+    amount: number
+    domain: string
+    payoutRequestId: string
+    txid: string | null
+    transactionVerified: boolean
+    developerCompleted: boolean
+    cancelled: boolean
+    userCancelled: boolean
+  }>
+}> {
+  if (
+    process.env.PI_NETWORK !== "testnet" ||
+    process.env.PI_A2U_TESTNET_ONLY !== "true" ||
+    process.env.PI_ENV !== "production" ||
+    !resolvePiSandbox()
+  ) return { ok: false, state: "testnet_gate_closed" }
+
+  const apiKey = String(process.env.PI_API_KEY || process.env.PI_SERVER_API_KEY || "").trim()
+  const walletSeed = String(process.env.PI_WALLET_PRIVATE_SEED || "").trim()
+  if (!apiKey || !/^S[A-Z2-7]{55}$/.test(walletSeed)) {
+    return { ok: false, state: "not_configured" }
+  }
+
+  try {
+    const sdkModule = await import("pi-backend")
+    const sdk = new sdkModule.default(apiKey, walletSeed)
+    const incomplete = await sdk.getIncompleteServerPayments()
+    return {
+      ok: true,
+      state: "ready",
+      items: incomplete.slice(0, 1).map((payment) => ({
+        providerPaymentId: String(payment.identifier || "").slice(0, 200),
+        direction: String(payment.direction || "").slice(0, 32),
+        network: String(payment.network || "").slice(0, 32),
+        amount: Number(payment.amount),
+        domain: String(payment.metadata?.domain || payment.metadata?.payoutKind || "unknown").replace(/[^A-Za-z0-9_.:-]/g, "").slice(0, 64),
+        payoutRequestId: String(payment.metadata?.payoutRequestId || "").replace(/[^A-Za-z0-9_.:-]/g, "").slice(0, 80),
+        txid: payment.transaction?.txid ? String(payment.transaction.txid).slice(0, 300) : null,
+        transactionVerified: payment.status?.transaction_verified === true || payment.transaction?.verified === true,
+        developerCompleted: payment.status?.developer_completed === true,
+        cancelled: payment.status?.cancelled === true,
+        userCancelled: payment.status?.user_cancelled === true,
+      })),
+    }
+  } catch (error) {
+    console.error("[pi-a2u-orchestration] provider incomplete-payment inspection failed", {
+      errorName: error instanceof Error ? error.name : "UnknownError",
+    })
+    return { ok: false, state: "provider_unavailable" }
+  }
 }

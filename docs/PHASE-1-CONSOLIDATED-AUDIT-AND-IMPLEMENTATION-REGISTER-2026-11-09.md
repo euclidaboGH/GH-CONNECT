@@ -4,9 +4,15 @@
 **Authoritative source archive:** `GREENHAVEN-0.338.18-STEP2-SURGICAL-SQL-FIXES-DEPENDENCY-AUDIT-2026-11-09.zip`  
 **Project package:** `gh-connect@0.338.18`
 
-**Current in-place maintenance derivative:** `gh-connect@0.338.20` (Run #242); the audit findings and historical baseline below remain preserved.  
+**Current in-place maintenance derivative:** `gh-connect@0.338.24` (Runs #250–258); the audit findings and historical baseline below remain preserved.  
 **Phase:** 1 of the ten-phase completion roadmap — authoritative baseline and complete audit  
 **Disposition:** **Source inventory and selected contracts verified; Phase 1 is NOT fully closed. Production remains NOT APPROVED.**
+
+## Run #250–255 addendum — 2026-11-10
+
+The current derivative advances the source with immutable Pi identity insert-only resolution and production fail-closed username lookup; Testnet curation/community reconciliation; global server-only SECURITY DEFINER ACLs and hardened postgres default function privileges; pinned search paths; duplicate-index removal; RLS policy deduplication/initplan optimization; eleven missing FK indexes; and a corrected Phase 9.4 marketplace timeline migration that preserves the existing Phase 21 event-journal schema. The live Testnet security advisor now reports no SECURITY DEFINER client-execution or mutable-search-path warnings; the performance advisor reports no duplicate indexes, unindexed foreign keys, RLS initplan or multiple-permissive-policy findings.
+
+The Testnet audit still has operator gates: two old APPROVED membership payment intents require Pi provider reconciliation; one uncertain Pi earnings payout retains a reservation and must not be released without provider evidence; four Daily Claim entries remain pending (two matured); GHC curation issuance remains intentionally disabled; marketplace migrations 194–195 remain unapplied pending disposable PostgreSQL validation; and original migration history 1–189 remains unreconciled. Mainnet was not accessed. Static verification passes, but Node 24.15.0 dependency-backed typecheck/lint/build and provider/device E2E acceptance remain outstanding. Production remains NOT APPROVED.
 
 ## 1. Purpose and non-destructive rules
 
