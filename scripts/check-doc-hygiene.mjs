@@ -238,6 +238,7 @@ const required = new Set([
   'docs/UPGRADE-WORKLOG-0.288.0.md',
   'docs/UPGRADE-WORKLOG-0.289.0.md',
   'docs/WALLET_NOTIFICATION_AUDIT_0.222.0_2026-10-31.md',
+  'docs/VERCEL-GITHUB-RUN-247-BUILD-DIAGNOSTICS-AND-DEPENDENCY-WARNINGS-2026-11-10.md',
 ])
 const failures=[]
 const walk=(dir)=>{

@@ -34,11 +34,17 @@ jobs:
       - name: Verify pinned Node runtime
         run: node -e "if (process.versions.node !== '24.15.0') { console.error('Expected Node.js 24.15.0, received ' + process.versions.node); process.exit(1) }"
 
+      - name: Record npm runtime
+        run: npm --version
+
       - name: Dependency lock integrity
         run: node scripts/check-dependency-lock-integrity.mjs
 
       - name: Install
-        run: unset npm_config_cache_dir NPM_CONFIG_CACHE_DIR; npm ci --legacy-peer-deps
+        run: |
+          npm config delete cache-dir --location=user || true
+          unset npm_config_cache_dir NPM_CONFIG_CACHE_DIR
+          npm ci --legacy-peer-deps
 
       - name: JSX duplicate-prop guard
         run: node scripts/check-jsx-duplicate-props.mjs
@@ -106,11 +112,17 @@ jobs:
       - name: Verify pinned Node runtime
         run: node -e "if (process.versions.node !== '24.15.0') { console.error('Expected Node.js 24.15.0, received ' + process.versions.node); process.exit(1) }"
 
+      - name: Record npm runtime
+        run: npm --version
+
       - name: Dependency lock integrity
         run: node scripts/check-dependency-lock-integrity.mjs
 
       - name: Install
-        run: unset npm_config_cache_dir NPM_CONFIG_CACHE_DIR; npm ci --legacy-peer-deps
+        run: |
+          npm config delete cache-dir --location=user || true
+          unset npm_config_cache_dir NPM_CONFIG_CACHE_DIR
+          npm ci --legacy-peer-deps
 
       - name: Build
         run: npm run build
@@ -119,3 +131,14 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL || 'https://example.supabase.co' }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'public-anon-placeholder' }}
           NEXT_PUBLIC_PI_SANDBOX: "true"
+
+      - name: Preserve Next.js build diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: next-build-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .next/trace
+            .next/diagnostics
+          if-no-files-found: ignore
+          retention-days: 3

@@ -76,3 +76,27 @@ Fifteen focused upgrades were made from the Run #245 baseline and the supplied V
 - Focused Run #246 source contract: 18/18; Run #245 account hydration: 16/16; Pi identity/withdrawal: 10/10; Phase 4 payout execution worker: 21/21; Phase 1–10 pack: 20/20; withdrawal health: 23/23; project truth: 11/11; repository consistency: 6/6; documentation hygiene: PASS; migration source manifest: 200/200; SQL lexical integrity: PASS; full `npm run verify:static`: exit 0.
 - No Supabase migration was applied, no payout was executed, no Pi/GHC balance or ledger was modified, and no GitHub/Vercel action or production deployment was performed.
 - PostgreSQL execution, target Testnet migration-history reconciliation, Node 24.15.0 dependency-backed lint/typecheck/build, and live Pi Testnet acceptance remain outstanding. Five modified TypeScript files passed syntax transpilation only; full typechecking is not claimed. Production remains NOT APPROVED.
+
+## Run #247 — build failure diagnostics and dependency warning triage
+
+Fifteen safe build/CI improvements were made from the supplied GitHub Actions #247 log and the Run #246 source baseline:
+
+1. Replaced the opaque prebuild command chain with a numbered diagnostic runner.
+2. Preserved all 277 pre-existing prebuild checks under `prebuild:checks`.
+3. Executes each checker directly with Node.js, without shell evaluation.
+4. Labels each check before execution.
+5. Reports the exact failing script and its exit status/signal.
+6. Validates all prebuild entries use direct Node invocations.
+7. Validates every entry has a script target.
+8. Confirms every referenced checker exists before execution.
+9. Enforces the declared Node engine before running the prebuild gates.
+10. Adds a no-execution `--list` / `--dry-run` mode.
+11. Adds a focused 15-assertion Run #247 source contract.
+12. Registers the contract in `verify:static` and as `check:run247-build-diagnostics`.
+13. Removes stale user-level npm `cache-dir` configuration in CI without changing project `.npmrc`.
+14. Records npm's version in both CI jobs.
+15. Preserves only Next.js trace/diagnostics artifacts for three days when build fails.
+
+Dependency warnings were reviewed but not “fixed” by unsafe package swaps. `pi-backend@0.1.3` brings in deprecated Stellar packages transitively; `eslint-config-next@15.5.26` declares ESLint 7/8/9 peer support; DOMPurify 4.x requires compatibility testing; and native install scripts remain unapproved pending exact script review. See `docs/VERCEL-GITHUB-RUN-247-BUILD-DIAGNOSTICS-AND-DEPENDENCY-WARNINGS-2026-11-10.md`.
+
+The visible Run #247 excerpt does not contain the underlying Next.js compiler diagnostic. The runner now makes prebuild failures attributable, but it does not prove the omitted Next.js failure is fixed. Local dependency installation could not complete because the registry returned `EAI_AGAIN`, and the available runtime was Node 22.16.0 rather than the required Node 24.15.0. Dependency-backed typecheck, lint and production build remain unverified. No migrations, balances, ledger entries, reservations, Pi transfers, GitHub pushes, Vercel deployments or production settings were changed. Production remains NOT APPROVED.
