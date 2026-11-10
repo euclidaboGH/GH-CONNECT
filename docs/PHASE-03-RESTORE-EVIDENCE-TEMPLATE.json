@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "environment": "disposable",
+  "production_credentials_used": false,
+  "backup_sha256": "replace-with-64-character-lowercase-sha256",
+  "postgres_version": "record-exact-server-version",
+  "restore_started_at": "2026-01-01T00:00:00Z",
+  "restore_finished_at": "2026-01-01T00:00:00Z",
+  "restore_status": "fail",
+  "integrity_checks": [
+    { "name": "catalog validation SQL", "status": "not_run" },
+    { "name": "ledger/payment reconciliation", "status": "not_run" },
+    { "name": "foreign keys and indexes", "status": "not_run" }
+  ],
+  "smoke_tests": [
+    { "name": "authenticated profile read", "status": "not_run" },
+    { "name": "wallet/transaction history read", "status": "not_run" },
+    { "name": "rollback-safe financial fixture", "status": "not_run" }
+  ],
+  "actual_rpo_seconds": null,
+  "actual_rto_seconds": null,
+  "review": {
+    "reviewer_role": "independent-operator-role",
+    "reviewed_at": "2026-01-01T00:00:00Z"
+  },
+  "notes": "Replace all placeholders. Do not include personal data, database URLs, tokens, passwords, or secrets. This template intentionally fails until real evidence is recorded."
+}

@@ -1,0 +1,21 @@
+import fs from "node:fs"
+const read = (p) => fs.readFileSync(new URL(`../${p}`, import.meta.url), "utf8")
+const checks = []
+const check = (name, ok) => { checks.push([name, Boolean(ok)]); console.log(`${ok ? "PASS" : "FAIL"} — ${name}`) }
+const release = read("lib/app-release.ts")
+const pkg = JSON.parse(read("package.json"))
+const wallet = read("features/wallet/wallet-screen.tsx")
+const centre = read("components/ghc/economy-outcome-centre.tsx")
+const model = read("lib/economy-next-action.ts")
+check("release metadata is 0.242.0", release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`))
+check("wallet has economic outcome centre", wallet.includes("EconomyOutcomeCentre") && centre.includes("What matters now"))
+check("outcome uses real wallet states", ["availableGhc", "pendingGhc", "lockedGhc", "claimableToday"].every((x) => model.includes(x)))
+check("pending funds receive priority", model.indexOf('id: "pending"') < model.indexOf('id: "claim"'))
+check("daily claim routes to Rewards", wallet.includes('onOpenRewards={() => navigateSettingsSection("rewards")}'))
+check("Pi rail remains distinct", centre.includes("GHC and Pi remain separate rails") && model.includes('selectedRail === "pi"'))
+check("membership remains a separate benefit path", wallet.includes('navigateSettingsSection("membership")') && wallet.includes("Free, VIP and VVIP benefits"))
+check("financial authority is not moved client-side", !centre.includes("credit") && !centre.includes("mint") && !model.includes("guaranteed return"))
+check("canonical wallet activity path remains", wallet.includes('setTab("activity")') && wallet.includes("WalletBalanceCard"))
+const failed = checks.filter(([, ok]) => !ok)
+console.log(`\nPass 20 Economy Outcomes: ${checks.length - failed.length}/${checks.length} passed`)
+if (failed.length) process.exit(1)

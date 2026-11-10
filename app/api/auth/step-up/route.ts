@@ -1,0 +1,178 @@
+/**
+ * POST /api/auth/step-up
+ *
+ * Establish short-lived server-side step-up for an existing GH session.
+ * Requires:
+ * - Valid GH server session (cookie)
+ * - Fresh Pi accessToken verified via /v2/me
+ * - Verified Pi identity maps to the same GH user as the session
+ *
+ * Does NOT create a new login session.
+ * Does NOT store access tokens.
+ * Does NOT accept client stepUp flags.
+ */
+
+import { NextResponse } from "next/server"
+import {
+  resolveAuthenticatedUser,
+  verifyPiAccessToken,
+} from "@/lib/server/economy/auth"
+import { getByPiAppUid, getByGhUserId } from "@/lib/server/identity/pi-identity-store"
+import {
+  createStepUp,
+  rateLimitStepUp,
+  STEP_UP_TTL_MS,
+} from "@/lib/server/identity/step-up-store"
+import { checkRateLimit, pruneRateLimitBuckets } from "@/lib/server/economy/rate-limit"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+import {
+  extractSessionTokenFromCookie,
+  rotateSession,
+  buildSessionCookieHeader,
+} from "@/lib/server/identity/session-store"
+
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
+
+export async function POST(request: Request) {
+  try {
+    pruneRateLimitBuckets()
+
+    const auth = await resolveAuthenticatedUser(request.headers)
+    if (!auth) {
+      return NextResponse.json(
+        { ok: false, error: "AUTH_REQUIRED" },
+        { status: 401, headers: { "Cache-Control": "no-store" } }
+      )
+    }
+
+    if (auth.source !== "gh_session" || !auth.sessionId) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "SESSION_REQUIRED",
+          detail: "Step-up requires an active GreenHaven server session cookie.",
+        },
+        { status: 403, headers: { "Cache-Control": "no-store" } }
+      )
+    }
+
+    const rl = rateLimitStepUp(auth.userId)
+    if (!rl.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "RATE_LIMITED",
+          detail: `Too many step-up attempts; retry in ${rl.retryAfterSec}s`,
+        },
+        { status: 429, headers: { "Cache-Control": "no-store" } }
+      )
+    }
+
+    const parsedBody = await readBoundedJson(request, 8 * 1024)
+    if (!parsedBody.ok) {
+      return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400, headers: { "Cache-Control": "no-store" } })
+    }
+    const body = parsedBody.value
+    const accessToken = typeof body.accessToken === "string" ? body.accessToken.trim() : ""
+
+    // Reject client-forged step-up claims
+    if (body.stepUp === true && !accessToken) {
+      console.info("[step-up] STEP_UP_FAILURE", { reason: "client_flag_only" })
+      return NextResponse.json(
+        { ok: false, error: "INVALID_STEP_UP" },
+        { status: 400, headers: { "Cache-Control": "no-store" } }
+      )
+    }
+
+    if (!accessToken) {
+      return NextResponse.json(
+        { ok: false, error: "accessToken required" },
+        { status: 400, headers: { "Cache-Control": "no-store" } }
+      )
+    }
+
+    // Fresh Pi Platform verification — never trust body.uid
+    const piUser = await verifyPiAccessToken(accessToken)
+    if (!piUser?.uid) {
+      console.info("[step-up] STEP_UP_FAILURE", { reason: "invalid_pi_token" })
+      return NextResponse.json(
+        { ok: false, error: "INVALID_PI_TOKEN" },
+        { status: 401, headers: { "Cache-Control": "no-store" } }
+      )
+    }
+
+    // Map Pi identity → GH user; must match session user
+    let mappedGhUserId: string | null = null
+    const byPi = await getByPiAppUid(piUser.uid)
+    if (byPi) {
+      mappedGhUserId = byPi.ghUserId
+    } else {
+      const byGh = await getByGhUserId(piUser.uid)
+      if (byGh) mappedGhUserId = byGh.ghUserId
+      else if (piUser.uid === auth.userId) {
+        // First-link edge: session user id may equal pi uid
+        mappedGhUserId = auth.userId
+      }
+    }
+
+    if (!mappedGhUserId || mappedGhUserId !== auth.userId) {
+      console.info("[step-up] STEP_UP_IDENTITY_MISMATCH", {
+        sessionUser: auth.userId,
+        piUid: piUser.uid,
+      })
+      // Rate-limit mismatch probing lightly
+      checkRateLimit(`step_up_mismatch:${auth.userId}`, 5, 60_000)
+      return NextResponse.json(
+        { ok: false, error: "IDENTITY_MISMATCH" },
+        { status: 403, headers: { "Cache-Control": "no-store" } }
+      )
+    }
+
+    const record = await createStepUp({
+      ghUserId: auth.userId,
+      sessionId: auth.sessionId,
+      authMethod: "pi_fresh_auth",
+    })
+
+    // Phase 4: rotate session token after successful step-up so a stolen pre-step-up
+    // cookie cannot keep a long-lived elevated context.
+    const res = NextResponse.json(
+      {
+        ok: true,
+        stepUp: {
+          expiresAt: record.expiresAt,
+          ttlMs: STEP_UP_TTL_MS,
+          authMethod: record.authMethod,
+        },
+        sessionRotated: false as boolean,
+      },
+      { headers: { "Cache-Control": "no-store" } }
+    )
+    const raw = extractSessionTokenFromCookie(request.headers)
+    if (raw) {
+      const rotated = await rotateSession({
+        rawToken: raw,
+        userAgent: request.headers.get("user-agent"),
+      })
+      if (rotated) {
+        res.headers.append("Set-Cookie", buildSessionCookieHeader(rotated.rawToken))
+        // mutate JSON body flag via rewrite is awkward; log only — client refreshes session via /api/auth/session
+        console.info("[step-up] SESSION_ROTATED_AFTER_STEP_UP", {
+          sessionId: rotated.record.id.slice(0, 8),
+        })
+      }
+    }
+    return res
+  } catch (err) {
+    console.error(
+      "[step-up] failed",
+      err instanceof Error ? err.message : "unknown"
+    )
+    const durabilityFailure = err instanceof Error && err.message === "STEP_UP_DURABILITY_UNAVAILABLE"
+    return NextResponse.json(
+      { ok: false, error: durabilityFailure ? "STEP_UP_DURABILITY_UNAVAILABLE" : "STEP_UP_FAILED" },
+      { status: durabilityFailure ? 503 : 500, headers: { "Cache-Control": "no-store" } }
+    )
+  }
+}
