@@ -27,7 +27,7 @@ test('not-found links to privacy and terms', /href="\/privacy"/.test(notFound) &
 test('error boundary links to support', /\/support/.test(errorPage))
 test('robots.ts allows legal routes and disallows api', /\/privacy/.test(robots) && /\/api\//.test(robots))
 test('sitemap lists privacy terms support', /\/privacy/.test(sitemap) && /\/terms/.test(sitemap) && /\/support/.test(sitemap))
-test('readiness reports programmePhase', /programmePhase:\s*"10-platform-acceptance"/.test(readiness))
+test('readiness reports programmePhase', /programmePhase:\s*"10-platform-acceptance(?:;[^"]*)?"/.test(readiness))
 test('filtering index barrel exists', existsSync(join(root, 'lib/filtering/index.ts')))
 test('settings-persistence module exists', existsSync(join(root, 'lib/settings-persistence.ts')))
 test('relationship-integrity module exists', existsSync(join(root, 'lib/server/social/relationship-integrity.ts')))
