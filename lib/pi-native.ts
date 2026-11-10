@@ -19,9 +19,15 @@ function getPi(): Record<string, unknown> | null {
   return w.Pi && typeof w.Pi === "object" ? w.Pi : null
 }
 
-/** True when window.Pi is injected (typical Pi Browser). */
+/**
+ * Best-effort host detection for choosing the Pi SDK sign-in path. This is
+ * only a UX hint; it never authenticates a user or grants payment authority.
+ * Pi Browser can expose its user-agent before the SDK bridge is initialized.
+ */
 export function isPiBrowserRuntime(): boolean {
-  return Boolean(getPi())
+  if (getPi()) return true
+  if (typeof navigator === "undefined") return false
+  return /PiBrowser|Pi\s*Network|minepi/i.test(String(navigator.userAgent || ""))
 }
 
 export function canOpenShareDialog(): boolean {

@@ -55,7 +55,7 @@ const MESSAGES: Record<WalletConsentErrorCode, string> = {
   PI_AUTH_UNAVAILABLE: "Pi authentication is only available inside Pi Browser. Open GreenHaven there and try again.",
   PI_TOKEN_REQUIRED: "Pi authentication is required. Please retry Pi authentication.",
   PI_TOKEN_INVALID: "Pi authentication could not be verified. Please retry Pi authentication.",
-  PI_WALLET_ADDRESS_REQUIRED: "Pi did not return a wallet address. Re-authenticate in Pi Browser and approve the wallet-address permission.",
+  PI_WALLET_ADDRESS_REQUIRED: "Pi did not expose a wallet address for this authorization. No withdrawal was started. Reopen GreenHaven in Pi Browser and retry wallet authorization; never enter or substitute an address manually.",
   PI_WALLET_ADDRESS_INVALID: "Pi returned an invalid wallet address. No payout authorization was changed.",
   PI_WALLET_ADDRESS_MISMATCH: "Pi returned conflicting wallet details. No payout authorization was changed.",
   IDENTITY_MISMATCH: "Your authenticated Pi account does not match the Pi account linked to this GreenHaven account.",
@@ -133,7 +133,7 @@ export async function fetchWalletAuthorizationStatus(signal?: AbortSignal): Prom
 type ConsentPostResponse = { status: number; body: { ok?: boolean; error?: string } | null }
 
 /** The access token only lives in this call's request body; it is never retained. */
-async function postConsent(accessToken: string, walletAddress: string): Promise<ConsentPostResponse | null> {
+async function postConsent(accessToken: string, walletAddress: string | null): Promise<ConsentPostResponse | null> {
   try {
     const res = await fetch("/api/identity/wallet-authorization", {
       method: "POST",
@@ -162,9 +162,9 @@ export async function requestPiWalletConsent(): Promise<WalletConsentResult> {
     const pi = await piAuthenticateOfficial(["username", "payments", "wallet_address"])
     accessToken = pi.accessToken
     if (!accessToken) return fail("PI_TOKEN_REQUIRED")
-    const walletAddress = String(pi.walletAddress || "").trim().toUpperCase()
-    if (!walletAddress) return fail("PI_WALLET_ADDRESS_REQUIRED")
-    if (!/^G[A-Z2-7]{55}$/.test(walletAddress)) return fail("PI_WALLET_ADDRESS_INVALID")
+    const walletAddress = String(pi.walletAddress || "").trim().toUpperCase() || null
+    if (walletAddress && !/^G[A-Z2-7]{55}$/.test(walletAddress)) return fail("PI_WALLET_ADDRESS_INVALID")
+    // Missing SDK data is not conclusive; the server verifies the token with Pi /v2/me.
     const response = await postConsent(accessToken, walletAddress)
     if (!response) return fail("NETWORK_ERROR")
     const { status, body } = response

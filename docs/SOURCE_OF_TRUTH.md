@@ -26,6 +26,22 @@ The user's latest authoritative uploaded archive is `GREENHAVEN-0.338.23-RUN257-
 - Targeted marketplace/community static contracts and runtime parser/mapper/cart/discovery tests are documented in `docs/INDEPENDENT-MARKETPLACE-COMMUNITY-FINANCIAL-AUDIT-2026-11-09.md`. These checks do not prove PostgreSQL concurrency, live provider settlement, RLS deployment, browser/device behavior or production readiness.
 - Typecheck remains BLOCKED in this environment: the project requires Node `24.15.0`, but the available runtime is `22.16.0`; dependency installation timed out and required type packages are incomplete. Do not claim a successful TypeScript check or production build until the supported runtime and full lockfile install are available.
 
+## Run #265 — isolated Pi earnings payout recovery simulation
+
+- Added `scripts/test-run265-payout-recovery-simulation.mjs`, a deterministic in-memory test fixture for payout reservation, exact provider reconciliation, safe release, verified settlement and idempotent retries. It makes no Pi SDK/network/Supabase calls and does not touch any live wallet or ledger.
+- The fixture asserts that an uncertain payout with an execution attempt can never be released merely because a lookup is empty; recovery requires an exact provider/request/UID/amount/network match; settlement requires a verified and developer-completed receipt with destination confirmation; duplicate release/settlement cannot append a second ledger effect.
+- The 13 scenario tests are registered in `test:pi-earnings-recovery-simulation`, `prebuild:checks`, and `verify:static`.
+- This is simulation coverage, not a live provider acceptance test and not a change to the live three uncertain reservations.
+- The wallet-address migration remains unapplied until Run #264 source is deployed and the target migration history is reconciled. The separate Run #261 A2U qualification migration is not required for withdrawals and remains unapplied; it requires its own operator/KYC review.
+
+## Run #264 — Pi Browser and wallet-consent reliability follow-up
+
+Run #264 is a source-level follow-up to Run #263 / 0.338.27. It recognizes Pi Browser from the user-agent before `window.Pi` is injected, uses the shared single-flight Pi SDK initializer for initial authentication, and prevents a slow initial handshake from being mislabeled as an unsupported browser. Browser detection is never authentication evidence.
+
+Wallet consent now permits a fresh Pi access token to be verified by the server even when the SDK response omits `user.wallet_address`; a valid address returned by Pi Platform `/v2/me` is the only fallback. If both sources provide an address, they must match. If neither source provides a valid address, authorization remains blocked. The checkbox has a 24px control and a minimum 48px clickable row.
+
+The Testnet wallet-address migration remains REVIEW_REQUIRED and unapplied until the new source is deployed and target migration history reconciled. No uncertain payout, reservation, wallet balance, ledger row, or Mainnet data is changed. Pi Browser device acceptance and the full Node 24.15.0 build remain release gates; production is NOT APPROVED.
+
 ## Authority order
 
 Read `docs/CURRENT_BUILD_CONTEXT.md` first for the current concise product/build brief. It supersedes older prompt notes and historical worklogs as the active implementation context.
@@ -80,3 +96,14 @@ For implementation prompts:
 ## Current ten-phase completion programme
 
 The controlling Phase 1 audit and implementation register for source release 0.338.13 is `docs/PHASE-1-CONSOLIDATED-AUDIT-AND-IMPLEMENTATION-REGISTER-2026-11-09.md`. It records current inventory counts, test evidence, blockers and phase traceability. Source checks are not live database or production certification.
+
+
+## Run #262 — Vercel build memory remediation (2026-11-10)
+
+- Vercel deployment logs for the 0.338.27 Testnet Preview builds explicitly reported an Out Of Memory event and `Next.js build worker exited ... SIGKILL` during optimized production compilation, after all 289 prebuild checks passed.
+- Bound Next.js build concurrency to one worker and enabled webpack memory optimizations. TypeScript and ESLint build gates remain enabled. Added `scripts/check-run262-build-memory-budget.mjs` to enforce these constraints.
+- This is a source-level mitigation; a clean Node 24.15.0 Vercel rebuild is still required to prove the OOM is resolved.
+
+## Run #263 — Connected infrastructure hardening (2026-11-10)
+
+See `docs/RUN263-20-ESSENTIAL-HARDENING-AUDIT.md` for the 20-control evidence register, live Vercel configuration updates, Supabase Testnet audit findings, and remaining release gates. Run #263 adds 20 source/CI assertions to the sequential prebuild suite. No Supabase schema, financial rows, provider state, or Mainnet resources were modified.

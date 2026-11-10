@@ -54,10 +54,20 @@ await t("Pi platform rejects token → PI_TOKEN_INVALID and no mapping read", as
   assert.deepEqual(r, { ok: false, error: "PI_TOKEN_INVALID" })
   assert.equal(calls.byGh, 0)
 })
-await t("missing SDK wallet address → PI_WALLET_ADDRESS_REQUIRED", async () => {
-  const { deps: d } = deps()
+await t("missing SDK address still checks Pi Platform and fails closed when both sources omit it", async () => {
+  const { deps: d, calls } = deps()
   const { walletAddress, ...withoutAddress } = good
   assert.deepEqual(await verifyWalletConsentProof(withoutAddress, d), { ok: false, error: "PI_WALLET_ADDRESS_REQUIRED" })
+  assert.equal(calls.verify, 1)
+})
+await t("Pi Platform address is accepted when SDK auth response omits it", async () => {
+  const { deps: d, calls } = deps({ verifyPiAccessToken: async () => { calls.verify++; return { uid: "pi-uid-1", username: "alice", walletAddress: PI_WALLET_ADDRESS } } })
+  const { walletAddress, ...withoutAddress } = good
+  const result = await verifyWalletConsentProof(withoutAddress, d)
+  assert.equal(result.ok, true)
+  assert.equal(result.piWalletAddress, PI_WALLET_ADDRESS)
+  assert.equal(result.walletAddressSource, "platform_api")
+  assert.equal(calls.verify, 1)
 })
 await t("server-returned wallet address must match Pi SDK address", async () => {
   const { deps: d } = deps({ verifyPiAccessToken: async () => ({ uid: "pi-uid-1", walletAddress: `G${"B".repeat(55)}` }) })
@@ -105,4 +115,4 @@ await t("every failure has a safe message and an HTTP status; none leak internal
   }
 })
 
-console.log(`\nPhase 28 wallet consent tests: ${passed}/12 passed`)
+console.log(`\nPhase 28 wallet consent tests: ${passed}/13 passed`)

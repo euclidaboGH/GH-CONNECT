@@ -196,7 +196,7 @@ function detectPiEnvironment(): {
     /PiBrowser/i.test(ua) ||
     /Pi Network/i.test(ua) ||
     /minepi/i.test(ua) ||
-    /Pi/i.test(ua)
+    /\bPi\b/i.test(ua)
   return {
     hasWindowPi: typeof (window as any).Pi !== "undefined",
     uaLooksLikePi,
@@ -219,41 +219,6 @@ async function waitForWindowPi(timeoutMs = 10000, intervalMs = 250): Promise<boo
   return typeof (window as any).Pi !== "undefined"
 }
 
-const loadPiSDK = async (): Promise<void> => {
-
-  if (typeof window === "undefined") {
-    throw new Error("Pi Browser required (no window)")
-  }
-  // Prefer native bridge (injected by Pi Browser)
-  if (typeof (window as any).Pi !== "undefined") return
-
-  const env = detectPiEnvironment()
-  console.info("[PiAuth] waiting for window.Pi", env)
-
-  const appeared = await waitForWindowPi(10000, 250)
-  if (appeared) {
-    console.info("[PiAuth] window.Pi appeared after wait")
-    return
-  }
-
-  // Optional CDN load — only helps when host already provides Pi host APIs
-  try {
-    const timeout = PI_NETWORK_CONFIG.SCRIPT_LOAD_TIMEOUT_MS || 12000
-    await loadScript(PI_NETWORK_CONFIG.SDK_URL, timeout)
-  } catch (e) {
-    console.warn("[PiAuth] CDN Pi SDK load issue:", e)
-  }
-
-  if (await waitForWindowPi(3000, 250)) return
-
-  const after = detectPiEnvironment()
-  console.warn("[PiAuth] window.Pi still missing", after)
-  throw new Error(
-    after.uaLooksLikePi
-      ? "Pi Browser detected but window.Pi is still missing. Wait a few seconds and Retry, or re-open the app from Pi → Develop using the exact URL registered in the Developer Portal. Check NEXT_PUBLIC_PI_SANDBOX matches sandbox/testnet."
-      : "Pi bridge (window.Pi) not found. Open GreenHaven from inside the Pi app (Develop → your app). Pasting the Vercel URL into Chrome/WhatsApp will not work."
-  )
-}
 
 /** Map raw SDK ReferenceErrors to a clear operator message */
 function humanizePiAuthError(err: unknown): string {
@@ -436,7 +401,8 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
       // 2) Official Pi SDK + SDKLite
       setAuthMessage("Loading Pi SDK...");
       try {
-        await loadPiSDK();
+        // Use the shared single-flight SDK loader; do not race the root SDK script.
+        await ensurePiInitialized();
         setAuthMessage("Authenticating with Pi...");
         setAuthLifecycle((s) => transitionAuth(s, "PI_AUTHENTICATING"));
         const identity = await officialPiAuthenticate();
@@ -901,10 +867,18 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
         if (prev) return prev;
         // Production / Pi-required hosts: show error, do NOT fake a user
         if (!allowLocalAuthFallback()) {
-          setHasError(true);
-          setAuthMessage(
-            "Pi Browser is required. Open this GreenHaven link inside the Pi app (Develop → your app, or the production URL). Sign in with your Pi account to continue."
-          );
+          const env = detectPiEnvironment();
+          if (env.uaLooksLikePi) {
+            // Keep a slow Pi webview handshake in a connecting state instead of
+            // falsely telling a user already in Pi Browser that it is required.
+            setHasError(false);
+            setAuthMessage("Pi Browser detected. Still connecting to Pi… You can retry authentication if this takes too long.");
+          } else {
+            setHasError(true);
+            setAuthMessage(
+              "Pi sign-in is not connected yet. Open GreenHaven inside the Pi app (Develop → your app), or use the normal-browser Pi sign-in option."
+            );
+          }
           return false;
         }
         console.info("[PiAuth] Auth hard-timeout — activating local preview session");

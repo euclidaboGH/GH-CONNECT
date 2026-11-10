@@ -800,14 +800,15 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
               <p className="mt-1.5 text-[11px] leading-relaxed text-violet-900/90 dark:text-violet-100/85">
                 A 3% platform fee applies to each withdrawal; you receive the remaining 97%.
               </p>
-              <label className="mt-2.5 flex items-start gap-2 text-[12px] text-violet-950 dark:text-violet-100">
+              <label className="mt-3 flex min-h-12 w-full cursor-pointer items-start gap-3 rounded-xl border border-violet-300/80 bg-white/70 px-3 py-3 text-[13px] leading-relaxed text-violet-950 transition-colors hover:bg-white focus-within:outline-none focus-within:ring-2 focus-within:ring-violet-500 focus-within:ring-offset-2 dark:border-violet-700 dark:bg-violet-950/50 dark:text-violet-100">
                 <input
                   type="checkbox"
-                  className="mt-0.5 h-4 w-4 rounded border-violet-400"
+                  className="mt-0.5 h-6 w-6 min-h-6 min-w-6 shrink-0 cursor-pointer rounded-md border-2 border-violet-500 accent-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-600 focus-visible:ring-offset-2"
                   checked={consentChecked}
                   onChange={(e) => setConsentChecked(e.target.checked)}
+                  aria-label="I authorize GreenHaven to send eligible Pi earnings to my linked Pi account"
                 />
-                <span>
+                <span className="flex-1">
                   I authorize GreenHaven to send eligible Pi earnings to my linked Pi account; GreenHaven will verify the provider payment destination against the wallet address returned by Pi before submission
                   {destination ? ` (@${destination})` : ""}.
                 </span>

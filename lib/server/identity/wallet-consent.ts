@@ -42,9 +42,14 @@ export async function verifyWalletConsentProof(
   // Explicit consent must be the literal boolean true — never truthy strings.
   if (input.consent !== true) return { ok: false, error: "CONSENT_REQUIRED" }
 
+  // Some Pi Browser/SDK builds omit the wallet_address field in AuthResult.
+  // Still verify the fresh bearer token: the trusted Platform /v2/me response
+  // may provide the address. A client-supplied address is not required to run
+  // this server-side verification.
   const sdkWalletAddress = typeof input.walletAddress === "string" ? input.walletAddress.trim().toUpperCase() : ""
-  if (!sdkWalletAddress) return { ok: false, error: "PI_WALLET_ADDRESS_REQUIRED" }
-  if (!/^G[A-Z2-7]{55}$/.test(sdkWalletAddress)) return { ok: false, error: "PI_WALLET_ADDRESS_INVALID" }
+  if (sdkWalletAddress && !/^G[A-Z2-7]{55}$/.test(sdkWalletAddress)) {
+    return { ok: false, error: "PI_WALLET_ADDRESS_INVALID" }
+  }
 
   const token = typeof input.accessToken === "string" ? input.accessToken.trim() : ""
   if (!token || token.length > MAX_TOKEN_LENGTH) return { ok: false, error: "PI_TOKEN_REQUIRED" }
@@ -55,16 +60,19 @@ export async function verifyWalletConsentProof(
   // Trusted server-side verification with the Pi Platform.
   const piUser = await deps.verifyPiAccessToken(token)
   if (!piUser?.uid) return { ok: false, error: "PI_TOKEN_INVALID" }
-  // The official Pi SDK returns wallet_address when the user grants that
-  // scope. The server verifies the bearer token and app-specific UID. Some
-  // Platform API UserDTO versions also return the address; when present it must
-  // exactly match the SDK value. Otherwise mark it SDK-reported until A2U's
-  // authoritative PaymentDTO.to_address confirms it before submission.
+  // Prefer the authenticated Platform API address when available. When both
+  // Platform API and SDK return an address, require exact equality. If only
+  // the SDK returns it, keep its provenance explicit and independently check
+  // A2U PaymentDTO.to_address before submission and settlement.
   const platformWalletAddress = String(piUser.walletAddress || "").trim().toUpperCase()
-  if (platformWalletAddress && platformWalletAddress !== sdkWalletAddress) {
+  if (platformWalletAddress && !/^G[A-Z2-7]{55}$/.test(platformWalletAddress)) {
+    return { ok: false, error: "PI_WALLET_ADDRESS_INVALID" }
+  }
+  if (platformWalletAddress && sdkWalletAddress && platformWalletAddress !== sdkWalletAddress) {
     return { ok: false, error: "PI_WALLET_ADDRESS_MISMATCH" }
   }
-  const piWalletAddress = sdkWalletAddress
+  const piWalletAddress = platformWalletAddress || sdkWalletAddress
+  if (!piWalletAddress) return { ok: false, error: "PI_WALLET_ADDRESS_REQUIRED" }
   const walletAddressSource: "platform_api" | "pi_sdk_scope" = platformWalletAddress ? "platform_api" : "pi_sdk_scope"
 
   let mapping: Awaited<ReturnType<WalletConsentDeps["getByGhUserId"]>>
@@ -99,7 +107,7 @@ export const WALLET_CONSENT_MESSAGES: Record<WalletConsentFailure, string> = {
   IDENTITY_MAPPING_REQUIRED: "Sign in with Pi so GreenHaven can link your Pi identity before authorizing withdrawals.",
   IDENTITY_MISMATCH: "Your authenticated Pi account does not match the Pi account linked to this GreenHaven account.",
   IDENTITY_LOOKUP_UNAVAILABLE: "Identity verification is temporarily unavailable. Withdrawals remain blocked; please try again shortly.",
-  PI_WALLET_ADDRESS_REQUIRED: "Pi did not return a wallet address. Re-authenticate in Pi Browser and approve the wallet-address permission.",
+  PI_WALLET_ADDRESS_REQUIRED: "Pi did not expose a wallet address for this authorization. No withdrawal was started. Reopen GreenHaven in Pi Browser and retry wallet authorization; never enter or substitute an address manually.",
   PI_WALLET_ADDRESS_INVALID: "Pi returned an invalid wallet address. No payout authorization was changed.",
   PI_WALLET_ADDRESS_MISMATCH: "The wallet address from Pi authentication did not match Pi's server response. No payout authorization was changed.",
 }
