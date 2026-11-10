@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 50 essential upgrades — 10 per section across 5 product sections (0.338.16).
+ * 50 essential upgrades — 10 per section across 5 product sections (0.338.17).
  * Source-only regression; does not claim live acceptance or production approval.
  */
 import fs from 'node:fs'
@@ -91,7 +91,7 @@ add(5, 'P09', 'Five-item bottom navigation contract documented', /BOTTOM_NAV_ITE
 add(5, 'P10', 'CI does not auto-apply migrations', !/supabase\s+db\s+push/.test(ci))
 
 // Release hygiene (counted inside section totals above; soft check)
-const versionOk = pkg.version === '0.338.16' && release.includes('0.338.16')
+const versionOk = pkg.version === '0.338.17' && release.includes('0.338.17')
 
 let failed = 0
 for (const c of checks) {
@@ -100,9 +100,9 @@ for (const c of checks) {
 }
 console.log(`\n50 essential upgrades: ${checks.length - failed}/${checks.length} passed`)
 if (!versionOk) {
-  console.error('FAIL release version is not 0.338.16')
+  console.error('FAIL release version is not 0.338.17')
   failed++
 } else {
-  console.log('PASS release version is 0.338.16')
+  console.log('PASS release version is 0.338.17')
 }
 if (checks.length !== 50 || failed) process.exit(1)

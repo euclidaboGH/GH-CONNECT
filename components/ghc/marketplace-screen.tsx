@@ -504,7 +504,7 @@ function ListingDetail({
 
   return (
     <div className="gh-world-marketplace flex h-full min-h-0 flex-col bg-background">
-      <header className="gh-marketplace-header gh-marketplace-detail-header flex shrink-0 items-center gap-2 border-b border-border/50 px-3 pb-1 pt-[max(0.25rem,env(safe-area-inset-top,0px))]">
+      <header className="gh-marketplace-header gh-marketplace-detail-header flex shrink-0 flex-col gap-1.5 border-b border-border/50 px-3 pb-1 pt-[max(0.25rem,env(safe-area-inset-top,0px))]">
         <button
           type="button"
           onClick={onBack}
@@ -1957,6 +1957,7 @@ function validateMarketplaceBrowseFilters(value: unknown): MarketplaceBrowseFilt
   }
 }
 
+/** Cart is separate from Wallet balances — do not mix badges or CTAs. */
 export function MarketplaceScreen({
   onBack,
   initialListingId,

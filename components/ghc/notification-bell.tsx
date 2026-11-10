@@ -700,6 +700,7 @@ export function NotificationBell({
         method: "POST",
         credentials: "include",
         headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(10_000),
       })
         .then((response) => {
           if (!response?.ok) {

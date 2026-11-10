@@ -1,8 +1,8 @@
 # GreenHaven / GH-CONNECT — Phase 1 Consolidated Audit and Implementation Register
 
 **Audit date:** 2026-11-09  
-**Authoritative source archive:** `GREENHAVEN-0.338.16-STEP2-SURGICAL-SQL-FIXES-DEPENDENCY-AUDIT-2026-11-09.zip`  
-**Project package:** `gh-connect@0.338.16`  
+**Authoritative source archive:** `GREENHAVEN-0.338.17-STEP2-SURGICAL-SQL-FIXES-DEPENDENCY-AUDIT-2026-11-09.zip`  
+**Project package:** `gh-connect@0.338.17`  
 **Phase:** 1 of the ten-phase completion roadmap — authoritative baseline and complete audit  
 **Disposition:** **Source inventory and selected contracts verified; Phase 1 is NOT fully closed. Production remains NOT APPROVED.**
 
@@ -12,7 +12,7 @@ This register is the controlling source-audit index for the ten-phase completion
 
 Rules:
 
-- Keep the 0.338.16 archive as the sole source baseline for this work.
+- Keep the 0.338.17 archive as the sole source baseline for this work.
 - Preserve working architecture, features, interfaces, assets, integrations and dependency versions unless a confirmed defect requires a narrowly scoped fix.
 - Do not apply migrations, repair remote history, change balances, execute payouts, or change provider/deployment settings as part of this source-only phase.
 - Distinguish **source present**, **source check passed**, **database applied**, **Testnet verified**, and **production verified**. They are not interchangeable states.
@@ -22,7 +22,7 @@ Rules:
 
 | Item | Observed value | Interpretation |
 |---|---:|---|
-| `package.json` version | `0.338.16` | Matches archive release identity |
+| `package.json` version | `0.338.17` | Matches archive release identity |
 | Canonical SQL migration files | 199 | Repository inventory only |
 | Migration classifications | 118 REQUIRED; 78 REVIEW_REQUIRED; 2 PROPOSAL; 1 REQUIRES_APPROVAL | `REQUIRED` is not automatic authorization to apply |
 | Migration source manifest | 199/199 synchronized | Source inventory gate passes |

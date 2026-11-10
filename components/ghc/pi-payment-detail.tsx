@@ -58,7 +58,14 @@ export function PiPaymentDetail({ intent, finding, onClose }: { intent: PiPaymen
     setTimelineLoading(true)
     setTimelineError(null)
     try {
-      const response = await fetch(`/api/payments/intents/${encodeURIComponent(intent.id)}/timeline`, { cache: "no-store", headers: { Accept: "application/json" } })
+      const controller = new AbortController()
+      const timer = window.setTimeout(() => controller.abort(), 12_000)
+      const response = await fetch(`/api/payments/intents/${encodeURIComponent(intent.id)}/timeline`, {
+        credentials: "include",
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+        signal: controller.signal,
+      }).finally(() => window.clearTimeout(timer))
       const data = await response.json().catch(() => null)
       if (!response.ok || !data?.ok || !Array.isArray(data.events)) throw new Error("The stored payment history is temporarily unavailable.")
       setTimeline(data.events)
