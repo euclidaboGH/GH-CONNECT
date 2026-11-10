@@ -55,7 +55,7 @@ const MESSAGES: Record<WalletConsentErrorCode, string> = {
   PI_AUTH_UNAVAILABLE: "Pi authentication is only available inside Pi Browser. Open GreenHaven there and try again.",
   PI_TOKEN_REQUIRED: "Pi authentication is required. Please retry Pi authentication.",
   PI_TOKEN_INVALID: "Pi authentication could not be verified. Please retry Pi authentication.",
-  PI_WALLET_ADDRESS_REQUIRED: "Pi did not expose a wallet address for this authorization. No withdrawal was started. Reopen GreenHaven in Pi Browser and retry wallet authorization; never enter or substitute an address manually.",
+  PI_WALLET_ADDRESS_REQUIRED: "Pi signed you in but did not grant GreenHaven the wallet-address permission. No authorization or withdrawal was created. In Pi Browser, open GreenHaven using the registered app link, approve the wallet-address permission when Pi asks, and retry. If Pi does not ask again, review GreenHaven's permissions in Pi Browser and re-enable wallet access. Never enter or substitute a wallet address manually.",
   PI_WALLET_ADDRESS_INVALID: "Pi returned an invalid wallet address. No payout authorization was changed.",
   PI_WALLET_ADDRESS_MISMATCH: "Pi returned conflicting wallet details. No payout authorization was changed.",
   IDENTITY_MISMATCH: "Your authenticated Pi account does not match the Pi account linked to this GreenHaven account.",
@@ -156,10 +156,11 @@ async function postConsent(accessToken: string, walletAddress: string | null): P
 export async function requestPiWalletConsent(): Promise<WalletConsentResult> {
   let accessToken: string | null
   try {
-    // Explicit payout consent adds the wallet_address scope. The server verifies
-    // the token's UID and granted scope; the A2U PaymentDTO destination is then
-    // compared with this SDK-reported address before any transaction is submitted.
-    const pi = await piAuthenticateOfficial(["username", "payments", "wallet_address"])
+    // Request only the additional permission this action needs. Pi's app-local
+    // UID is returned without a scope; username and payments are not required
+    // to bind a public wallet address. A2U remains server-initiated and UID-routed.
+    // The server independently verifies this fresh token with Pi /v2/me.
+    const pi = await piAuthenticateOfficial(["wallet_address"])
     accessToken = pi.accessToken
     if (!accessToken) return fail("PI_TOKEN_REQUIRED")
     const walletAddress = String(pi.walletAddress || "").trim().toUpperCase() || null

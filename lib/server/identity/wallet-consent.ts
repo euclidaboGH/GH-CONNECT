@@ -107,7 +107,7 @@ export const WALLET_CONSENT_MESSAGES: Record<WalletConsentFailure, string> = {
   IDENTITY_MAPPING_REQUIRED: "Sign in with Pi so GreenHaven can link your Pi identity before authorizing withdrawals.",
   IDENTITY_MISMATCH: "Your authenticated Pi account does not match the Pi account linked to this GreenHaven account.",
   IDENTITY_LOOKUP_UNAVAILABLE: "Identity verification is temporarily unavailable. Withdrawals remain blocked; please try again shortly.",
-  PI_WALLET_ADDRESS_REQUIRED: "Pi did not expose a wallet address for this authorization. No withdrawal was started. Reopen GreenHaven in Pi Browser and retry wallet authorization; never enter or substitute an address manually.",
+  PI_WALLET_ADDRESS_REQUIRED: "Pi authenticated the linked account but did not return the wallet-address permission. No authorization or withdrawal was created. Reopen the registered GreenHaven app in Pi Browser, approve wallet-address access when prompted, and retry. If no permission prompt appears, review GreenHaven's app permissions in Pi Browser. Never enter or substitute an address manually.",
   PI_WALLET_ADDRESS_INVALID: "Pi returned an invalid wallet address. No payout authorization was changed.",
   PI_WALLET_ADDRESS_MISMATCH: "The wallet address from Pi authentication did not match Pi's server response. No payout authorization was changed.",
 }

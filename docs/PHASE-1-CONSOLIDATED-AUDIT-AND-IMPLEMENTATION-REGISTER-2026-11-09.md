@@ -2,9 +2,9 @@
 
 **Audit date:** 2026-11-09  
 **Authoritative source archive:** `GREENHAVEN-0.338.18-STEP2-SURGICAL-SQL-FIXES-DEPENDENCY-AUDIT-2026-11-09.zip`  
-**Project package:** `gh-connect@0.338.27`
+**Current project package:** `gh-connect@0.338.29`
 
-**Current in-place maintenance derivative:** `gh-connect@0.338.27 (Runs #250–261)`; the audit findings and historical baseline below remain preserved.  
+**Current in-place maintenance derivative:** `gh-connect@0.338.29 (Runs #250–267)`; the audit findings and historical baseline below remain preserved. The original 0.338.18 audit baseline and 0.338.27 Run #250–261 snapshots are historical references, not current release pointers.  
 **Phase:** 1 of the ten-phase completion roadmap — authoritative baseline and complete audit  
 **Disposition:** **Source inventory and selected contracts verified; Phase 1 is NOT fully closed. Production remains NOT APPROVED.**
 
@@ -20,7 +20,7 @@ This register is the controlling source-audit index for the ten-phase completion
 
 Rules:
 
-- Keep the 0.338.18 archive as the sole source baseline for this work.
+- Preserve the 0.338.18 archive as the historical audit baseline; use the current 0.338.29 source-of-truth archive and its executable source for implementation.
 - Preserve working architecture, features, interfaces, assets, integrations and dependency versions unless a confirmed defect requires a narrowly scoped fix.
 - Do not apply migrations, repair remote history, change balances, execute payouts, or change provider/deployment settings as part of this source-only phase.
 - Distinguish **source present**, **source check passed**, **database applied**, **Testnet verified**, and **production verified**. They are not interchangeable states.

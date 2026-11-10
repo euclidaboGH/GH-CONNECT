@@ -1,6 +1,6 @@
-# Current source increment — Run #266 / 0.338.28
+# Current source increment — Run #267 / 0.338.29
 
-GreenHaven's canonical post-card renderer is shared across Feed, Profile and Community. Run #266 adds semantic article markup, explicit surface identity, responsive author/content/media treatment, and a mobile-first Comment / Save / Share action dock. It preserves existing social API and database contracts, server-authoritative engagement, moderation and visibility controls, durable-media validation, and the single UnifiedCompose entry. Share UI feedback no longer implies a share completed merely because the share sheet opened. Run #266 source checks pass 14/14; five changed TSX files pass syntax transpilation. Full Node 24.15.0 typecheck/lint/build and browser/device, screen-reader and two-account acceptance remain open. No migration or live database change was made. Production NOT APPROVED.
+Run #267 applies a shared compact header system across Discovery, Community, Marketplace and other app sections, with brighter neutral surfaces, reduced vertical chrome, compact toolbars and consistent focus treatment. Pi wallet consent now requests only the `wallet_address` scope, normalizes Pi SDK and Platform API response variants, and improves missing-permission guidance. Server-side Pi token verification, durable UID matching, wallet-address validation, destination matching and fail-closed authorization remain mandatory. Run #267 static checks pass 12/12; Phase 28 wallet consent static checks pass 46/46 and runtime proof tests pass 13/13. Full Node 24.15.0 typecheck/lint/build, Pi Browser Testnet permission acceptance and browser/device visual review remain open. No migration, live database mutation, payout or deployment was performed. Production NOT APPROVED.
 
 ## Run #261 — Pi A2U ecosystem qualification register (2026-11-10)
 
@@ -40,7 +40,7 @@ The earnings payout worker no longer directly selects from `gh_pi_earnings_payou
 
 ## 0.330.49 — Phase 3 wallet, rewards and membership concurrency hardening (2026-11-08)
 
-**Current source version:** `0.338.28`
+**Current source version:** `0.338.29`
 
 This increment closes several Phase 3 financial-reliability gaps. Pi withdrawal reservation recovery now reports per-request reasons and unlock conditions, and only releases a Pi Testnet reservation when it is still `reserved`, has no provider payment/txid, has no execution start/lease and has zero execution attempts. Processing/uncertain requests remain protected until an authoritative provider result; timeouts do not forfeit earned funds. Wallet ledger history prioritizes human-readable reasons over opaque references, and the withdrawal request response no longer contradicts its own execution gate. GHC membership purchase now serializes entitlement preflight and debit per account and prevents duplicate active same-tier charges or active VVIP downgrades during concurrent requests. Reward claim replay by either pending-row ID or rewardId alias resolves to the one posted credit. Pi payment recovery now looks up and validates the provider object before binding its ID, checks payer identity/network/direction/amount, and requires a verified transaction and txid before completion; recovery is durably rate limited and no-store. The new SQL migration `20261108110001_phase3_wallet_rewards_membership_concurrency_recovery.sql` is REVIEW_REQUIRED and unapplied. Its 43-check source contract passes; existing targeted Phase 3 ledger, request guard, membership, payout lifecycle/settlement/execution, wallet recovery and cross-feature reconciliation contracts pass. Live PostgreSQL concurrency, authenticated Pi Testnet payment/entitlement recovery, actual 3π reservation reconciliation, Node 24.15.0 dependency-backed typecheck/lint/build and browser/device acceptance remain outstanding. Production remains NOT APPROVED.
 
@@ -209,8 +209,8 @@ The release retains the 0.330.0 Settings/media/navigation work and corrects stal
 
 ## Current authoritative metadata
 
-- Package and lockfile version: `0.338.28` (verified against `package.json` and the lockfile root).
-- Current project archive: `GREENHAVEN-0.338.28-RUN266-SOCIAL-POST-EXPERIENCE.zip`.
+- Package and lockfile version: `0.338.29` (verified against `package.json` and the lockfile root).
+- Current project archive: `GREENHAVEN-0.338.29-RUN267-COMPACT-HEADERS-PI-WALLET-CONSENT.zip`.
 - Runtime: Node `24.15.0` / package engine `^24.15.0`; this audit environment only supplied Node 22.16.0, so dependency-backed typecheck/build remain unverified.
 - Canonical Supabase migrations: **209** SQL files.
 - Duplicate migration numeric prefixes: **0** (source-level manifest check required for release).

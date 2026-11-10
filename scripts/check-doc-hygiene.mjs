@@ -7,6 +7,12 @@ const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
 const docsRoot = join(root, 'docs')
 const required = new Set([
   'docs/SOURCE_OF_TRUTH.md',
+  'docs/RUN268-VERCEL-RELEASE-GATE-FIX.md',
+  'docs/RUN263-20-ESSENTIAL-HARDENING-AUDIT.md',
+  'docs/RUN265-PI-EARNINGS-PAYOUT-RECOVERY-SIMULATION.md',
+  'docs/RUN266-SOCIAL-POST-EXPERIENCE.md',
+  'docs/RUN267-COMPACT-HEADERS-PI-WALLET-CONSENT.md',
+  'docs/UPGRADE-WORKLOG-0.338.27-RUN264.md',
   'docs/ACCEPTANCE-COMPLETION-REGISTER.md',
   'docs/PHASE-2-WALLET-PAYMENTS-IMPLEMENTATION-2026-11-08.md',
   'docs/PHASE-2-WALLET-FOLLOWUP-HARDENING-2026-11-08.md',

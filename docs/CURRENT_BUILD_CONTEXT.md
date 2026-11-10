@@ -2,11 +2,16 @@
 
 **Canonical implementation context. Read this before every new build prompt or engineering task. This document supersedes historical prompts, worklogs and archives for current implementation decisions.**
 
-## Run #261 — Current source authority (2026-11-10)
+## Run #267 — Current source authority (2026-11-10)
+
+- Current source release: **0.338.29**. Shared header chrome is slimmer/brighter across Discovery, Community, Marketplace and other app surfaces. Pi wallet authorization requests the explicit `wallet_address` scope only; server token verification and fail-closed address/UID checks remain required.
+- Run #267 does not apply Supabase migrations, alter live balances/reservations, execute payouts or deploy to Vercel. Pi Browser Testnet scope acceptance and Node 24.15.0 full build remain outstanding.
+
+## Historical Run #261 — source history (2026-11-10)
 
 - Run #258: Testnet Marketplace order-list RPC fixed after reproducing SQLSTATE 42703; applied migration `20261110110002_marketplace_orders_list_rpc_alias_fix.sql` (generated history version `20261110102610`). Synthetic read-only postflight returned an empty order list and confirmed service_role-only ACL. No order or financial data changed.
 
-- Current working source release: **0.338.28**, derived from the user's latest authoritative `GREENHAVEN-0.338.23-RUN257-ECONOMY-MARKETPLACE-RECONCILIATION.zip` through 0.338.25.
+- Current working source release: **0.338.29**, derived from the user's latest authoritative `GREENHAVEN-0.338.23-RUN257-ECONOMY-MARKETPLACE-RECONCILIATION.zip` through 0.338.25.
 - Current archive includes a Testnet-only A2U withdrawal reliability improvement: unrelated incomplete Pi server payments are now added to the shared operator review queue with provider ID/txid and bounded metadata; the operator treasury report can inspect Pi's single incomplete server payment read-only; failure diagnostics are sanitized and persisted. No A2U transfer is auto-cancelled or bypassed.
 - Testnet remains the only active audit target. Mainnet is not to be modified. Supabase migration history for the original manually applied migrations remains unreconciled; never run `supabase db push` or replay migrations 1–189.
 - Current source inventory: 209 canonical migrations; 140 public tables with RLS; 0 public SECURITY DEFINER functions executable by client roles; 13 intentionally deny-all RLS tables. Wallet payout provider state, old membership payment intents, Daily Claim pending rows and marketplace SKU/fulfilment migrations still require controlled reconciliation and provider acceptance.
@@ -23,8 +28,8 @@
 
 ## CURRENT BUILD CONTEXT
 
-- Current source release: **0.338.28** (Run #266: unified social post UX/UI across Feed, Profile and Community; Runs #256–265 remain in the source history).
-- Current baseline: `GREENHAVEN-0.338.23-RUN257-ECONOMY-MARKETPLACE-RECONCILIATION.zip`; 0.338.28 is the current sequential working increment. The 0.338.23 archive remains the user-authoritative source input; 0.338.24 and 0.338.25 are derived working releases. Historical Messenger/Community improvements remain part of the source tree.
+- Current source release: **0.338.29** (Run #266: unified social post UX/UI across Feed, Profile and Community; Runs #256–265 remain in the source history).
+- Current baseline: `GREENHAVEN-0.338.23-RUN257-ECONOMY-MARKETPLACE-RECONCILIATION.zip`; 0.338.29 is the current sequential working increment. The 0.338.23 archive remains the user-authoritative source input; 0.338.24 and 0.338.25 are derived working releases. Historical Messenger/Community improvements remain part of the source tree.
 - Product: GreenHaven social platform and ecosystem. Keep the existing product identity, routes, data contracts and security boundaries unless a reviewed implementation explicitly changes them.
 - Visual direction: premium, modern, calm and accessible; deep emerald / teal / navy with restrained gold accents; light-mode-first. Screenshots are design references, not sources of banking features, balances, licenses, logos or provider capabilities.
 - Wallet: GHC and Pi are separate assets and separate ledgers. Never add them together, convert one into the other for display, fabricate balances, or treat local cache as financial authority. Server-confirmed balances must be clearly distinguished from stale, pending, locked and unavailable data.

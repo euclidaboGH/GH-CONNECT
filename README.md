@@ -1,17 +1,21 @@
 # GreenHaven / GH-CONNECT
 
-**Current source version:** `0.338.28`
+**Current source version:** `0.338.29`
 
 Production status: **NOT APPROVED** — supported Node 24.15.0 dependency-backed typecheck/lint/build, browser/device, live database/provider and operator acceptance remain outstanding.
 
 This repository is the canonical GreenHaven / GH Connect source tree. See `docs/SOURCE_OF_TRUTH.md` and `docs/CURRENT_BUILD_CONTEXT.md` before implementation or release work.
 
 
-## Latest release — 0.338.28 / Run #266
+## Latest release — 0.338.29 / Run #267
 
-Unifies the canonical post-card experience across Feed, Profile and Community. Adds semantic article structure, explicit surface identity, cleaner author metadata and media framing, and a stable mobile-first action dock with clear Comment, Save and Share labels. Corrects the share feedback so opening share options is not represented as a completed share. Preserves existing post APIs, media validation, moderation, visibility, engagement, and the single UnifiedCompose flow. Run #266 has 14/14 targeted source-contract checks; dependency-backed typecheck, lint, production build, browser/device and two-account acceptance remain required. No database migration or financial behavior changed.
+Refines the shared section chrome across Discovery, Community, Marketplace and other app surfaces with slimmer headers, brighter neutral surfaces, compact toolbars, consistent focus states and safe-area-aware spacing. Improves Pi wallet consent by requesting only the `wallet_address` permission needed for that action, normalizing documented and defensive wallet-address response variants, and giving actionable guidance when Pi does not grant the scope. Server-side Pi token verification, linked-UID matching, address format checks and fail-closed payout authorization remain mandatory. No database migration or live financial mutation was performed. Node 24.15.0 typecheck/lint/build and Pi Browser permission acceptance remain outstanding.
 
-## Previous release — 0.338.27 / Run #261
+## Previous release — 0.338.28 / Run #266
+
+Unifies the canonical post-card experience across Feed, Profile and Community, with semantic article structure, cleaner author metadata and media framing, and a stable mobile-first Comment / Save / Share action dock. Share feedback accurately reports that options opened rather than claiming content was sent. Run #266 source checks passed 14/14.
+
+## Historical release — 0.338.27 / Run #261
 
 Adds an operator-only Pi A2U ecosystem qualification register: full-KYC recipient attestations are bound to GreenHaven Pi UID mappings, and only independently provider-verified, developer-completed Testnet A2U settlements to five distinct recipients count. The register never creates or retries payments. The additive migration is REVIEW_REQUIRED and unapplied pending Testnet source deployment and migration-history review. Targets the live Pi earnings withdrawal failure with actionable provider-stage diagnostics, a read-only Pi incomplete-A2U health probe, a one-active-withdrawal-per-user guard, and safe Pi wallet-address binding/display. The wallet address is obtained from Pi's `wallet_address` permission and bound to the same server-verified app-specific Pi UID; the provider's actual `to_address` must match before any A2U payment is submitted or settled. A2U transfers still route by Pi UID, not a browser-supplied address. The new additive Testnet migration is REVIEW_REQUIRED and unapplied pending deployment/history review. Existing uncertain reservations are not force-released or blindly retried; users can explicitly reconcile an existing request against an exact Pi incomplete payment. See `docs/UPGRADE-WORKLOG-0.338.27.md` and `docs/PI-EARNINGS-WITHDRAWAL-INCIDENT-2026-11-10.md`.
 

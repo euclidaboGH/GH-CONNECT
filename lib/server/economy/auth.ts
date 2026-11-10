@@ -109,13 +109,14 @@ export async function verifyPiAccessToken(
     if (!res.ok) return null
     const data = (await res.json()) as {
       uid?: string
-      user?: { uid?: string; username?: string; wallet_address?: string }
+      user?: { uid?: string; username?: string; wallet_address?: string; walletAddress?: string }
       username?: string
       wallet_address?: string
+      walletAddress?: string
     }
     const uid = data.uid || data.user?.uid
     if (typeof uid !== "string" || !uid) return null
-    const walletAddress = data.wallet_address || data.user?.wallet_address
+    const walletAddress = data.wallet_address || data.walletAddress || data.user?.wallet_address || data.user?.walletAddress
     return {
       uid,
       username: data.username || data.user?.username,

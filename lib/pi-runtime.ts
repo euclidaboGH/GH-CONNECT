@@ -188,7 +188,9 @@ export async function piAuthenticateOfficial(
     scopes: string[],
     onIncomplete: (payment: unknown) => void
   ) => Promise<{
-    user?: { uid?: string | number; username?: string; wallet_address?: string }
+    user?: { uid?: string | number; username?: string; wallet_address?: string; walletAddress?: string }
+    wallet_address?: string
+    walletAddress?: string
     accessToken?: string
   }>
 
@@ -211,7 +213,9 @@ export async function piAuthenticateOfficial(
   return {
     uid,
     username: authResult?.user?.username ? String(authResult.user.username) : null,
-    walletAddress: authResult?.user?.wallet_address ? String(authResult.user.wallet_address) : null,
+    walletAddress: (authResult?.user?.wallet_address || authResult?.user?.walletAddress || authResult?.wallet_address || authResult?.walletAddress)
+      ? String(authResult?.user?.wallet_address || authResult?.user?.walletAddress || authResult?.wallet_address || authResult?.walletAddress).trim()
+      : null,
     accessToken: authResult?.accessToken ? String(authResult.accessToken) : null,
   }
 }
