@@ -1,8 +1,9 @@
 /**
  * Withdrawal-PIN recovery via 3 randomly assigned security questions.
- * - Questions are drawn server-side with crypto.randomInt, so different users get different sets.
- * - Answers are normalized then stored only as per-answer scrypt hashes.
- * - 5 wrong attempts lock recovery for 15 minutes. All 3 answers must match.
+ * - Questions are drawn server-side with crypto.randomInt.
+ * - Answers are normalized and stored only as per-answer scrypt hashes.
+ * - Failed attempts are recorded atomically by a service-role-only RPC.
+ * - PIN replacement and recovery-lock reset commit in one database transaction.
  */
 import { randomBytes, randomInt, scryptSync, timingSafeEqual } from "node:crypto"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
@@ -23,8 +24,13 @@ export const QUESTION_BANK: Record<string, string> = {
 }
 
 const MAX_ATTEMPTS = 5
-const LOCK_MS = 15 * 60_000
+const LOCK_SECONDS = 15 * 60
 const QUESTION_COUNT = 3
+const REQUEST_TIMEOUT_MS = 8_000
+
+type StoredAnswer = { qid: string; salt: string; hash: string }
+type RecoveryRow = { answers: StoredAnswer[]; failed_attempts: number; locked_until: string | null }
+type RecoveryRpc = { ok?: boolean; error?: string; code?: unknown; configured?: boolean; answers?: unknown; failed_attempts?: number; locked_until?: string | null; locked?: boolean }
 
 export function normalizeAnswer(raw: unknown): string {
   if (typeof raw !== "string") return ""
@@ -35,7 +41,7 @@ export function isUsableAnswer(raw: unknown): boolean {
   const n = normalizeAnswer(raw)
   return n.length >= 2 && n.length <= 80
 }
-/** Draw 3 distinct questions at random (Fisher–Yates with crypto randomness). */
+/** Draw 3 distinct questions (Fisher–Yates with cryptographic randomness). */
 export function drawQuestionIds(): string[] {
   const ids = Object.keys(QUESTION_BANK)
   for (let i = ids.length - 1; i > 0; i--) {
@@ -51,96 +57,133 @@ export function questionsFor(ids: string[]) {
 const hash = (value: string, saltHex: string) =>
   scryptSync(value, Buffer.from(saltHex, "hex"), 32).toString("hex")
 
-function base(env: ReturnType<typeof readGhcServerEnv>) {
-  return `${env.supabaseUrl!.replace(/\/$/, "")}/rest/v1`
+function isStoredAnswer(value: unknown): value is StoredAnswer {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false
+  const item = value as Record<string, unknown>
+  return typeof item.qid === "string" && !!QUESTION_BANK[item.qid]
+    && typeof item.salt === "string" && /^[0-9a-f]{32}$/.test(item.salt)
+    && typeof item.hash === "string" && /^[0-9a-f]{64}$/.test(item.hash)
 }
-function hdr(key: string, prefer = "return=representation") {
-  return { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: prefer }
-}
-type StoredAnswer = { qid: string; salt: string; hash: string }
-type Row = { answers: StoredAnswer[]; failed_attempts: number; locked_until: string | null }
 
-async function loadRow(userId: string): Promise<{ ok: true; row: Row | null } | { ok: false; error: string }> {
+async function recoveryRpc(name: string, body: Record<string, unknown>): Promise<{ ok: true; data: RecoveryRpc } | { ok: false; error: string }> {
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return { ok: false, error: "RECOVERY_SERVICE_UNAVAILABLE" }
   try {
-    const res = await fetch(`${base(env)}/gh_withdrawal_pin_recovery?user_id=eq.${encodeURIComponent(userId)}&select=answers,failed_attempts,locked_until`,
-      { headers: hdr(env.supabaseServiceRoleKey), cache: "no-store", signal: AbortSignal.timeout(10_000) })
-    if (!res.ok) return { ok: false, error: [400, 404, 406].includes(res.status) ? "RECOVERY_TABLE_PENDING" : "RECOVERY_SERVICE_UNAVAILABLE" }
-    const rows = (await res.json().catch(() => [])) as Row[]
-    return { ok: true, row: Array.isArray(rows) && rows[0] ? rows[0] : null }
-  } catch { return { ok: false, error: "RECOVERY_SERVICE_UNAVAILABLE" } }
+    const response = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/${name}`, {
+      method: "POST",
+      headers: {
+        apikey: env.supabaseServiceRoleKey,
+        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(body),
+      cache: "no-store",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    })
+    const data = (await response.json().catch(() => null)) as RecoveryRpc | null
+    if (!response.ok) {
+      const code = typeof data?.error === "string" ? data.error : typeof data?.code === "string" ? data.code : undefined
+      // Keep the diagnostic actionable without logging user data, answers, hashes, or credentials.
+      console.error("[pin-recovery] Supabase RPC failed", { operation: name, status: response.status, code })
+      return { ok: false, error: response.status === 403 ? "RECOVERY_STORAGE_PERMISSION_DENIED" : "RECOVERY_SERVICE_UNAVAILABLE" }
+    }
+    if (!data || typeof data !== "object") return { ok: false, error: "RECOVERY_SERVICE_UNAVAILABLE" }
+    return { ok: true, data }
+  } catch (error) {
+    console.error("[pin-recovery] Supabase RPC unavailable", {
+      operation: name,
+      cause: error instanceof Error ? error.name : "unknown",
+    })
+    return { ok: false, error: "RECOVERY_SERVICE_UNAVAILABLE" }
+  }
+}
+
+async function loadRow(userId: string): Promise<{ ok: true; row: RecoveryRow | null } | { ok: false; error: string }> {
+  const result = await recoveryRpc("gh_withdrawal_pin_recovery_get", { p_user_id: userId })
+  if (!result.ok) return result
+  if (result.data.ok !== true) return { ok: false, error: result.data.error || "RECOVERY_SERVICE_UNAVAILABLE" }
+  if (result.data.configured !== true) return { ok: true, row: null }
+  const answers = result.data.answers
+  if (!Array.isArray(answers) || answers.length !== QUESTION_COUNT || !answers.every(isStoredAnswer)) {
+    console.error("[pin-recovery] stored recovery record failed schema validation")
+    return { ok: false, error: "RECOVERY_DATA_INVALID" }
+  }
+  return {
+    ok: true,
+    row: {
+      answers,
+      failed_attempts: Number.isFinite(Number(result.data.failed_attempts)) ? Number(result.data.failed_attempts) : 0,
+      locked_until: typeof result.data.locked_until === "string" ? result.data.locked_until : null,
+    },
+  }
 }
 
 export async function getRecoveryStatus(userId: string) {
-  const r = await loadRow(userId)
-  if (!r.ok) return r
-  if (!r.row) return { ok: true as const, configured: false, locked: false }
-  const locked = !!r.row.locked_until && new Date(r.row.locked_until).getTime() > Date.now()
+  const result = await loadRow(userId)
+  if (!result.ok) return result
+  if (!result.row) return { ok: true as const, configured: false, locked: false }
+  const locked = !!result.row.locked_until && new Date(result.row.locked_until).getTime() > Date.now()
   return {
-    ok: true as const, configured: true, locked, lockedUntil: r.row.locked_until,
-    questions: questionsFor(r.row.answers.map((a) => a.qid)),
+    ok: true as const,
+    configured: true,
+    locked,
+    lockedUntil: result.row.locked_until,
+    questions: questionsFor(result.row.answers.map((answer) => answer.qid)),
   }
 }
 
-/** Save answers for 3 distinct bank questions. Insert-only: cannot overwrite existing recovery. */
+/** Insert-only setup: the database prevents overwriting an existing recovery record. */
 export async function setupRecovery(userId: string, questionIds: string[], answers: unknown[]) {
-  const env = readGhcServerEnv()
-  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return { ok: false as const, error: "RECOVERY_SERVICE_UNAVAILABLE" }
   if (questionIds.length !== QUESTION_COUNT || new Set(questionIds).size !== QUESTION_COUNT
-      || questionIds.some((q) => !QUESTION_BANK[q]) || answers.length !== QUESTION_COUNT
+      || questionIds.some((questionId) => !QUESTION_BANK[questionId]) || answers.length !== QUESTION_COUNT
       || !answers.every(isUsableAnswer)) return { ok: false as const, error: "RECOVERY_INPUT_INVALID" }
-  const norm = answers.map(normalizeAnswer)
-  if (new Set(norm).size !== QUESTION_COUNT) return { ok: false as const, error: "RECOVERY_ANSWERS_MUST_DIFFER" }
-  const stored: StoredAnswer[] = questionIds.map((qid, i) => {
+  const normalized = answers.map(normalizeAnswer)
+  if (new Set(normalized).size !== QUESTION_COUNT) return { ok: false as const, error: "RECOVERY_ANSWERS_MUST_DIFFER" }
+  const stored: StoredAnswer[] = questionIds.map((qid, index) => {
     const salt = randomBytes(16).toString("hex")
-    return { qid, salt, hash: hash(norm[i], salt) }
+    return { qid, salt, hash: hash(normalized[index], salt) }
   })
-  try {
-    const res = await fetch(`${base(env)}/gh_withdrawal_pin_recovery`, {
-      method: "POST", headers: hdr(env.supabaseServiceRoleKey, "resolution=ignore-duplicates,return=representation"),
-      body: JSON.stringify({ user_id: userId, answers: stored }), cache: "no-store", signal: AbortSignal.timeout(10_000),
-    })
-    if (!res.ok) return { ok: false as const, error: "RECOVERY_PERSIST_FAILED" }
-    const ins = (await res.json().catch(() => [])) as unknown[]
-    return Array.isArray(ins) && ins.length ? { ok: true as const } : { ok: false as const, error: "RECOVERY_ALREADY_CONFIGURED" }
-  } catch { return { ok: false as const, error: "RECOVERY_SERVICE_UNAVAILABLE" } }
+  const result = await recoveryRpc("gh_withdrawal_pin_recovery_setup", { p_user_id: userId, p_answers: stored })
+  if (!result.ok) return result
+  if (result.data.ok === true) return { ok: true as const }
+  return { ok: false as const, error: result.data.error || "RECOVERY_PERSIST_FAILED" }
 }
 
-/** Verify all 3 answers (keyed by question id) and, only if correct, replace the withdrawal PIN. */
+/** Verify all answers; failed-attempt increments and successful PIN replacement are database-atomic. */
 export async function resetPinWithAnswers(userId: string, answersByQid: Record<string, unknown>, newPin: string) {
-  const env = readGhcServerEnv()
-  const r = await loadRow(userId)
-  if (!r.ok) return r
-  if (!r.row) return { ok: false as const, error: "RECOVERY_NOT_CONFIGURED" }
-  if (r.row.locked_until && new Date(r.row.locked_until).getTime() > Date.now()) return { ok: false as const, error: "RECOVERY_LOCKED" }
-  let all = true
-  for (const a of r.row.answers) {
-    const given = normalizeAnswer(answersByQid[a.qid])
-    const x = Buffer.from(hash(given, a.salt), "hex"), y = Buffer.from(a.hash, "hex")
-    if (!(given && x.length === y.length && timingSafeEqual(x, y))) all = false
+  const result = await loadRow(userId)
+  if (!result.ok) return result
+  if (!result.row) return { ok: false as const, error: "RECOVERY_NOT_CONFIGURED" }
+  if (result.row.locked_until && new Date(result.row.locked_until).getTime() > Date.now()) {
+    return { ok: false as const, error: "RECOVERY_LOCKED" }
   }
-  const k = env.supabaseServiceRoleKey!
-  const patchRec = (body: object) => fetch(`${base(env)}/gh_withdrawal_pin_recovery?user_id=eq.${encodeURIComponent(userId)}`,
-    { method: "PATCH", headers: hdr(k), body: JSON.stringify({ ...body, updated_at: new Date().toISOString() }), cache: "no-store" }).catch(() => null)
-  if (!all) {
-    const attempts = Math.min((r.row.failed_attempts || 0) + 1, MAX_ATTEMPTS)
-    const lockedUntil = attempts >= MAX_ATTEMPTS ? new Date(Date.now() + LOCK_MS).toISOString() : null
-    await patchRec({ failed_attempts: attempts, locked_until: lockedUntil })
-    return { ok: false as const, error: lockedUntil ? "RECOVERY_LOCKED" : "RECOVERY_ANSWERS_INCORRECT" }
+
+  let allCorrect = true
+  for (const answer of result.row.answers) {
+    const given = normalizeAnswer(answersByQid[answer.qid])
+    const actual = Buffer.from(hash(given, answer.salt), "hex")
+    const expected = Buffer.from(answer.hash, "hex")
+    const matches = given.length > 0 && actual.length === expected.length && timingSafeEqual(actual, expected)
+    allCorrect = matches && allCorrect
   }
-  const salt = randomBytes(16).toString("hex")
-  try {
-    const res = await fetch(`${base(env)}/gh_withdrawal_pins?user_id=eq.${encodeURIComponent(userId)}`, {
-      method: "PATCH", headers: hdr(k),
-      body: JSON.stringify({ pin_hash: hash(newPin, salt), pin_salt: salt, failed_attempts: 0, locked_until: null,
-        // 24h withdrawal cooldown after a recovery reset limits damage from a stolen session.
-        reset_cooldown_until: new Date(Date.now() + 24 * 3600_000).toISOString(), updated_at: new Date().toISOString() }),
-      cache: "no-store", signal: AbortSignal.timeout(10_000),
+
+  if (!allCorrect) {
+    const failure = await recoveryRpc("gh_withdrawal_pin_recovery_record_failure", {
+      p_user_id: userId, p_max_attempts: MAX_ATTEMPTS, p_lock_seconds: LOCK_SECONDS,
     })
-    const upd = res.ok ? ((await res.json().catch(() => [])) as unknown[]) : []
-    if (!Array.isArray(upd) || !upd.length) return { ok: false as const, error: "PIN_NOT_CONFIGURED" }
-  } catch { return { ok: false as const, error: "RECOVERY_SERVICE_UNAVAILABLE" } }
-  await patchRec({ failed_attempts: 0, locked_until: null })
+    if (!failure.ok) return failure
+    if (failure.data.ok !== true) return { ok: false as const, error: failure.data.error || "RECOVERY_SERVICE_UNAVAILABLE" }
+    return { ok: false as const, error: failure.data.locked === true ? "RECOVERY_LOCKED" : "RECOVERY_ANSWERS_INCORRECT" }
+  }
+
+  const salt = randomBytes(16).toString("hex")
+  const reset = await recoveryRpc("gh_withdrawal_pin_recovery_reset_pin", {
+    p_user_id: userId,
+    p_pin_hash: hash(newPin, salt),
+    p_pin_salt: salt,
+  })
+  if (!reset.ok) return reset
+  if (reset.data.ok !== true) return { ok: false as const, error: reset.data.error || "RECOVERY_SERVICE_UNAVAILABLE" }
   return { ok: true as const }
 }

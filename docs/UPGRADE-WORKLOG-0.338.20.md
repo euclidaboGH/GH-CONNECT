@@ -48,3 +48,31 @@ Production remains NOT APPROVED.
 - Added `scripts/check-run245-account-hydration.mjs` to `prelint`: 15/15. GitHub #195 lint remediation: 9/9. Project truth: 11/11. Withdrawal single-entrypoint: 6/6. Pi withdrawal consent/identity: 12/12.
 - The source environment remains Node.js 22.16.0 without `node_modules`; full dependency-backed ESLint, TypeScript and Next.js build results must come from Node.js 24.15.0 CI.
 - No migrations, balances, ledger entries, Pi transfers, production settings, GitHub branches or deployments were changed. Production remains NOT APPROVED.
+
+
+## Run #246 — withdrawal, PIN recovery and hydration reliability
+
+Fifteen focused upgrades were made from the Run #245 baseline and the supplied Vercel diagnostics:
+
+1. Replaced the payout worker's direct request-table read with an ownership-scoped SECURITY DEFINER lookup RPC.
+2. Preserved the payout table's direct-access revocation for `service_role` and all client roles.
+3. Limited the payout lookup response to the exact fields required by the Testnet worker.
+4. Validated canonical UUID request IDs before invoking the database RPC.
+5. Converted Supabase lookup failures into safe retryable 503 responses instead of unhandled 500s.
+6. Added sanitized Supabase HTTP/SQLSTATE diagnostics without returning raw database errors or secrets.
+7. Added an additive repair migration that reasserts `public` schema usage and the server-only PIN-table grants.
+8. Removed direct recovery-table access from the recovery service; recovery status now uses a narrow RPC.
+9. Moved recovery setup to a database-enforced insert-only RPC with question-ID/hash validation.
+10. Made failed recovery-answer attempts atomic under a row lock.
+11. Made PIN replacement, recovery-attempt reset and the 24-hour post-reset cooldown one database transaction.
+12. Added strict validation of persisted recovery-answer structure before hashing/comparison.
+13. Added a separate durable fail-closed rate limit to PIN-recovery status GET.
+14. Added payout-lookup and PIN-recovery RPC probes to withdrawal infrastructure health using synthetic non-user identities.
+15. Separated server-confirmed account-anchor cache from profile hints and skipped repeat hydration POSTs only when a prior server-confirmed immutable anchor exists.
+
+- New additive SQL migration: `20261110100001_withdrawal_rpc_acl_and_recovery_atomicity.sql` — REVIEW_REQUIRED, not applied.
+- Migration inventory regenerated and synchronized at 200 canonical SQL files; the new migration is explicitly held for review.
+- Added `supabase/tests/verify_run246_withdrawal_rpc_acl.sql`, a read-only catalog postflight for the effective service-role/client grants and RLS state.
+- Focused Run #246 source contract: 18/18; Run #245 account hydration: 16/16; Pi identity/withdrawal: 10/10; Phase 4 payout execution worker: 21/21; Phase 1–10 pack: 20/20; withdrawal health: 23/23; project truth: 11/11; repository consistency: 6/6; documentation hygiene: PASS; migration source manifest: 200/200; SQL lexical integrity: PASS; full `npm run verify:static`: exit 0.
+- No Supabase migration was applied, no payout was executed, no Pi/GHC balance or ledger was modified, and no GitHub/Vercel action or production deployment was performed.
+- PostgreSQL execution, target Testnet migration-history reconciliation, Node 24.15.0 dependency-backed lint/typecheck/build, and live Pi Testnet acceptance remain outstanding. Five modified TypeScript files passed syntax transpilation only; full typechecking is not claimed. Production remains NOT APPROVED.

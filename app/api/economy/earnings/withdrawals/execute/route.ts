@@ -28,7 +28,11 @@ function matches(p: PiBackendPayment,input:{id:string;requestId:string;uid:strin
 async function rest<T>(base:string,key:string,path:string,init:RequestInit={}):Promise<T> {
   const r=await fetch(`${base}/rest/v1/${path}`,{...init,headers:{apikey:key,Authorization:`Bearer ${key}`,...(init.headers||{})},cache:"no-store",signal:AbortSignal.timeout(15_000)})
   const data=await r.json().catch(()=>null)
-  if(!r.ok) throw new Error(`SUPABASE_HTTP_${r.status}`)
+  if(!r.ok) {
+    const detail = data && typeof data === "object" ? data as Record<string, unknown> : {}
+    const code = typeof detail.code === "string" ? detail.code.replace(/[^A-Z0-9_]/gi, "").slice(0, 40) : ""
+    throw new Error(`SUPABASE_HTTP_${r.status}${code ? `_${code}` : ""}`)
+  }
   return data as T
 }
 async function rpc<T>(base:string,key:string,name:string,body:Record<string,unknown>):Promise<T> {
@@ -48,11 +52,17 @@ export async function POST(request:Request) {
   if(!parsed.ok) return reply({ok:false,error:parsed.error},parsed.error==="REQUEST_TOO_LARGE"?413:400)
   const body=parsed.value as {requestId?:unknown}
   const requestId=String(body?.requestId||"").trim()
-  if(!/^[0-9a-f-]{36}$/i.test(requestId)) return reply({ok:false,error:"INVALID_REQUEST_ID"},400)
+  if(!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(requestId)) return reply({ok:false,error:"INVALID_REQUEST_ID"},400)
   const env=readGhcServerEnv(); if(!env.supabaseUrl||!env.supabaseServiceRoleKey) return reply({ok:false,error:"PAYOUT_SERVICE_UNAVAILABLE"},503)
   const base=env.supabaseUrl.replace(/\/$/,""); const key=env.supabaseServiceRoleKey
-  const rows=await rest<Array<{id:string;user_id:string;gross_atomic:string;fee_atomic:string;net_atomic:string;recipient_pi_app_uid:string;network:string;status:string;provider_payment_id:string|null}>>(base,key,`gh_pi_earnings_payout_requests?${new URLSearchParams({id:`eq.${requestId}`,user_id:`eq.${auth.userId}`,select:"id,user_id,gross_atomic,fee_atomic,net_atomic,recipient_pi_app_uid,network,status,provider_payment_id",limit:"1"})}`)
-  const row=rows[0]; if(!row) return reply({ok:false,error:"REQUEST_NOT_FOUND"},404)
+  const lookup=await rpc<{ok:boolean;error?:string;request?:{id:string;user_id:string;gross_atomic:string;fee_atomic:string;net_atomic:string;recipient_pi_app_uid:string;network:string;status:string;provider_payment_id:string|null}}>(base,key,"gh_pi_earnings_payout_get_owned",{p_request_id:requestId,p_user_id:auth.userId}).catch((error)=>{
+    console.error("[pi-earnings-payout] owned request lookup failed",{cause:error instanceof Error?error.message:"unknown"})
+    return null
+  })
+  if(!lookup) return reply({ok:false,error:"PAYOUT_STORAGE_UNAVAILABLE",retryable:true},503)
+  if(!lookup.ok) return reply({ok:false,error:lookup.error||"PAYOUT_STORAGE_UNAVAILABLE",retryable:lookup.error!=="REQUEST_NOT_FOUND"},lookup.error==="REQUEST_NOT_FOUND"?404:503)
+  const row=lookup.request
+  if(!row) return reply({ok:false,error:"PAYOUT_STORAGE_UNAVAILABLE",retryable:true},503)
   if(row.status==="paid") return reply({ok:true,duplicate:true,status:"paid",requestId})
   if(row.status==="released"||row.status==="failed") return reply({ok:false,error:"REQUEST_TERMINAL"},409)
   if(row.network!=="Pi Testnet") return reply({ok:false,error:"TESTNET_ONLY"},409)

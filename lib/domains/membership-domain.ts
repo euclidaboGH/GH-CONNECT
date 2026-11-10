@@ -181,6 +181,35 @@ export const MEMBERSHIP_PLANS: Record<MembershipTierId, MembershipPlan> = {
 const STORAGE_KEY = "ghc_membership_v1"
 
 const ACCOUNT_CACHE_KEY = "ghc_account_created_at_v1"
+// Separate namespace: only a successful server response may populate this cache.
+// The legacy cache may also contain profile hints and is never used to skip server hydration.
+const SERVER_ACCOUNT_CACHE_KEY = "ghc_account_created_at_server_v1"
+
+function readServerConfirmedAccountCreatedAt(userId: string): number | undefined {
+  try {
+    if (typeof localStorage === "undefined") return undefined
+    const raw = localStorage.getItem(SERVER_ACCOUNT_CACHE_KEY)
+    if (!raw) return undefined
+    const all = JSON.parse(raw) as Record<string, number>
+    const value = all[userId]
+    return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function writeServerConfirmedAccountCreatedAt(userId: string, ts: number) {
+  try {
+    if (typeof localStorage === "undefined") return
+    const raw = localStorage.getItem(SERVER_ACCOUNT_CACHE_KEY)
+    const all = raw ? JSON.parse(raw) as Record<string, number> : {}
+    all[userId] = ts
+    const entries = Object.entries(all).filter(([, value]) => typeof value === "number" && Number.isFinite(value) && value > 0)
+    localStorage.setItem(SERVER_ACCOUNT_CACHE_KEY, JSON.stringify(Object.fromEntries(entries.slice(-128))))
+  } catch {
+    /* storage is an optional UX optimization; the server remains authoritative */
+  }
+}
 
 function readCachedAccountCreatedAt(userId: string): number | undefined {
   try {
@@ -242,6 +271,15 @@ export async function hydrateAccountCreatedAtFromServer(
   const pending = accountAnchorInFlight.get(userId)
   if (pending) return pending
 
+  // Account creation time is immutable. A prior server-confirmed value can safely
+  // satisfy repeat domain construction without another rate-limited mutation.
+  // This cache is a display/hydration optimization only; server entitlements never trust it.
+  const serverConfirmed = readServerConfirmedAccountCreatedAt(userId)
+  if (serverConfirmed) {
+    rememberAccountAnchor(userId, serverConfirmed)
+    return serverConfirmed
+  }
+
   const cached = readCachedAccountCreatedAt(userId)
   const request = (async (): Promise<number | undefined> => {
     try {
@@ -264,6 +302,7 @@ export async function hydrateAccountCreatedAtFromServer(
       const data = (await res.json()) as { accountCreatedAt?: number | string | null }
       const anchor = Number(data.accountCreatedAt)
       if (data.accountCreatedAt != null && Number.isFinite(anchor) && anchor > 0) {
+        writeServerConfirmedAccountCreatedAt(userId, anchor)
         writeCachedAccountCreatedAt(userId, anchor)
         rememberAccountAnchor(userId, anchor)
         return anchor
@@ -416,8 +455,10 @@ export function createMembershipDomain(deps: {
       if (all[userId]) return // already has a record — never reset
 
       const fromDeps = deps.getAccountCreatedAt?.()
+      const fromServerCache = readServerConfirmedAccountCreatedAt(userId)
       const fromCache = readCachedAccountCreatedAt(userId)
       const createdAt =
+        (typeof fromServerCache === "number" && fromServerCache > 0 ? fromServerCache : undefined) ??
         (typeof fromCache === "number" && fromCache > 0 ? fromCache : undefined) ??
         (typeof fromDeps === "number" && fromDeps > 0 ? fromDeps : undefined)
       if (typeof fromDeps === "number" && fromDeps > 0) {

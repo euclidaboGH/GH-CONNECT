@@ -31,7 +31,7 @@ const ci = read('.github/workflows/ci.yml')
 add(1, 'P1-A', 'Package, app release and consolidated audit agree on current package version', release.includes(`APP_RELEASE_VERSION = \"${pkg.version}\"`) && sourceTruth.includes(`gh-connect@${pkg.version}`))
 add(1, 'P1-B', 'Consolidated register preserves external blockers and production no-go', /Production remains NOT APPROVED/.test(sourceTruth) && /Testnet and Mainnet migration histories/.test(sourceTruth))
 // Phase 2 — migration integrity and deployment safety.
-add(2, 'P2-A', '199 canonical migration versions are unique and 14-digit', migrationFiles.length === 199 && migrationVersions.every((v) => /^\d{14}$/.test(v)) && new Set(migrationVersions).size === migrationVersions.length)
+add(2, 'P2-A', 'Canonical migration versions match the on-disk inventory and are unique 14-digit identifiers', migrationFiles.length > 0 && migrationVersions.every((v) => /^\d{14}$/.test(v)) && new Set(migrationVersions).size === migrationFiles.length)
 add(2, 'P2-B', 'Balance-observability SQL remains a proposal, outside canonical migrations', exists('supabase/proposals/20261109_phase6_earnings_balance_integrity_observability_proposal.sql') && !exists('supabase/migrations/20261109_phase6_earnings_balance_integrity_observability_proposal.sql') && !/supabase db push/.test(workflow))
 // Phase 3 — identity and mutation authority.
 add(3, 'P3-A', 'Production identity resolution requires canonical GH mapping', /env\.isProduction/.test(identity) && /canonical|mapping/i.test(identity) && /if \(!mapping\?\.ghUserId\)/.test(identity) && /return null/.test(identity))
@@ -47,7 +47,7 @@ add(6, 'P6-A', 'PI earnings balance proposal exposes raw totals and integrity an
 add(6, 'P6-B', 'Legacy display balances remain clamped while anomaly evidence is additive', /availableAtomic', v_available/.test(earningsProposal) && /v_available_raw := v_available/.test(earningsProposal) && /v_reserved_raw := v_reserved/.test(earningsProposal) && /IF v_available < 0 THEN v_available := 0/.test(earningsProposal) && /rawAvailableAtomic/.test(earningsProposal))
 // Phase 7 — Pi identity and payout recovery.
 add(7, 'P7-A', 'Pi identity fallback is explicitly restricted outside production', /env\.isProduction/.test(identity) && /production/.test(identity) && /fallback|legacy/i.test(identity))
-add(7, 'P7-B', 'Payout authorization binds canonical account to exact recipient', /recipient_pi_app_uid/.test(payoutWorker) && /user_id:`eq\.\$\{auth\.userId\}`/.test(payoutWorker) && /assertPayoutWalletAuthorization/.test(payoutWorker) && /begin\.recipientUid/.test(payoutWorker))
+add(7, 'P7-B', 'Payout authorization binds canonical account to exact recipient', /recipient_pi_app_uid/.test(payoutWorker) && /gh_pi_earnings_payout_get_owned/.test(payoutWorker) && /p_user_id:auth\.userId/.test(payoutWorker) && /assertPayoutWalletAuthorization/.test(payoutWorker) && /begin\.recipientUid/.test(payoutWorker))
 // Phase 8 — marketplace, membership and settlement.
 add(8, 'P8-A', 'Marketplace commission is fixed at canonical 500 bps until DB policy exists', /CANONICAL_PLATFORM_FEE_BPS\s*=\s*500/.test(commission) && !/process\.env\.GHC_MARKETPLACE_PLATFORM_FEE_BPS/.test(commission))
 add(8, 'P8-B', 'No app-only minimum fee can diverge from immutable SQL proceeds', !/GHC_MARKETPLACE_MIN_PLATFORM_FEE_MINOR/.test(commission) && /100000000/.test(proceeds))

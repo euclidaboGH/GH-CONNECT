@@ -1,3 +1,7 @@
+## Run #246 — Withdrawal Supabase permissions, PIN recovery and account hydration (2026-11-10)
+
+The earnings payout worker no longer directly selects from `gh_pi_earnings_payout_requests`, whose migration intentionally revokes direct `service_role` table access. It now uses the new ownership-scoped `gh_pi_earnings_payout_get_owned` SECURITY DEFINER RPC, which returns only the execution fields for the exact authenticated owner. Lookup permission/schema failures now produce a sanitized retryable service response instead of an unhandled route exception. PIN recovery now uses service-role-only RPCs for status, insert-only setup, atomic failed-attempt recording, and transactional PIN replacement plus recovery-lock reset and 24-hour cooldown. The new migration reasserts the PIN storage service-role grants while keeping client roles denied and recovery-table direct access revoked. The withdrawals health endpoint now probes the payout lookup and PIN recovery RPCs with synthetic non-user identities, without creating payments or mutating user data. Account-anchor hydration now distinguishes server-confirmed cache values from profile hints and skips repeated idempotent POSTs only when a server-confirmed immutable anchor is already available. The additive migration `20261110100001_withdrawal_rpc_acl_and_recovery_atomicity.sql` is REVIEW_REQUIRED and unapplied; reconcile target migration history and validate on disposable PostgreSQL before any Testnet application. No Pi transfer, ledger change, payout execution, or production deployment was performed. Production remains NOT APPROVED.
+
 ## 0.330.49 — Phase 3 wallet, rewards and membership concurrency hardening (2026-11-08)
 
 **Current source version:** `0.338.20`
@@ -169,11 +173,11 @@ The release retains the 0.330.0 Settings/media/navigation work and corrects stal
 
 ## Current authoritative metadata
 
-- Package and lockfile version: `0.338.10` (verified against `package.json` and the lockfile root).
+- Package and lockfile version: `0.338.20` (verified against `package.json` and the lockfile root).
 - Runtime: Node `24.15.0` / package engine `^24.15.0`; this audit environment only supplied Node 22.16.0, so dependency-backed typecheck/build remain unverified.
-- Canonical Supabase migrations: **198** SQL files.
+- Canonical Supabase migrations: **200** SQL files.
 - Duplicate migration numeric prefixes: **0** (source-level manifest check required for release).
-- Migration source manifest: 198 entries, synchronized with the canonical migration directory.
+- Migration source manifest: 200 entries, synchronized with the canonical migration directory.
 - No local secret `.env` file is included; `.env.example` is the only env template.
 
 

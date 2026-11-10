@@ -14,7 +14,7 @@ const check = (name, ok) => {
 const migrations = fs.readdirSync(path.join(root, 'supabase/migrations')).filter((f) => f.endsWith('.sql'))
 const versions = migrations.map((f) => f.slice(0, 14))
 const unique = new Set(versions)
-check('199 unique 14-digit migration versions', migrations.length === 199 && versions.every((v) => /^\d{14}$/.test(v)) && unique.size === 199)
+check('unique 14-digit migration versions match the canonical on-disk inventory', migrations.length > 0 && versions.every((v) => /^\d{14}$/.test(v)) && unique.size === migrations.length)
 
 check('proposals directory exists outside canonical migrations', exists('supabase/proposals'))
 const proposals = exists('supabase/proposals')

@@ -47,6 +47,9 @@ test("does not call quote_withdrawal in health probes", !/name: "gh_earnings_quo
 test("probes withdrawable and balances with correct args", /gh_earnings_withdrawable/.test(mod) && /gh_earnings_balances/.test(mod) && /p_asset:\s*"PI"/.test(mod))
 test("auth table selects gh_user_id", /select=gh_user_id/.test(mod))
 test("documents ledger service_role revoke", /service_role revoked on ledger/.test(mod))
+test("probes ownership-scoped payout lookup RPC with a synthetic non-user identity", /gh_pi_earnings_payout_get_owned/.test(mod) && /payout_execution_lookup_rpc/.test(mod) && /REQUEST_NOT_FOUND/.test(mod))
+test("probes PIN recovery RPC without reading or mutating a real user's recovery data", /gh_withdrawal_pin_recovery_get/.test(mod) && /pin_recovery_rpc/.test(mod) && /__gh_health_probe_non_user__/.test(mod))
+test("critical rollup blocks readiness when payout lookup or PIN recovery RPC is unavailable", /"payout_execution_lookup_rpc"/.test(mod) && /"pin_recovery_rpc"/.test(mod))
 
 const failed = checks.filter((x) => !x).length
 console.log(`\nWithdrawals health: ${checks.length - failed}/${checks.length} passed`)

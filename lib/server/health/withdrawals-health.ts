@@ -502,6 +502,72 @@ async function probeEarningsWithdrawableRpc(): Promise<WithdrawalsHealthComponen
   }
 }
 
+async function probeWithdrawalSupportRpc(input: {
+  id: string
+  functionName: string
+  body: Record<string, unknown>
+  accepts: (value: Record<string, unknown>) => boolean
+  purpose: string
+}): Promise<WithdrawalsHealthComponent> {
+  const checkedAt = nowIso()
+  const env = readGhcServerEnv()
+  if (!hasPrivilegedDatabase() || !env.supabaseUrl || !env.supabaseServiceRoleKey) {
+    return { id: input.id, status: "not_configured", code: "SUPABASE_CREDENTIALS_MISSING", detail: `Cannot probe ${input.purpose} without privileged Supabase credentials.`, checkedAt }
+  }
+  const base = env.supabaseUrl.replace(/\/$/, "")
+  try {
+    const { result, latencyMs } = await timed(async () => {
+      const response = await fetch(`${base}/rest/v1/rpc/${input.functionName}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: env.supabaseServiceRoleKey!,
+          Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+          Accept: "application/json",
+        },
+        body: JSON.stringify(input.body),
+        cache: "no-store",
+        signal: AbortSignal.timeout(8_000),
+      })
+      const body = await response.json().catch(() => null)
+      return { status: response.status, body: body && typeof body === "object" ? body as Record<string, unknown> : null }
+    })
+    const errText = JSON.stringify(result.body || {})
+    if (result.status === 404 || /PGRST202|Could not find the function/i.test(errText)) {
+      return { id: input.id, status: "unavailable", code: "RPC_NOT_APPLIED", detail: `${input.functionName} is missing. Reconcile and apply its reviewed migration before enabling this workflow.`, checkedAt, latencyMs }
+    }
+    if (result.status === 401 || result.status === 403) {
+      return { id: input.id, status: "unavailable", code: "RPC_PERMISSION_DENIED", detail: `${input.functionName} exists or was addressed, but the configured server role cannot execute it. Verify the service-role key and function ACL.`, checkedAt, latencyMs }
+    }
+    if (result.status >= 500 || !result.body || !input.accepts(result.body)) {
+      return { id: input.id, status: "unavailable", code: result.status >= 400 ? `RPC_HTTP_${result.status}` : "RPC_RESPONSE_INVALID", detail: `${input.functionName} did not return its expected safe diagnostic response. Check schema, grants and migration state.`, checkedAt, latencyMs }
+    }
+    return { id: input.id, status: "ok", code: "RPC_REACHABLE", detail: `${input.purpose} RPC executed with a synthetic non-user identity; no payout or PIN state was changed.`, checkedAt, latencyMs }
+  } catch (error) {
+    return { id: input.id, status: "unavailable", code: error instanceof Error && error.name === "TimeoutError" ? "RPC_TIMEOUT" : "RPC_NETWORK_ERROR", detail: `Network/timeout while probing ${input.purpose}.`, checkedAt }
+  }
+}
+
+async function probePayoutExecutionLookupRpc(): Promise<WithdrawalsHealthComponent> {
+  return probeWithdrawalSupportRpc({
+    id: "payout_execution_lookup_rpc",
+    functionName: "gh_pi_earnings_payout_get_owned",
+    body: { p_request_id: "00000000-0000-4000-8000-000000000000", p_user_id: "__gh_health_probe_non_user__" },
+    accepts: (value) => value.ok === false && value.error === "REQUEST_NOT_FOUND",
+    purpose: "ownership-scoped Pi earnings payout lookup",
+  })
+}
+
+async function probePinRecoveryRpc(): Promise<WithdrawalsHealthComponent> {
+  return probeWithdrawalSupportRpc({
+    id: "pin_recovery_rpc",
+    functionName: "gh_withdrawal_pin_recovery_get",
+    body: { p_user_id: "__gh_health_probe_non_user__" },
+    accepts: (value) => value.ok === true && value.configured === false,
+    purpose: "server-only withdrawal PIN recovery lookup",
+  })
+}
+
 async function probePiPlatformApi(): Promise<WithdrawalsHealthComponent> {
   const checkedAt = nowIso()
   const apiKey = getPiApiKey()
@@ -654,6 +720,8 @@ function rollupStatus(components: WithdrawalsHealthComponent[]): "ready" | "degr
     "wallet_authorization_table",
     "pi_platform_api",
     "earnings_withdrawable_rpc",
+    "payout_execution_lookup_rpc",
+    "pin_recovery_rpc",
   ])
   const critical = components.filter((c) => criticalIds.has(c.id))
   if (critical.some((c) => c.status === "unavailable" || c.status === "not_configured")) {
@@ -733,11 +801,13 @@ export async function evaluateWithdrawalsHealth(opts?: {
 
   const staticAssessment = assessFlags(hostname)
 
-  const [database, walletRpc, walletTable, earningsRpc, piApi] = await Promise.all([
+  const [database, walletRpc, walletTable, earningsRpc, payoutLookupRpc, pinRecoveryRpc, piApi] = await Promise.all([
     probeSupabaseConnectivity(),
     probeWalletAuthorizationRpc(),
     probeWalletAuthorizationTable(),
     probeEarningsWithdrawableRpc(),
+    probePayoutExecutionLookupRpc(),
+    probePinRecoveryRpc(),
     probePiPlatformApi(),
   ])
 
@@ -748,6 +818,8 @@ export async function evaluateWithdrawalsHealth(opts?: {
     walletRpc,
     walletTable,
     earningsRpc,
+    payoutLookupRpc,
+    pinRecoveryRpc,
   ]
 
   const status = rollupStatus(components)
