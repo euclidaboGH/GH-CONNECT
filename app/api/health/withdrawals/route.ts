@@ -34,7 +34,7 @@ export async function GET(request: Request) {
     // Anonymous callers only learn the coarse state. Per-variable gate hints (including the
     // format state of payout secrets) are operator-only.
     return NextResponse.json(
-      { ok: report.status !== "blocked", status: report.status, detail: "restricted" },
+      { ok: report.ok, status: report.status, detail: "restricted" },
       { status, headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0", Pragma: "no-cache" } },
     )
   }

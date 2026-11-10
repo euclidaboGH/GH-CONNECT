@@ -38,6 +38,7 @@ test("does not expose service role key in responses", !/serviceRoleKey:/.test(mo
 test("AbortSignal timeouts on upstream probes", /AbortSignal\.timeout/.test(mod))
 test("documents WALLET_AUTHORIZATION_REQUIRED enforcement", /WALLET_AUTHORIZATION_REQUIRED/.test(mod) || /assert_payout/.test(mod))
 test("rollup statuses ready|degraded|not_ready", /"ready"/.test(mod) && /"degraded"/.test(mod) && /"not_ready"/.test(mod))
+test("anonymous readiness uses report.ok rather than an invalid status comparison", route.includes("ok: report.ok") && !route.includes("report.status !== \"blocked\""))
 test("does not call A2U create/complete", !/payments\/a2u\/create/.test(mod) && !/a2u\/complete/.test(mod) && !/createPayment/.test(mod))
 
 
