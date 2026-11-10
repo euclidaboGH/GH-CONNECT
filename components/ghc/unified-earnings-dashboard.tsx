@@ -347,7 +347,7 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
     } catch { /* */ }
   }, [])
 
-  const onRevokeWalletAuth = async () => {
+  const onRevokeWalletAuth = useCallback(async () => {
     if (authorizingWallet) return
     const ok = await confirmDialog({
       title: "Revoke Pi payout authorization?",
@@ -380,7 +380,7 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
     } finally {
       setAuthorizingWallet(false)
     }
-  }
+  }, [authorizingWallet, refresh])
 
 
   const onPreviewFee = useCallback(async () => {

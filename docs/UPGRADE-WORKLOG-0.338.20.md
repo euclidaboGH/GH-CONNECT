@@ -37,3 +37,14 @@ Production remains NOT APPROVED.
 - Focused verification: project truth 11/11; Phase 1–12 consolidation 24/24; request-boundary follow-up 14/14; Phase 12 release readiness 28/28; release hygiene 13/13; wallet authorization 27/27; migration source manifest 199/199; documentation hygiene PASS; full `npm run verify:static` 57/57 plus trailing wallet authorization contract PASS.
 - Node 22.16.0 / no `node_modules` means dependency-backed typecheck, lint and Next.js build are not verified in this environment. The supplied Vercel excerpt omits the actual compiler diagnostic; capture the full build output before claiming the build issue is resolved.
 - No migrations, wallet balances, provider transfers, deployment settings or production state were changed. Production remains NOT APPROVED.
+
+
+## Run #245 — lint contract and account hydration hardening
+
+- Repaired the stale GitHub #195 lint-remediation contract: it now verifies the current dedicated Pi withdrawal sheet and actual callback dependency arrays rather than requiring the retired `onRequestPayout` callback.
+- Stabilized the wallet authorization revoke callback with explicit dependencies.
+- Identified the Vercel `/api/economy/account` 429 as consistent with the route's durable 12-per-minute mutation throttle; repeated domain-service construction was invoking the idempotent anchor POST without deduplication.
+- Added in-flight request sharing, bounded per-tab server-anchor memoization, a short negative cache, an eight-second timeout, explicit credentials/JSON/no-store request policy, strict positive timestamp validation, and an offline fallback. The canonical POST and its fail-closed rate limit remain intact.
+- Added `scripts/check-run245-account-hydration.mjs` to `prelint`: 15/15. GitHub #195 lint remediation: 9/9. Project truth: 11/11. Withdrawal single-entrypoint: 6/6. Pi withdrawal consent/identity: 12/12.
+- The source environment remains Node.js 22.16.0 without `node_modules`; full dependency-backed ESLint, TypeScript and Next.js build results must come from Node.js 24.15.0 CI.
+- No migrations, balances, ledger entries, Pi transfers, production settings, GitHub branches or deployments were changed. Production remains NOT APPROVED.
