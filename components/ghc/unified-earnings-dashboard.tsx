@@ -165,7 +165,6 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
     recipientUsername?: string
   } | null>(null)
   const [quoting, setQuoting] = useState(false)
-  const [requestingPayout, setRequestingPayout] = useState(false)
   const [payoutMsg, setPayoutMsg] = useState<string | null>(null)
   const [walletAuthActive, setWalletAuthActive] = useState<boolean | null>(null)
   const [walletAuthLoading, setWalletAuthLoading] = useState(false)
@@ -175,7 +174,6 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
   const [crossFindings, setCrossFindings] = useState<string[]>([])
   const [crossStatus, setCrossStatus] = useState<"healthy" | "attention" | "degraded" | null>(null)
   const quoteController = useRef<AbortController | null>(null)
-  const payoutIdempotencyRef = useRef<{ amountAtomic: number; key: string } | null>(null)
   const quoteSequence = useRef(0)
   const refreshController = useRef<AbortController | null>(null)
   const refreshSequence = useRef(0)
@@ -384,92 +382,6 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
     }
   }
 
-  const onRequestPayout = useCallback(async () => {
-    if (requestingPayout) return
-    if (snap?.eligible !== true || snap.piWalletLinked !== true) {
-      setPayoutMsg("Withdrawal is not available until the server confirms eligibility and a linked Pi identity.")
-      return
-    }
-    if (typeof snap.withdrawable !== "number" || !Number.isFinite(snap.withdrawable) || snap.withdrawable <= 0) {
-      setPayoutMsg("No withdrawable PI balance to request.")
-      return
-    }
-    // Convert PI decimal to atomic using server scale 1e7 (floor)
-    const amountAtomic = Math.floor(snap.withdrawable * 10_000_000 + 1e-12)
-    if (!Number.isSafeInteger(amountAtomic) || amountAtomic <= 0) {
-      setPayoutMsg("Amount could not be converted to valid atomic units.")
-      return
-    }
-    setRequestingPayout(true)
-    setPayoutMsg(null)
-    try {
-      // Keep the same request key when the client retries an uncertain network result.
-      // A changed amount is a distinct intent; successful reservation clears the key.
-      let pendingIntent = payoutIdempotencyRef.current
-      if (!pendingIntent || pendingIntent.amountAtomic !== amountAtomic) {
-        const nonce = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-          ? crypto.randomUUID()
-          : `${Date.now()}_${Math.random().toString(36).slice(2, 12)}`
-        pendingIntent = { amountAtomic, key: `ui-payout:${nonce}` }
-        payoutIdempotencyRef.current = pendingIntent
-      }
-      const idempotencyKey = pendingIntent.key
-      // Phase 3: payout request via apiRequest — never claims Pi sent until worker verifies A2U.
-      const wRes = await apiRequest<{
-        ok?: boolean
-        error?: string
-        message?: string
-        requestId?: string
-        status?: string
-      }>("/api/economy/earnings/withdrawals", {
-        method: "POST",
-        body: { amountAtomic, idempotencyKey },
-        timeoutMs: 25_000,
-      })
-      const body = wRes.data
-      if (wRes.status === 503 || body?.error === "PI_EARNINGS_PAYOUT_REQUESTS_DISABLED" || wRes.code === "PI_EARNINGS_PAYOUT_REQUESTS_DISABLED") {
-        setPayoutMsg(
-          "Withdrawals are not open on this deployment yet. No transfer was started.",
-        )
-        return
-      }
-      if (!wRes.ok || !body?.ok) {
-        const code = body?.error || wRes.code || ""
-        if (code === "WALLET_AUTHORIZATION_REQUIRED") {
-          setWalletAuthActive(false)
-          setPayoutMsg("Authorize Pi wallet payouts once — then you can withdraw to your linked Pi wallet.")
-          return
-        }
-        setPayoutMsg(
-          wRes.error ||
-            humanizeApiError(body?.error, body?.message) ||
-            "Could not create a payout request. No transfer was started.",
-        )
-        return
-      }
-      payoutIdempotencyRef.current = null
-      setPayoutMsg(
-        body.message ||
-          `Payout request recorded (${body.requestId || "queued"}). This does not send Pi until the server execution worker completes a verified A2U transfer.`,
-      )
-      try {
-        window.dispatchEvent(new CustomEvent("ghc:earnings-refresh", { detail: { reason: "payout-request" } }))
-        window.dispatchEvent(new CustomEvent("ghc:wallet-refresh", { detail: { reason: "payout-request" } }))
-        window.dispatchEvent(
-          new CustomEvent("ghc:toast", {
-            detail: {
-              message: body.message || `Payout request ${body.requestId || "queued"} recorded`,
-              type: "success",
-            },
-          }),
-        )
-      } catch { /* */ }
-    } catch {
-      setPayoutMsg("Network error while creating payout request. No transfer was started.")
-    } finally {
-      setRequestingPayout(false)
-    }
-  }, [requestingPayout, snap])
 
   const onPreviewFee = useCallback(async () => {
     if (snap?.eligible !== true || snap.piWalletLinked !== true) {
@@ -531,18 +443,12 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
     }
   }, [snap])
 
-  const runWithdraw = useCallback(async () => {
-    // Authorization is confirmed BEFORE any quote or payout request. When it is missing,
-    // hand off to the withdrawal sheet, which runs genuine Pi consent and then quotes.
-    if (walletAuthActive !== true) {
-      openWithdrawSheet()
-      return
-    }
-    if (!quoteDetail) {
-      await onPreviewFee()
-    }
-    await onRequestPayout()
-  }, [walletAuthActive, openWithdrawSheet, quoteDetail, onPreviewFee, onRequestPayout])
+  const runWithdraw = useCallback(() => {
+    // All entry points must use the same sheet. It owns amount selection, a fresh
+    // server quote, wallet-consent checks, PIN proof and idempotent request submission.
+    // Never submit from this dashboard: that path cannot safely manufacture PIN proof.
+    openWithdrawSheet()
+  }, [openWithdrawSheet])
 
 
   useEffect(() => {

@@ -11,3 +11,8 @@
 
 
 Source-level / source-only verification only. The supported runtime is Node.js 24.15.0; the available container runs Node.js 22.16.0 and does not contain the complete dependency tree. Full typecheck, lint and production build are therefore not claimed as passed.
+
+
+## Run #242 follow-up — version 0.338.20
+
+Removed the wallet dashboard's alternate direct withdrawal POST path, which omitted server PIN proof, and routed wallet focus withdrawals through the dedicated Pi withdrawal sheet. Added a prebuild regression contract and Run #242 root-cause report. Payout/Testnet kill switches remain unchanged and fail-closed.
