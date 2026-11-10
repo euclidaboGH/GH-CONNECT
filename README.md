@@ -1,17 +1,21 @@
 # GreenHaven / GH-CONNECT
 
-**Current source version:** `0.338.27`
+**Current source version:** `0.338.28`
 
 Production status: **NOT APPROVED** — supported Node 24.15.0 dependency-backed typecheck/lint/build, browser/device, live database/provider and operator acceptance remain outstanding.
 
 This repository is the canonical GreenHaven / GH Connect source tree. See `docs/SOURCE_OF_TRUTH.md` and `docs/CURRENT_BUILD_CONTEXT.md` before implementation or release work.
 
 
-## Latest release — 0.338.27 / Run #261
+## Latest release — 0.338.28 / Run #266
+
+Unifies the canonical post-card experience across Feed, Profile and Community. Adds semantic article structure, explicit surface identity, cleaner author metadata and media framing, and a stable mobile-first action dock with clear Comment, Save and Share labels. Corrects the share feedback so opening share options is not represented as a completed share. Preserves existing post APIs, media validation, moderation, visibility, engagement, and the single UnifiedCompose flow. Run #266 has 14/14 targeted source-contract checks; dependency-backed typecheck, lint, production build, browser/device and two-account acceptance remain required. No database migration or financial behavior changed.
+
+## Previous release — 0.338.27 / Run #261
 
 Adds an operator-only Pi A2U ecosystem qualification register: full-KYC recipient attestations are bound to GreenHaven Pi UID mappings, and only independently provider-verified, developer-completed Testnet A2U settlements to five distinct recipients count. The register never creates or retries payments. The additive migration is REVIEW_REQUIRED and unapplied pending Testnet source deployment and migration-history review. Targets the live Pi earnings withdrawal failure with actionable provider-stage diagnostics, a read-only Pi incomplete-A2U health probe, a one-active-withdrawal-per-user guard, and safe Pi wallet-address binding/display. The wallet address is obtained from Pi's `wallet_address` permission and bound to the same server-verified app-specific Pi UID; the provider's actual `to_address` must match before any A2U payment is submitted or settled. A2U transfers still route by Pi UID, not a browser-supplied address. The new additive Testnet migration is REVIEW_REQUIRED and unapplied pending deployment/history review. Existing uncertain reservations are not force-released or blindly retried; users can explicitly reconcile an existing request against an exact Pi incomplete payment. See `docs/UPGRADE-WORKLOG-0.338.27.md` and `docs/PI-EARNINGS-WITHDRAWAL-INCIDENT-2026-11-10.md`.
 
-The current deployed Vercel Testnet Preview is 0.338.25 and READY; its live withdrawal request returned 503 `PI_PROVIDER_OUTCOME_UNCERTAIN`. Run #260 source is not yet pushed or deployed. Production remains NOT APPROVED.
+The deployment and withdrawal observations in the following paragraphs are historical Run #261 context, not a statement that Run #266 is deployed. Run #266 is source-only and has not been pushed or deployed. Production remains NOT APPROVED.
 
 The preceding Run #259 added the credential-free `.env.example` template and retained the Run #258 Testnet Marketplace order-list RPC repair. See `docs/UPGRADE-WORKLOG-0.338.25.md`.
 

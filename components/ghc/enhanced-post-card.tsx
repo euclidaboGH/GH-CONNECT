@@ -61,6 +61,8 @@ const REACTIONS: PostReaction[] = [
 
 interface EnhancedPostCardProps {
   post: Post
+  /** Shared rendering surface, used for consistent responsive treatment and diagnostics. */
+  surface?: "feed" | "profile" | "community"
   /** Prioritize only the first visible feed card's primary media. */
   priority?: boolean
   /** @deprecated Post likes are not used for matching; optional legacy signal */
@@ -99,6 +101,7 @@ interface EnhancedPostCardProps {
 
 function EnhancedPostCardInner({
   post,
+  surface = "feed",
   priority = false,
   isLiked = false,
   isSaved,
@@ -480,9 +483,16 @@ function EnhancedPostCardInner({
   const contentParts = parseContent(post.content)
 
   return (
-    <div
+    <article
       ref={containerRef}
-      style={{ contentVisibility: "auto", containIntrinsicSize: "320px" }} data-post-id={post.id} data-sentiment={(() => { const t = upvoteCount + downvoteCount; if (t < 5) return "none"; const r = upvoteCount / t; return r >= 0.7 ? "positive" : r <= 0.35 ? "critical" : "mixed" })()} role="article" tabIndex={onOpenPost ? 0 : undefined} aria-busy={curationBusy || undefined} aria-label={post.authorName ? `Post by ${displayAuthor}` : "Post"} className="gh-post-card gh-card-interactive max-w-full cursor-pointer overflow-x-hidden overflow-hidden rounded-[1.25rem] border border-border/50 bg-card text-card-foreground shadow-[var(--gh-card-shadow)] focus-visible:outline-none"
+      style={{ contentVisibility: "auto", containIntrinsicSize: "320px" }}
+      data-post-id={post.id}
+      data-post-surface={surface}
+      data-sentiment={(() => { const t = upvoteCount + downvoteCount; if (t < 5) return "none"; const r = upvoteCount / t; return r >= 0.7 ? "positive" : r <= 0.35 ? "critical" : "mixed" })()}
+      tabIndex={onOpenPost ? 0 : undefined}
+      aria-busy={curationBusy || undefined}
+      aria-label={post.authorName ? `Post by ${displayAuthor}` : "Post"}
+      className={`gh-post-card gh-card-interactive group/post relative max-w-full overflow-x-hidden overflow-hidden rounded-[1.25rem] border border-border/60 bg-card text-card-foreground shadow-[var(--gh-card-shadow)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 ${onOpenPost ? "cursor-pointer" : "cursor-default"}`}
       onClick={(event) => {
         const target = event.target as HTMLElement | null
         if (target?.closest("button, a, input, textarea, select, video, [role=button], [data-post-no-open]")) return
@@ -497,8 +507,8 @@ function EnhancedPostCardInner({
       }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-3 pb-2 pt-3 sm:px-4 sm:pt-4">
-        <div className="flex flex-1 items-center gap-2.5">
+      <header className="flex min-w-0 items-start justify-between gap-2 px-3 pb-2.5 pt-3 sm:px-4 sm:pt-4">
+        <div className="flex min-w-0 flex-1 items-start gap-2.5">
           <button type="button" onClick={() => onOpenProfile?.(post.authorId)} className={`relative rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${(post as Post & { authorVerified?: boolean }).authorVerified ? "gh-avatar-halo" : ""}`} aria-label={`Open ${displayAuthor}'s profile`}>
             <LazyImage
               src={resolveAvatarUrl(post.authorPhoto, { seed: post.authorId || post.authorName || "member", size: 96 })}
@@ -508,16 +518,16 @@ function EnhancedPostCardInner({
             {(post as Post & { authorOnline?: boolean }).authorOnline && <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-background bg-emerald-500" title="Online now" aria-label="Online now" />}
             {(post as Post & { authorVerified?: boolean }).authorVerified && <span className="absolute -right-1 -top-1 rounded-full bg-card p-0.5 text-sky-600 shadow-sm ring-1 ring-border/40" title="Verified profile" aria-label="Verified profile"><ShieldCheck size={11} /></span>}
           </button>
-          <div className="min-w-0 flex-1">
-            <button type="button" onClick={() => onOpenProfile?.(post.authorId)} className="block max-w-full truncate text-left text-sm font-bold text-foreground hover:text-primary">{displayAuthor}</button>
-            <div className="flex flex-wrap items-center gap-1">
+          <div className="min-w-0 flex-1 pt-0.5">
+            <button type="button" onClick={() => onOpenProfile?.(post.authorId)} className="block max-w-full truncate text-left text-[14px] font-bold leading-5 text-foreground decoration-emerald-600/50 underline-offset-2 hover:text-primary hover:underline focus-visible:outline-none focus-visible:underline">{displayAuthor}</button>
+            <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
               <AuthorRepChip data={authorReputationFromPost(post as never)} />
               {(() => {
                 const p = post as Post & { authorProfession?: string; authorTitle?: string; communityName?: string }
                 const ctx = p.authorProfession || p.authorTitle || p.communityName
                 return ctx ? <span className="truncate text-[10px] font-medium text-muted-foreground">{ctx}</span> : null
               })()}
-              <p className="text-xs text-muted-foreground">
+              <p className="text-[11px] leading-4 text-muted-foreground">
                 {timeAgo(post.createdAt)}
                 {(post.isEdited || post.editedAt) && (
                   <span className="ml-1 text-[10px] font-semibold">· Edited</span>
@@ -545,7 +555,7 @@ function EnhancedPostCardInner({
           </div>
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           {visibilityReason && (
             <button
               type="button"
@@ -571,7 +581,7 @@ function EnhancedPostCardInner({
             <MoreVertical size={16} />
           </button>
         </div>
-      </div>
+      </header>
 
       <ActionSheet
         open={showMenu}
@@ -769,13 +779,13 @@ function EnhancedPostCardInner({
       )}
 
       {/* Content with rich formatting */}
-      <div className="px-3 pb-2.5 pt-1 sm:px-4 sm:pb-3">
+      <div className="min-w-0 px-3 pb-3 pt-1 sm:px-4 sm:pb-3.5">
         {detectSpecialPost(post.content) ? (
           <SpecialPostBody content={post.content || ""} />
         ) : (
           <>
             <div
-              className={`mb-1 break-words text-[15px] leading-[1.55] tracking-[-0.011em] text-foreground sm:text-base ${
+              className={`mb-1 break-words [overflow-wrap:anywhere] text-[15px] leading-[1.62] tracking-[-0.008em] text-foreground sm:text-[15.5px] ${
                 !contentExpanded && (post.content?.length || 0) > 220 ? "line-clamp-5" : ""
               }`}
             >
@@ -861,7 +871,7 @@ function EnhancedPostCardInner({
         {/* Media gallery with improved viewing */}
         {realImages.length > 0 && (
           <div
-            className="group relative mb-2 aspect-[4/5] max-h-[24rem] w-full cursor-pointer overflow-hidden rounded-[1.15rem] bg-muted/50 sm:aspect-video sm:max-h-[26rem]"
+            className="group relative mb-2 aspect-[4/5] max-h-[26rem] w-full cursor-pointer overflow-hidden rounded-2xl bg-muted/50 ring-1 ring-inset ring-black/5 sm:aspect-video sm:max-h-[30rem]"
             onClick={handleImageTap}
             onPointerDown={(e) => {
               if (e.button !== 0) return
@@ -1092,7 +1102,7 @@ function EnhancedPostCardInner({
         </div>
       )}
 
-    </div>
+    </article>
   )
 }
 

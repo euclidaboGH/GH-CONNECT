@@ -1138,6 +1138,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                   ) : null}
                   <PostErrorBoundary>
                     <div className="gh-feed-post-slot cv-auto"><EnhancedPostCard
+                      surface="feed"
                       post={post}
                       priority={index === 0}
                       isLiked={likedPosts.includes(post.id)}

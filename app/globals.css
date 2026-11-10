@@ -3554,3 +3554,69 @@ header img[alt="GreenHaven"],
   .gh-marketplace-header [role="toolbar"] { gap: 0.375rem; }
   .gh-marketplace-header [role="toolbar"] button { padding-inline: 0.625rem; }
 }
+
+/* Run #266 — one consistent, mobile-first post experience across Feed, Profile and Community. */
+.gh-post-card[data-post-surface] {
+  isolation: isolate;
+  min-width: 0;
+  border-color: color-mix(in srgb, var(--border) 82%, transparent);
+  background: var(--card);
+}
+.gh-post-card[data-post-surface="profile"],
+.gh-post-card[data-post-surface="community"] {
+  box-shadow: var(--gh-card-shadow, 0 1px 3px rgb(0 0 0 / .06));
+}
+.gh-post-card > header {
+  min-width: 0;
+}
+.gh-post-card > header > div:first-child > button:first-child {
+  flex: 0 0 auto;
+  min-width: 44px;
+  min-height: 44px;
+}
+.gh-post-action-dock {
+  display: block;
+  width: 100%;
+}
+.gh-post-action-primary,
+.gh-post-action-secondary {
+  width: 100%;
+}
+.gh-post-action-secondary .gh-post-response-action {
+  min-height: 44px;
+  min-width: 0;
+  gap: .35rem;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1;
+}
+.gh-post-action-secondary .gh-post-response-action:focus-visible {
+  position: relative;
+  z-index: 2;
+}
+@media (max-width: 380px) {
+  .gh-post-action-dock { padding-inline: .625rem; }
+  .gh-post-action-secondary { gap: .375rem; }
+  .gh-post-action-secondary .gh-post-response-action {
+    gap: .25rem;
+    padding-inline: .25rem;
+    font-size: 10px;
+  }
+  .gh-post-action-primary { column-gap: .375rem; }
+}
+@media (min-width: 640px) {
+  .gh-post-action-secondary {
+    display: flex;
+    justify-content: flex-end;
+    gap: .375rem;
+  }
+  .gh-post-action-secondary .gh-post-response-action {
+    flex: 0 0 auto;
+    min-width: 6.25rem;
+    padding-inline: .75rem;
+    font-size: 12px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gh-post-card[data-post-surface] { transition: none; }
+}

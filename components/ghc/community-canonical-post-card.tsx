@@ -30,6 +30,7 @@ export function CommunityCanonicalPostCard({ post, isMod = false, onPin, onHide 
 
   return (
     <EnhancedPostCard
+      surface="community"
       post={post}
       isSaved={saved}
       onLike={(postId) => {
