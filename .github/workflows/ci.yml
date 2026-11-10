@@ -35,7 +35,10 @@ jobs:
         run: node scripts/check-dependency-lock-integrity.mjs
 
       - name: Install
-        run: npm ci --legacy-peer-deps
+        run: unset npm_config_cache_dir NPM_CONFIG_CACHE_DIR; npm ci --legacy-peer-deps
+
+      - name: JSX duplicate-prop guard
+        run: node scripts/check-jsx-duplicate-props.mjs
 
       - name: Complete source regression suite
         run: npm run verify:static
@@ -101,7 +104,7 @@ jobs:
         run: node scripts/check-dependency-lock-integrity.mjs
 
       - name: Install
-        run: npm ci --legacy-peer-deps
+        run: unset npm_config_cache_dir NPM_CONFIG_CACHE_DIR; npm ci --legacy-peer-deps
 
       - name: Build
         run: npm run build

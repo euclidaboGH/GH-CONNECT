@@ -816,9 +816,10 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
 
           {!needsConsent && (
             <div className="space-y-2">
-              <p className="text-[11px] font-medium text-muted-foreground">
+              <label htmlFor="withdrawal-pin" className="block text-[11px] font-medium text-muted-foreground">
                 Withdrawal PIN (6 digits — separate from login; never sent to Pi)
-              </p>
+              </label>
+              <p id="withdraw-pin-hint" className="text-[10px] text-muted-foreground">Enter the six-digit withdrawal PIN configured in Wallet Security.</p>
               {pinStatusError ? (
                 <p id="withdraw-pin-status-error" className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100" role="alert">{pinStatusError}</p>
               ) : null}
@@ -833,24 +834,31 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
               ) : (
                 <div className="relative">
                   <input
+                    id="withdrawal-pin"
                     type={showPin ? "text" : "password"}
                     inputMode="numeric"
+                    minLength={6}
                     maxLength={6}
+                    required
                     autoComplete="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    enterKeyHint="done"
                     value={pinInput}
                     onChange={(e) => setPinInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
                     className="w-full rounded-2xl border border-border/70 bg-background py-2.5 pl-4 pr-12 text-sm font-semibold tracking-[0.3em] text-foreground outline-none focus:border-violet-500"
                     placeholder="••••••"
                     aria-label="Enter withdrawal PIN"
-                    inputMode="numeric"
                     pattern="[0-9]{6}"
-                    aria-describedby={pinStatusError ? "withdraw-pin-status-error" : undefined}
+                    aria-invalid={pinInput.length > 0 && pinInput.length !== 6}
+                    aria-describedby={pinStatusError ? "withdraw-pin-hint withdraw-pin-status-error" : "withdraw-pin-hint"}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPin((v) => !v)}
                     className="absolute right-1.5 top-1/2 inline-flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted active:scale-95"
                     aria-label={showPin ? "Hide PIN" : "Show PIN"}
+                    aria-controls="withdrawal-pin"
                     aria-pressed={showPin}
                   >
                     {showPin ? <EyeOff size={17} /> : <Eye size={17} />}
@@ -864,7 +872,7 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
           )}
 
           {msg ? (
-            <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100" role="status">
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100" role="status" aria-live="polite">
               {msg}
             </p>
           ) : null}
@@ -882,7 +890,7 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
           </button>
           <button
             type="button"
-            disabled={submitting || quoting || authLoading || authorizing || pinBusy || needsConsent || auth === null || pinConfigured === null || amountPi <= 0}
+            disabled={submitting || quoting || authLoading || authorizing || pinBusy || needsConsent || auth === null || pinConfigured !== true || pinInput.length !== 6 || amountPi <= 0}
             aria-busy={submitting || pinBusy}
             onClick={() => void onSubmit()}
             className="flex min-h-12 w-full items-center justify-center rounded-full bg-violet-700 text-[15px] font-bold text-white shadow-sm disabled:opacity-50"
