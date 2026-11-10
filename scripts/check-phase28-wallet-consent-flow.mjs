@@ -23,6 +23,12 @@ const results = []
 const test = (name, ok) => { results.push(Boolean(ok)); console.log(`${ok ? "PASS" : "FAIL"} ${name}`) }
 const postPost = route.slice(route.indexOf("export async function POST"), route.indexOf("export async function DELETE"))
 
+test("consent conditional wraps identity and consent cards in a JSX fragment", /\) : needsConsent \? \(\s*<>[\s\S]*data-wallet-consent-dialog[\s\S]*<\/>/.test(sheet))
+test("identity details use a named accessible group", /role="group" aria-label="Withdrawal identity details"/.test(sheet))
+test("authorization loading is announced accessibly", /role="status" aria-live="polite">[\s\S]*Checking payout consent/.test(sheet))
+test("consent controls expose pending state and block duplicate authorization", /aria-busy=\{authorizing\}/.test(sheet) && /disabled=\{authorizing \|\| authLoading \|\| !consentChecked/.test(sheet))
+test("PIN input exposes numeric format and associated status error", /pattern="\[0-9\]\{6\}"/.test(sheet) && /aria-describedby=\{pinStatusError \? "withdraw-pin-status-error"/.test(sheet) && /id="withdraw-pin-status-error"/.test(sheet))
+test("quote and submit actions expose their in-progress state", /aria-busy=\{quoting\}/.test(sheet) && /aria-busy=\{submitting \|\| pinBusy\}/.test(sheet))
 test("grant route verifies fresh Pi proof before any grant RPC", postPost.indexOf("verifyWalletConsentProof") > -1 && postPost.indexOf("verifyWalletConsentProof") < postPost.indexOf("grantWalletAuthorization"))
 test("grant route uses trusted server verification (Pi /v2/me) and the durable mapping", /verifyPiAccessToken/.test(postPost) && /getByGhUserId/.test(postPost) && /getByPiAppUid/.test(postPost))
 test("grant route never reads recipient/user/authorized from the body", !/body\.(piAppUid|recipient|ghUserId|userId|authorized)/.test(postPost) && !/parsedBody\.value\.(piAppUid|recipient|ghUserId|userId|authorized)/.test(postPost))

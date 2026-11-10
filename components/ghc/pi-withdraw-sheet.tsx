@@ -716,13 +716,13 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
           )}
 
           {authLoading ? (
-            <p className="flex items-center gap-2 text-[12px] text-muted-foreground">
+            <p className="flex items-center gap-2 text-[12px] text-muted-foreground" role="status" aria-live="polite">
               <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking payout consent…
             </p>
           ) : needsConsent ? (
-            
+            <>
           {/* Identity map: GreenHaven account vs linked Pi wallet */}
-          <div className="rounded-lg border border-violet-100 bg-violet-50/60 px-3 py-2 text-xs text-violet-900 space-y-1" role="status">
+          <div className="rounded-lg border border-violet-100 bg-violet-50/60 px-3 py-2 text-xs text-violet-900 space-y-1" role="group" aria-label="Withdrawal identity details">
             <p className="font-medium text-violet-950">Identity for this withdrawal</p>
             <p>GreenHaven session: signed-in account (server verified)</p>
             <p>
@@ -748,7 +748,7 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
             </p>
           </div>
 
-<div className="rounded-2xl border border-violet-300/70 bg-violet-50/90 px-3 py-3 dark:border-violet-800 dark:bg-violet-950/40" data-wallet-consent-dialog>
+<div className="rounded-2xl border border-violet-300/70 bg-violet-50/90 px-3 py-3 dark:border-violet-800 dark:bg-violet-950/40" data-wallet-consent-dialog aria-busy={authorizing}>
               <p className="flex items-center gap-1.5 text-[13px] font-bold text-violet-950 dark:text-violet-100">
                 <ShieldCheck className="h-4 w-4" /> Authorize your Pi wallet for withdrawals
               </p>
@@ -778,7 +778,8 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
               ) : null}
               <button
                 type="button"
-                disabled={authorizing || !consentChecked || auth?.hasMapping !== true}
+                disabled={authorizing || authLoading || !consentChecked || auth?.hasMapping !== true}
+                aria-busy={authorizing}
                 onClick={() => void onAuthorizeAndContinue()}
                 className="mt-3 flex min-h-11 w-full items-center justify-center rounded-full bg-violet-700 px-4 text-[14px] font-bold text-white disabled:opacity-50"
               >
@@ -806,6 +807,7 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
                 Cancel
               </button>
             </div>
+            </>
           ) : (
             <p className="flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-2 text-[11px] font-medium text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
               <Wallet className="h-3.5 w-3.5" /> {consentDone ? "Wallet authorized. " : ""}Payouts authorized for @{destination || "your Pi wallet"}
@@ -818,7 +820,7 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
                 Withdrawal PIN (6 digits — separate from login; never sent to Pi)
               </p>
               {pinStatusError ? (
-                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100" role="alert">{pinStatusError}</p>
+                <p id="withdraw-pin-status-error" className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100" role="alert">{pinStatusError}</p>
               ) : null}
               {pinConfigured === false ? (
                 <div className="space-y-2 rounded-2xl border border-violet-200 bg-violet-50 px-3 py-3 text-[12px] text-violet-950 dark:border-violet-900 dark:bg-violet-950/30 dark:text-violet-100" role="status">
@@ -840,6 +842,9 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
                     className="w-full rounded-2xl border border-border/70 bg-background py-2.5 pl-4 pr-12 text-sm font-semibold tracking-[0.3em] text-foreground outline-none focus:border-violet-500"
                     placeholder="••••••"
                     aria-label="Enter withdrawal PIN"
+                    inputMode="numeric"
+                    pattern="[0-9]{6}"
+                    aria-describedby={pinStatusError ? "withdraw-pin-status-error" : undefined}
                   />
                   <button
                     type="button"
@@ -869,6 +874,7 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
           <button
             type="button"
             disabled={quoting || authLoading || authorizing || needsConsent || auth === null || amountPi <= 0}
+            aria-busy={quoting}
             onClick={() => void onQuote()}
             className="flex min-h-11 w-full items-center justify-center rounded-full border border-border/70 bg-background text-[13px] font-bold text-foreground disabled:opacity-50"
           >
@@ -877,6 +883,7 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
           <button
             type="button"
             disabled={submitting || quoting || authLoading || authorizing || pinBusy || needsConsent || auth === null || pinConfigured === null || amountPi <= 0}
+            aria-busy={submitting || pinBusy}
             onClick={() => void onSubmit()}
             className="flex min-h-12 w-full items-center justify-center rounded-full bg-violet-700 text-[15px] font-bold text-white shadow-sm disabled:opacity-50"
             data-testid="pi-withdraw-submit"
@@ -893,7 +900,7 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
               "Review withdrawal"
             )}
           </button>
-          <p className="text-center text-[10px] text-muted-foreground">
+          <p className="text-center text-[10px] text-muted-foreground" aria-live="polite">
             Your Pi is reserved first, then sent by the secure payout service. Success is shown only after Pi confirms it.
           </p>
         </div>
