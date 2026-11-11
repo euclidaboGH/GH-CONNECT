@@ -44,6 +44,8 @@ export function MatchScreen() {
   useSectionRefresh("discover", () => {
     try {
       window.dispatchEvent(new CustomEvent("ghc:matches-refresh", { detail: { reason: "soft" } }))
+    } catch { /* */ }
+  }, { minIntervalMs: 10_000 })
 
   useEffect(() => {
     const onVis = () => {
@@ -54,8 +56,6 @@ export function MatchScreen() {
     document.addEventListener("visibilitychange", onVis)
     return () => document.removeEventListener("visibilitychange", onVis)
   }, [])
-    } catch { /* */ }
-  }, { minIntervalMs: 10_000 })
 
   const {
     matches,
