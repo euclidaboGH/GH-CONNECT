@@ -11,9 +11,9 @@ if (report.scope.activeModules !== 11) failures.push('active module count mismat
 if (report.scope.pointsPerModule !== 30) failures.push('maintenance points per module mismatch')
 if (report.scope.totalPoints !== 330) failures.push('total maintenance point count mismatch')
 if (JSON.stringify(report.modules.map((item) => item.name)) !== JSON.stringify(expected)) failures.push('active module order/identity mismatch')
-for (const module of report.modules) {
-  if (!Array.isArray(module.maintenancePoints) || module.maintenancePoints.length !== 30) failures.push(`${module.name}: expected exactly 30 maintenance points`)
-  if (module.maintenancePoints.some((point) => typeof point !== 'string' || point.trim().length < 8)) failures.push(`${module.name}: invalid maintenance point`)
+for (const moduleReport of report.modules) {
+  if (!Array.isArray(moduleReport.maintenancePoints) || moduleReport.maintenancePoints.length !== 30) failures.push(`${moduleReport.name}: expected exactly 30 maintenance points`)
+  if (moduleReport.maintenancePoints.some((point) => typeof point !== 'string' || point.trim().length < 8)) failures.push(`${moduleReport.name}: invalid maintenance point`)
 }
 if (report.verification.staticAssertionsPassed !== 3599 || report.verification.staticFailures !== 0) failures.push('static verification evidence mismatch')
 if (report.verification.databaseMigrationsApplied !== 0 || report.verification.deployment !== 'NOT_DEPLOYED') failures.push('safety boundary mismatch')
