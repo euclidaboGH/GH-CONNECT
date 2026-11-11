@@ -187,7 +187,7 @@ import {
   type PostShare,
 } from "@/lib/post-comment-system-complete"
 
-interface GHCContextType {
+export interface GHCContextType {
   ready: boolean
   profile: Profile
   settings: Settings

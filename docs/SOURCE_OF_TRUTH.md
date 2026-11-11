@@ -1,12 +1,14 @@
 # GreenHaven — Source of Truth & Prompt Execution Rules
 
 **Current source baseline archive:** `GREENHAVEN-0.338.43-ECOSYSTEM-30-TRACKS-ALL-41-SERVICES.zip`
-**Current working candidate:** `0.338.49`
-**Current source version:** `0.338.49`
-**Package identity:** `gh-connect@0.338.49`
+**Current working candidate:** `0.338.51`
+**Current source version:** `0.338.51`
+**Package identity:** `gh-connect@0.338.51`
 **Status:** Testnet implementation candidate derived from the user's 0.338.43 ecosystem archive. It is not a production release. Mainnet remains untouched and production is NOT APPROVED.
 
-## Current implementation authority — 0.338.49
+## Current implementation authority — 0.338.51
+
+Run #288 continues from the verified Run #287 archive. It exports the GHC context contract for typed consumers, removes the `as any` escape hatch in `usePermissions`, derives match IDs from the declared context model, and binds client permission checks to the hydrated profile identity instead of a hard-coded placeholder. An eight-assertion type-safety gate runs before TypeScript. Run #287's app-shell structural repair remains covered by its 20-assertion gate. Targeted matching, discovery, messaging, communications, ACL and module checks pass. Dependency-backed full TypeScript/lint/build remains unverified: the available environment is Node 22.16.0 while the project and several locked dependencies require newer Node 22.19+/24.15.0; dependency installation timed out. No SQL migration, financial mutation, GitHub push, Vercel deployment or Mainnet operation was performed. Production remains NOT APPROVED.
 
 Run #285 continues from the uploaded 0.338.47 archive. It adds a response-level Discovery privacy fallback, server-side match-inbox privacy projection (bidirectional block exclusion; hidden/no-one suppression; matches-only requires reciprocal interest), and fixes a duplicate direct-message POST by making the HTTP message repository append cache-only after the domain performs its single idempotent server write. Focused Run #285 tests pass. Testnet currently has 39 applied migration records; exact comparison finds 10 source files present and 29 missing or version-mismatched in the uploaded source, so no further migration is safe until exact source restoration and clean-database rehearsal. Vercel project buildCommand was synchronized to run the existing Webpack cache cleanup before Next.js build after the latest deployment was OOM-killed. GitHub `testnet` remains 0.338.31, so do not overwrite it from this newer uploaded archive without source synchronization. Node 24.15.0 typecheck/build and browser/device acceptance remain open.
 

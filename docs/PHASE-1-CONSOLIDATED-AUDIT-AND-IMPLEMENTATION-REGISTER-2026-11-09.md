@@ -3,11 +3,15 @@
 **Audit date:** 2026-11-09  
 **Last updated:** 2026-11-11  
 **Authoritative source archive:** `GREENHAVEN-0.338.43-ECOSYSTEM-30-TRACKS-ALL-41-SERVICES.zip`  
-**Current project package:** `gh-connect@0.338.49`
+**Current project package:** `gh-connect@0.338.51`
 
-**Current in-place maintenance derivative:** `gh-connect@0.338.49 (Runs #250–284)`; the audit findings and historical baseline below remain preserved. The original 0.338.18 audit baseline and Run #250–278 snapshots are historical references, not current release pointers.  
+**Current in-place maintenance derivative:** `gh-connect@0.338.51 (Runs #250–288)`; the audit findings and historical baseline below remain preserved. The original 0.338.18 audit baseline and Run #250–278 snapshots are historical references, not current release pointers.  
 **Phase:** 1 of the ten-phase completion roadmap — authoritative baseline and complete audit  
 **Disposition:** **Source inventory and selected contracts verified; Phase 1 is NOT fully closed. Production remains NOT APPROVED.**
+
+## Run #288 addendum — 2026-11-11
+
+The permissions hook now consumes the exported `GHCContextType` without an `as any` cast, derives match IDs from the declared model and uses the hydrated profile identity in permission context construction. The app shell remains structurally repaired under Run #287. The new type-safety contract passes 6/6; focused Run #287, Run #241, Run #284, Run #283, Run #278, Run #262, Run #263, Run #266 and Run #267 checks pass. Full Node 24 dependency-backed typecheck/lint/build and browser/device acceptance remain open.
 
 Run #283 adds the first cross-module implementation tranche: 55 typed presentation/input helpers across 11 Active modules, five missing feature entry points wired into the root feature registry, safer account-scoped connection-intent cache handling, and an inclusive GHC request-expiry boundary. The new helper suite passes 55/55 and feature wiring passes 16/16. This is not completion of the requested 220 upgrade targets; remaining module-specific feature work and full runtime acceptance remain open.
 

@@ -1,12 +1,15 @@
 # GreenHaven
 
-**Current source version:** `0.338.49`
+**Current source version:** `0.338.51`
 
 Production status: **NOT APPROVED** — supported Node 24.15.0 dependency-backed typecheck/lint/build, browser/device, live database/provider and operator acceptance remain outstanding.
 
 This repository is the canonical GreenHaven source tree. See `docs/SOURCE_OF_TRUTH.md` and `docs/CURRENT_BUILD_CONTEXT.md` before implementation or release work.
 
-## Latest implementation candidate — 0.338.49 / Run #285
+## Latest implementation candidate — 0.338.51 / Run #288
+
+Run #288 removes an unsafe `as any` cast from the permissions hook, exposes the GHC context interface as a typed contract, and ensures UI permission checks use the authenticated profile identity when hydrated. Run #287 repairs duplicate module content and declaration ordering in the app shell. Focused regression gates pass; full dependency-backed typecheck/build and browser/device acceptance remain outstanding because the available Node runtime is below the project's required version and dependency installation did not complete. No database migration, payment, push or deployment was performed.
+
 
 Run #283 adds 55 tested helper capabilities across all 11 Active modules, fills Matching, Connections, Orders, GHC and Pi Payments feature entry points, and registers focused tests in the static/prebuild gates. The 220-target register is explicit: five helper capabilities per module are implemented in this tranche; 165 deeper UI/API/database feature targets remain. Static verification passes; Node 24.15.0 runtime/build and browser/device acceptance remain outstanding. No SQL, Testnet financial mutation, GitHub push, Vercel deployment or Mainnet operation was performed.
 
