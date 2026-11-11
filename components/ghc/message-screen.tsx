@@ -438,9 +438,8 @@ export function MessageScreen() {
         if (typeof f === "string") continue
         indexPeer(f.id || f.userId, f.displayName || f.name, f.avatarUrl || f.photo || f.profilePhoto)
       }
-      for (const m of (ghc.matches || []) as unknown as Array<Record<string, unknown> | string>) {
-        if (typeof m === "string") continue
-        indexPeer(m.id || m.userId, m.displayName || m.name, m.avatarUrl || m.photo || m.profilePhoto)
+      for (const m of ghc.matches || []) {
+        indexPeer(m.userId || m.id, m.userName, m.userPhoto)
       }
       // Phase 4: include following graph for DM name/photo enrichment.
       for (const f of (ghc.following || []) as Array<Record<string, unknown> | string>) {
@@ -1243,9 +1242,9 @@ export function MessageScreen() {
                       try {
                         const { uploadDurableMedia } = await import("@/lib/media/upload-client")
                         const file = new File([result.blob], `voice-${Date.now()}.webm`, { type: result.mimeType })
-                        const up = await uploadDurableMedia(file, { category: "audio", purpose: "message" })
-                        if (!up?.url && !up?.id) {
-                          window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "Voice note upload failed.", tone: "warning" } }))
+                        const up = await uploadDurableMedia(file, { category: "audio" })
+                        if (!up.ok) {
+                          window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: up.userMessage || "Voice note upload failed.", tone: "warning" } }))
                           return
                         }
                         // Prefer existing send path via attachment if available

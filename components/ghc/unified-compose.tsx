@@ -2,7 +2,7 @@
 
 import { DurableImage } from "./durable-image"
 import { confirmDialog } from "@/lib/ui/global-interactions"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useRegionalContext } from "@/contexts/regional-context"
 import { getWorkflowMessage } from "@/lib/i18n/workflows"
 import { Image as ImageIcon, Video, X, Globe, Users, Lock, FileText, BarChart3, Save } from "lucide-react"
@@ -130,15 +130,18 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
   const closeRef = useRef<() => void>(() => undefined)
   const pendingComposeRef = useRef<{ text?: string; draftId?: string } | null>(null)
 
-  const communityOptions = (conversations || [])
-    .filter((c) => {
-      const community = c as typeof c & { isCommunity?: boolean; kind?: string; communityId?: string }
-      return community.isCommunity === true || community.kind === "community" || Boolean(community.communityId)
-    })
-    .map((c) => ({
-      id: c.id,
-      name: c.groupName || c.participantName || "Community",
-    }))
+  const communityOptions = useMemo(
+    () => (conversations || [])
+      .filter((c) => {
+        const community = c as typeof c & { isCommunity?: boolean; kind?: string; communityId?: string }
+        return community.isCommunity === true || community.kind === "community" || Boolean(community.communityId)
+      })
+      .map((c) => ({
+        id: c.id,
+        name: c.groupName || c.participantName || "Community",
+      })),
+    [conversations],
+  )
 
   const imageInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
@@ -264,7 +267,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
       setLastSavedAt(saved.lastEditedAt)
     }, COMPOSE_LIMITS.autosaveMs)
     return () => window.clearTimeout(tId)
-  }, [text, selectedImages, selectedVideo, selectedDoc, selectedDocName, audience, selectedCommunityId, open, mode])
+  }, [text, selectedImages, selectedVideo, selectedDoc, selectedDocName, audience, selectedCommunityId, communityOptions, open, mode])
 
   if (!open) return null
 

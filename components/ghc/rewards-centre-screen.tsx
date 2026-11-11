@@ -666,7 +666,7 @@ export function RewardsCentreScreen({
       }
     } catch { /* the delayed event remains the fallback */ }
     return () => window.removeEventListener("ghc:open-rewards-tab", tabHandler)
-  }, [])
+  }, [setHistoryQuery])
 
   useEffect(() => {
     if (typeof window === "undefined") return

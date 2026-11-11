@@ -46,6 +46,7 @@ import {
   navigateNotificationDeepLink,
   type NotificationCenterBucket,
 } from "@/lib/notification-center"
+import { isSafeInternalNotificationPath } from "@/lib/notification-targets"
 import { useRegionalContext } from "@/contexts/regional-context"
 import { getSocialMessage as socialText } from "@/lib/i18n/social"
 import { useLiveNow } from "@/hooks/use-live-now"

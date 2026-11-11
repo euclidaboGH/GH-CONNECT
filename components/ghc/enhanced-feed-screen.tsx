@@ -270,9 +270,18 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   const feedPreferencesReady = hasFeedPreferenceOwner
     ? feedPreferencesLoadedFor === feedPreferenceOwnerId && notInterestedLoadedFor === feedPreferenceOwnerId && topicPreferencesLoadedFor === feedPreferenceOwnerId
     : isDemoDataAllowed()
-  const rankedPosts = feedPreferencesReady && rankedOwnerId === feedPreferenceOwnerId ? rankedPostsState : []
-  const likedPosts = feedPreferencesReady && Array.isArray(likedPostIds) ? likedPostIds : []
-  const bookmarkedPostIds = bookmarkedOwnerId === feedPreferenceOwnerId ? bookmarkedPostIdsState : []
+  const rankedPosts = useMemo(
+    () => feedPreferencesReady && rankedOwnerId === feedPreferenceOwnerId ? rankedPostsState : [],
+    [feedPreferencesReady, rankedOwnerId, feedPreferenceOwnerId, rankedPostsState],
+  )
+  const likedPosts = useMemo(
+    () => feedPreferencesReady && Array.isArray(likedPostIds) ? likedPostIds : [],
+    [feedPreferencesReady, likedPostIds],
+  )
+  const bookmarkedPostIds = useMemo(
+    () => bookmarkedOwnerId === feedPreferenceOwnerId ? bookmarkedPostIdsState : [],
+    [bookmarkedOwnerId, feedPreferenceOwnerId, bookmarkedPostIdsState],
+  )
 
   // Prefetch signed URLs only after the active account's feed state is ready.
   useEffect(() => {

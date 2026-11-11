@@ -74,7 +74,7 @@ export function DirectCallSheet() {
       ) : (
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-6">
           <div className="relative h-28 w-28 overflow-hidden rounded-full bg-white/10 ring-2 ring-white/20">
-            {/* eslint-disable-next-line @next/next/no-img-element */}<img src={session.peer.photoUrl || "/placeholder.svg?width=160&height=160"} alt="" className="h-full w-full object-cover" />
+            <img src={session.peer.photoUrl || "/placeholder.svg?width=160&height=160"} alt="" className="h-full w-full object-cover" />
           </div>
           <div className="text-center">
             <p className="text-xl font-bold">{session.peer.displayName || "GreenHaven member"}</p>

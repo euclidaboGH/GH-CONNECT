@@ -17,7 +17,7 @@ export function softHaptic(ms = 8): void {
   if (typeof navigator === "undefined") return
   try {
     const v = (navigator as Navigator & { vibrate?: (p: number | number[]) => boolean }).vibrate
-    if (typeof v === "function" && !prefersReducedMotion()) v.call(navigator, ms)
+    if (typeof v === "function" && !prefersReducedMotion()) v.call(navigator, [ms])
   } catch { /* */ }
 }
 

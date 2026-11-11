@@ -2491,7 +2491,7 @@ export function MarketplaceScreen({
     }
     window.addEventListener("ghc:open-marketplace", onOpenMarket)
     return () => window.removeEventListener("ghc:open-marketplace", onOpenMarket)
-  }, [])
+  }, [loadDurableOrders])
 
   useEffect(() => {
     if (!initialOrderId) return
