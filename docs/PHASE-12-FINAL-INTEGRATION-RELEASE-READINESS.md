@@ -1,4 +1,5 @@
 > **LEGACY VERIFICATION FIXTURE — NOT CURRENT PRODUCT AUTHORITY.**
+> Current source baseline reference: `0.338.53` (2026-11-11). The historical release details below remain archived and are not a statement of current release readiness.
 > This document is retained only because an executable regression/operator check references it. For current implementation decisions, follow `docs/SOURCE_OF_TRUTH.md` and executable source. Do not resurrect historical behavior from this file.
 
 # Phase 12 — Final integration and release readiness
