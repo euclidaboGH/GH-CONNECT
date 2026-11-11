@@ -65,7 +65,25 @@ try {
   spawnSync("git", ["add", "-f", "src/tracked.tsbuildinfo"], { cwd: fixture })
   const trackedCacheCheck = spawnSync(process.execPath, [join(fixture, "scripts/check-phase26-wallet-ledger-resilience.mjs")], { cwd: fixture, encoding: "utf8" })
   assert(trackedCacheCheck.status !== 0, "tracked TypeScript build caches remain a hard failure")
-  console.log("Run 272 Vercel build-prep tests: 8/8 passed")
+
+  // Exercise source-release/Vercel environments without .git metadata. Known
+  // generated cache locations are allowed, while stray cache artifacts in
+  // source roots are rejected instead of being silently accepted.
+  const noGitFixture = join(temp, "phase26-cache-policy-no-git")
+  for (const file of requiredFiles) {
+    const destination = join(noGitFixture, file)
+    mkdirSync(join(destination, ".."), { recursive: true })
+    cpSync(join(sourceRoot, file), destination)
+  }
+  mkdirSync(join(noGitFixture, ".cache"), { recursive: true })
+  writeFileSync(join(noGitFixture, ".cache", "tsconfig.tsbuildinfo"), "{}")
+  const noGitGenerated = spawnSync(process.execPath, [join(noGitFixture, "scripts/check-phase26-wallet-ledger-resilience.mjs")], { cwd: noGitFixture, encoding: "utf8" })
+  assert(noGitGenerated.status === 0, "generated build caches in a no-Git Vercel workspace are accepted")
+  writeFileSync(join(noGitFixture, "tsconfig.tsbuildinfo"), "{}")
+  const noGitStray = spawnSync(process.execPath, [join(noGitFixture, "scripts/check-phase26-wallet-ledger-resilience.mjs")], { cwd: noGitFixture, encoding: "utf8" })
+  assert(noGitStray.status !== 0, "stray source-root build caches fail without Git metadata")
+
+  console.log("Run 272 Vercel build-prep tests: 10/10 passed")
 } finally {
   rmSync(temp, { recursive: true, force: true })
 }

@@ -40,10 +40,21 @@ const cachePolicyValid =
   vercelignore.split(/\r?\n/).some((line) => line.trim() === '.next/**') &&
   tsconfig.compilerOptions?.tsBuildInfoFile === '.cache/tsconfig.tsbuildinfo' &&
   cacheFiles.every((file) => {
-    if (!insideGit) return false
-    const ignored = spawnSync('git', ['check-ignore', '--quiet', '--no-index', file], { cwd: root }).status === 0
-    const tracked = spawnSync('git', ['ls-files', '--error-unmatch', '--', file], { cwd: root, stdio: 'ignore' }).status === 0
-    return ignored && !tracked
+    // Source archives and some Vercel build workspaces omit Git metadata. In
+    // those environments, allow only known generated cache locations; a
+    // build-info file at the project root or inside application/source trees
+    // is a source-release hygiene failure. Git worktrees retain the stronger
+    // ignored + untracked checks below.
+    if (!insideGit) {
+      const generatedCacheLocation =
+        file.startsWith('.cache/') ||
+        file.startsWith('.next/cache/') ||
+        file.startsWith('.turbo/')
+      return generatedCacheLocation
+    }
+    const ignoredResult = spawnSync('git', ['check-ignore', '--quiet', '--no-index', file], { cwd: root })
+    const trackedResult = spawnSync('git', ['ls-files', '--error-unmatch', '--', file], { cwd: root, stdio: 'ignore' })
+    return ignoredResult.status === 0 && trackedResult.status !== 0
   })
 const checks = [
   ['wallet summary fetch has a bounded timeout', /AbortSignal\.timeout\(10_000\)/.test(walletV2)],
