@@ -1,5 +1,7 @@
 # Run #289 — Notification Targeting and Delivery Audit
 
+Date: 2026-11-11
+
 ## Expected recipient experience
 
 | Event | Destination | Required target context |

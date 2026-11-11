@@ -1,5 +1,7 @@
 # GreenHaven 0.338.53 — Run #291 Release Register Version-Pointer Repair
 
+Date: 2026-11-11
+
 ## Trigger
 
 The Vercel build on Testnet commit `b9aafcb` stopped at prebuild check 16/314. The Phase 1–10 upgrade pack reported 19/20, with only P1-A failing: `package.json` and `lib/app-release.ts` were already `0.338.53`, while the consolidated audit register still declared `gh-connect@0.338.52` as its current package and maintenance derivative.

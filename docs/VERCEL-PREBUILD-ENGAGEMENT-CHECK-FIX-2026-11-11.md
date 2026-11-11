@@ -1,5 +1,7 @@
 # Vercel prebuild failure — engagement reliability contract
 
+Date: 2026-11-11
+
 The failing Vercel deployment was `dpl_AVCrBE5tT5sKCqEnnP1Hae1UrxWu`, branch `testnet`, commit `729f20a0908a2fdf5c29a27a13ad3a9330d268e0`. The prebuild suite failed at step 137/316 in `scripts/check-phase1-12-engagement-reliability.mjs` (15/16 assertions).
 
 The failing assertion assumed `void Promise.all([ ... ])`. The current `components/ghc/notification-bell.tsx` builds a typed `requests` array, queues the unified notification write and the applicable legacy social write, then awaits `Promise.all(requests)` before dispatching `ghc:notifications-read`. The implementation was correct; the static test was stale.

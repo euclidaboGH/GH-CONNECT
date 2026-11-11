@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, symlinkSync, readFileSync, rmSync } from "node:fs"
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, symlinkSync, readFileSync, rmSync, cpSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { spawnSync } from "node:child_process"
@@ -27,7 +27,45 @@ try {
   const blocked = spawnSync(process.execPath, [script], { cwd: temp, encoding: "utf8" })
   assert(blocked.status !== 0, "symlinked Webpack cache cleanup is refused")
   assert(readFileSync(join(outside, "preserve.txt"), "utf8") === "preserve", "symlink target remains untouched")
-  console.log("Run 272 Vercel build-prep tests: 4/4 passed")
+
+  // Build caches can legitimately be regenerated inside the Vercel build
+  // workspace. They must be ignored/excluded, not mistaken for source files.
+  const fixture = join(temp, "phase26-cache-policy")
+  const sourceRoot = resolve(fileURLToPath(new URL("..", import.meta.url)))
+  const requiredFiles = [
+    "package.json", "package-lock.json", ".gitignore", ".vercelignore", "tsconfig.json",
+    "contexts/domains/wallet-read-provider.tsx", "lib/domains/wallet-v2.ts",
+    "components/ghc/unified-earnings-dashboard.tsx", "features/wallet/wallet-balance.tsx",
+    "features/wallet/wallet-screen.tsx", "docs/CURRENT_BUILD_CONTEXT.md",
+    "MIGRATION-SOURCE-MANIFEST.csv", "VERIFIED_MANIFEST.txt", ".env.example",
+    "scripts/check-phase26-wallet-ledger-resilience.mjs",
+  ]
+  for (const file of requiredFiles) {
+    const destination = join(fixture, file)
+    mkdirSync(join(destination, ".."), { recursive: true })
+    cpSync(join(sourceRoot, file), destination)
+  }
+  const gitInit = spawnSync("git", ["init", "-q"], { cwd: fixture, encoding: "utf8" })
+  assert(gitInit.status === 0, "incremental-cache fixture initializes a Git worktree")
+  spawnSync("git", ["config", "user.email", "test@example.invalid"], { cwd: fixture })
+  spawnSync("git", ["config", "user.name", "GreenHaven test"], { cwd: fixture })
+  spawnSync("git", ["add", "."], { cwd: fixture })
+  spawnSync("git", ["commit", "-qm", "fixture baseline"], { cwd: fixture })
+  mkdirSync(join(fixture, ".cache"), { recursive: true })
+  mkdirSync(join(fixture, ".next", "cache", "typescript"), { recursive: true })
+  writeFileSync(join(fixture, ".cache", "tsconfig.tsbuildinfo"), "{}")
+  writeFileSync(join(fixture, ".next", "cache", "typescript", "tsconfig.tsbuildinfo"), "{}")
+  writeFileSync(join(fixture, "tsconfig.tsbuildinfo"), "{}")
+  const cacheCheck = spawnSync(process.execPath, [join(fixture, "scripts/check-phase26-wallet-ledger-resilience.mjs")], { cwd: fixture, encoding: "utf8" })
+  assert(cacheCheck.status === 0, "regenerated ignored TypeScript build caches do not fail the wallet release gate")
+  assert(cacheCheck.stdout.includes("incremental build cache is excluded from source releases"), "source-release cache policy is checked")
+
+  mkdirSync(join(fixture, "src"), { recursive: true })
+  writeFileSync(join(fixture, "src", "tracked.tsbuildinfo"), "{}");
+  spawnSync("git", ["add", "-f", "src/tracked.tsbuildinfo"], { cwd: fixture })
+  const trackedCacheCheck = spawnSync(process.execPath, [join(fixture, "scripts/check-phase26-wallet-ledger-resilience.mjs")], { cwd: fixture, encoding: "utf8" })
+  assert(trackedCacheCheck.status !== 0, "tracked TypeScript build caches remain a hard failure")
+  console.log("Run 272 Vercel build-prep tests: 8/8 passed")
 } finally {
   rmSync(temp, { recursive: true, force: true })
 }

@@ -299,7 +299,7 @@ const walk=(dir)=>{
         // Non-required docs must be explicitly current; this prevents silent historical-document growth.
         // Allow: Pass48 baseline date, intermediate worklogs, and active Nov-2026 engineering notes.
         const currentWorklog = rel === `docs/UPGRADE-WORKLOG-${pkg.version}.md`
-        const datedCurrent = /2026-10-31|2026-11-0[1-5]|2026-11-08|2026-11-09|2026-11-10|0\.222\.0|0\.26[5-9]|0\.27[0-5]|0\.312\.0|0\.313\.\d+/.test(s) || /0\.27[0-5]\.\d/.test(s)
+        const datedCurrent = /2026-10-31|2026-11-0[1-5]|2026-11-08|2026-11-09|2026-11-10|2026-11-11|0\.222\.0|0\.26[5-9]|0\.27[0-5]|0\.312\.0|0\.313\.\d+/.test(s) || /0\.27[0-5]\.\d/.test(s)
         if(!currentWorklog && !datedCurrent) failures.push(`unclassified documentation: ${rel}`)
       }
     }

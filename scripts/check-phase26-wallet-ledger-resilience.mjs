@@ -14,6 +14,7 @@ const balance = read('features/wallet/wallet-balance.tsx')
 const screen = read('features/wallet/wallet-screen.tsx')
 const context = read('docs/CURRENT_BUILD_CONTEXT.md')
 const gitignore = read('.gitignore')
+const vercelignore = read('.vercelignore')
 const tsconfig = JSON.parse(read('tsconfig.json'))
 
 function collectBuildInfoFiles(directory, found = []) {
@@ -32,6 +33,11 @@ const insideGit = gitRoot.status === 0
 const cachePolicyValid =
   gitignore.includes('*.tsbuildinfo') &&
   gitignore.includes('.cache/') &&
+  vercelignore.split(/\r?\n/).some((line) => line.trim() === '*.tsbuildinfo') &&
+  vercelignore.split(/\r?\n/).some((line) => line.trim() === '.cache') &&
+  vercelignore.split(/\r?\n/).some((line) => line.trim() === '.cache/**') &&
+  vercelignore.split(/\r?\n/).some((line) => line.trim() === '.next') &&
+  vercelignore.split(/\r?\n/).some((line) => line.trim() === '.next/**') &&
   tsconfig.compilerOptions?.tsBuildInfoFile === '.cache/tsconfig.tsbuildinfo' &&
   cacheFiles.every((file) => {
     if (!insideGit) return false
@@ -55,7 +61,7 @@ const checks = [
   ['package and lockfile versions match', pkg.version === lock.version && pkg.version === lock.packages?.['']?.version],
   ['wallet release gate remains registered', (pkg.scripts['verify:static'] || '').includes('check-wallet-phase5-release-gate.mjs')],
   ['migration source manifest contains every canonical migration', existsSync(join(root, 'MIGRATION-SOURCE-MANIFEST.csv')) && read('MIGRATION-SOURCE-MANIFEST.csv').trim().split(/\r?\n/).length === Number((read('VERIFIED_MANIFEST.txt').match(/^canonical_migrations=(\d+)$/m) || [])[1]) + 1],
-  ['incremental build cache is excluded from source releases', cachePolicyValid && !existsSync(join(root, 'tsconfig.tsbuildinfo'))],
+  ['incremental build cache is excluded from source releases', cachePolicyValid],
   ['local secrets remain ignored while the example template is retained', gitignore.includes('.env.*') && gitignore.includes('!.env.example') && existsSync(join(root, '.env.example'))],
 ]
 let failures = 0

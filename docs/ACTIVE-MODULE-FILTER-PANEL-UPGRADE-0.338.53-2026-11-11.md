@@ -1,5 +1,7 @@
 # GreenHaven Active-module filter workspace upgrade
 
+Date: 2026-11-11
+
 **Source baseline:** `GREENHAVEN-0.338.53-RUN291-RELEASE-REGISTER-VERSION-REPAIR.zip`  
 **Release:** `0.338.53`  
 **Scope in this tranche:** all 11 Active modules — Community, GH Chat, Connections, Matches, Marketplace, Orders, Wallet, GHC, Pi Payments, Rewards and Membership.
