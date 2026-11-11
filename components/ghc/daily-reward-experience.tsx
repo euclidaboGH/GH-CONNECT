@@ -11,7 +11,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
-  ChevronRight, Gift, X, Sparkles, Check, Shield } from "lucide-react"
+  ChevronRight, X, Check, Shield, Clock } from "lucide-react"
 import { useGHC } from "@/contexts/ghc-context"
 import { getBoundDomainServices } from "@/lib/domains/compat"
 import {
@@ -241,91 +241,46 @@ export function DailyRewardFeedCard({
     }
   }, [claiming, daily.canClaimToday, daily.rewardDayKey, daily.displayCycleDay, daily.streakDays, userId, tier, ghc, refreshServerStatus])
 
-  // After claim: compact status pill only (no long rectangular prototype card).
+  // Premium daily bonus card — the official GHC coin is the visual anchor.
   if (!daily.canClaimToday) {
     return (
-      <div
-        className="mx-1 flex items-center gap-2.5 rounded-full border border-emerald-200/70 bg-emerald-50/90 px-3 py-2 shadow-sm dark:border-emerald-900/50 dark:bg-emerald-950/40"
-        role="status"
-        aria-label="Daily GHC reward already claimed"
-      >
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white shadow-inner">
-          <Gift size={16} aria-hidden />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-[12px] font-semibold text-emerald-950 dark:text-emerald-50">GHC daily claimed</p>
-          <p className="text-[10px] tabular-nums text-emerald-900/70 dark:text-emerald-200/70">
-            Next in <span className="font-semibold">{countdownLabel}</span>
-          </p>
+      <section className="gh-daily-feed-card gh-daily-feed-card-complete" aria-label="Daily GHC reward claimed">
+        <div className="gh-daily-feed-card-top"><span className="gh-daily-feed-kicker">GREENHAVEN DAILY REWARDS</span><span className="gh-daily-feed-status"><Check size={12} /> CLAIMED</span></div>
+        <div className="gh-daily-feed-main">
+          <div className="gh-daily-feed-coin"><GhcCoinIcon size={54} /></div>
+          <div className="min-w-0 flex-1"><p className="text-[15px] font-black text-foreground">Your daily reward is secured</p><p className="mt-1 text-[11px] text-muted-foreground">Your next check-in opens in <strong className="text-emerald-700 dark:text-emerald-300">{countdownLabel}</strong>.</p></div>
+          {onOpenFull ? <button type="button" onClick={onOpenFull} className="gh-daily-feed-secondary">Journey <ChevronRight size={14} /></button> : null}
         </div>
-        {onOpenFull ? (
-          <button
-            type="button"
-            onClick={onOpenFull}
-            className="shrink-0 rounded-full bg-white/80 px-2.5 py-1 text-[10px] font-bold text-emerald-800 ring-1 ring-emerald-200/80 dark:bg-emerald-900/60 dark:text-emerald-100 dark:ring-emerald-800"
-          >
-            Details
-          </button>
-        ) : null}
-      </div>
+        <div className="gh-daily-feed-footer"><span>7-day consistency journey</span><span>Day {daily.displayCycleDay}/7</span></div>
+        <div className="gh-daily-feed-progress"><span style={{ width: `${Math.min(100, Math.max(0, daily.displayCycleDay / 7 * 100))}%` }} /></div>
+      </section>
     )
   }
 
   return (
-    <div
-      className="mx-1 overflow-hidden rounded-full border border-emerald-500/25 bg-gradient-to-r from-emerald-600 via-emerald-600 to-teal-700 p-[1px] shadow-md shadow-emerald-700/20"
-      aria-label="Claim daily GHC reward"
-    >
-      <div className="flex items-center gap-2.5 rounded-full bg-gradient-to-r from-emerald-600 to-teal-700 px-2.5 py-2 pl-2 text-white">
-        <button
-          type="button"
-          disabled={claiming}
-          onClick={() => void handleClaim()}
-          className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/15 ring-2 ring-white/40 transition active:scale-95 disabled:opacity-60"
-          aria-label={claiming ? "Claiming daily reward" : `Claim ${daily.todayGhc} GHC`}
-        >
-          {claiming ? (
-            <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-          ) : (
-            <GhcCoinIcon size={26} />
-          )}
-          <span className="absolute -bottom-0.5 -right-0.5 rounded-full bg-amber-400 px-1.5 text-[9px] font-black leading-4 text-amber-950">
-            {daily.displayCycleDay}/7
-          </span>
+    <section className="gh-daily-feed-card" aria-label="Claim daily GHC reward">
+      <div className="gh-daily-feed-card-top"><span className="gh-daily-feed-kicker">GREENHAVEN DAILY REWARDS</span><span className="gh-daily-feed-status gh-daily-feed-status-ready"><span /> READY TO CLAIM</span></div>
+      <div className="gh-daily-feed-main">
+        <div className="gh-daily-feed-coin gh-daily-feed-coin-ready"><GhcCoinIcon size={58} /></div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-300">Day {daily.displayCycleDay} reward preview</p>
+          <p className="mt-0.5 text-[27px] font-black leading-none tracking-tight text-foreground">{daily.todayGhc.toLocaleString(undefined, { maximumFractionDigits: 2 })} <span className="text-[13px] font-extrabold text-emerald-700 dark:text-emerald-300">GHC</span></p>
+          <p className="mt-1 text-[10px] text-muted-foreground">Final amount confirmed by GreenHaven</p>
+        </div>
+        <button type="button" disabled={claiming} onClick={() => void handleClaim()} className="gh-daily-feed-claim" aria-label={claiming ? "Claiming daily GHC reward" : `Claim ${daily.todayGhc} GHC`}>
+          {claiming ? <span className="gh-daily-premium-spinner" /> : "Claim"}
+          {!claiming ? <span aria-hidden>→</span> : null}
         </button>
-        <button
-          type="button"
-          disabled={claiming}
-          onClick={() => void handleClaim()}
-          className="min-w-0 flex-1 text-left disabled:opacity-70"
-        >
-          <p className="text-[13px] font-bold leading-tight tracking-tight">
-            Claim {daily.todayGhc} GHC
-          </p>
-          <p className="text-[10px] font-medium text-white/80">
-            Daily utility · Day {daily.displayCycleDay}/7 · not Pi
-          </p>
-        </button>
-        <button
-          type="button"
-          disabled={claiming}
-          onClick={() => void handleClaim()}
-          className="shrink-0 rounded-full bg-white px-3.5 py-2 text-[12px] font-bold text-emerald-800 shadow-sm transition active:scale-[0.98] disabled:opacity-60"
-        >
-          {claiming ? "…" : "Claim"}
-        </button>
-        {onOpenFull ? (
-          <button
-            type="button"
-            onClick={onOpenFull}
-            className="shrink-0 rounded-full p-2 text-white/80 hover:bg-white/10 hover:text-white"
-            aria-label="Open reward details"
-          >
-            <ChevronRight size={18} />
-          </button>
-        ) : null}
       </div>
-    </div>
+      <div className="gh-daily-feed-journey">
+        <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-bold text-foreground">Your 7-day streak</span><span className="text-[10px] text-muted-foreground">{daily.displayCycleDay} of 7</span></div>
+        <div className="mt-2 grid grid-cols-7 gap-1.5" aria-label="Seven day reward progress">
+          {Array.from({ length: 7 }, (_, index) => { const day = index + 1; const current = day === daily.displayCycleDay; const past = day < daily.displayCycleDay; return <span key={day} className={`gh-daily-feed-day ${past ? "is-past" : current ? "is-current" : ""}`} aria-label={`Day ${day}${past ? " passed" : current ? " current" : " upcoming"}`}>{past ? "✓" : day}</span> })}
+        </div>
+      </div>
+      <div className="gh-daily-feed-bottom"><span><Shield size={12} /> Server verified · 48-hour maturity · Reset in {countdownLabel}</span>{onOpenFull ? <button type="button" onClick={onOpenFull} className="gh-daily-feed-link">View details <ChevronRight size={13} /></button> : null}</div>
+      {claiming ? <p className="mt-2 text-center text-[10px] font-semibold text-emerald-700 dark:text-emerald-300" role="status">Confirming your claim securely…</p> : null}
+    </section>
   )
 }
 
@@ -464,102 +419,37 @@ export function DailyRewardSheet({
   }, [claiming, daily.canClaimToday, daily.displayCycleDay, daily.rewardDayKey, daily.streakDays, userId, tier, ghc, onClose, onClaimed, refreshServerStatus])
 
   const handleDismiss = useCallback(() => {
+    if (claimInFlightRef.current || claiming) return
     markDailyRewardDismissed(userId)
     onClose()
-  }, [userId, onClose])
+  }, [claiming, userId, onClose])
 
   if (!open) return null
 
   return (
-    <div
-      className="fixed inset-0 z-[80] flex items-end justify-center sm:items-center"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="daily-reward-title"
-    >
-      <button
-        type="button"
-        className="absolute inset-0 bg-black/45 backdrop-blur-[2px]"
-        aria-label="Dismiss daily reward"
-        onClick={handleDismiss}
-      />
-      <div className="relative z-10 w-full max-w-md animate-in slide-in-from-bottom-4 duration-300 rounded-t-3xl border border-border bg-card shadow-2xl sm:rounded-3xl sm:mx-4">
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-              <Sparkles size={16} />
-            </span>
-            <div>
-              <p id="daily-reward-title" className="text-sm font-bold text-foreground">
-                Your Daily GHC Reward is ready
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                Day {daily.displayCycleDay} of 7 · {tier === "free" ? "Member" : tier.toUpperCase()} track
-              </p>
-            </div>
+    <div className="gh-daily-sheet-overlay fixed inset-0 z-[80] flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-labelledby="daily-reward-title">
+      <button type="button" disabled={claiming} className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm disabled:cursor-wait" aria-label="Dismiss daily reward" onClick={handleDismiss} />
+      <div className="gh-daily-sheet-card relative z-10 w-full max-w-lg sm:mx-4">
+        <header className="gh-daily-sheet-header">
+          <div className="min-w-0"><span className="gh-daily-eyebrow"><span className="gh-daily-live-dot" /> GREENHAVEN DAILY REWARDS</span><h2 id="daily-reward-title" className="mt-1 text-lg font-black tracking-tight text-white">Your next streak milestone starts here</h2><p className="mt-1 text-[11px] text-emerald-50/75">A consistent check-in keeps your seven-day reward journey moving.</p></div>
+          <button type="button" onClick={handleDismiss} disabled={claiming} className="gh-daily-premium-close" aria-label="Close"><X size={18} /></button>
+        </header>
+        <div className="gh-daily-sheet-content">
+          <div className="gh-daily-sheet-hero">
+            <div className="gh-daily-coin-stage"><span className="gh-daily-coin-orbit gh-daily-coin-orbit-one" /><span className="gh-daily-coin-orbit gh-daily-coin-orbit-two" /><span className="gh-daily-coin-disc"><GhcCoinIcon size={84} className="gh-daily-official-coin" /></span><span className="gh-daily-day-chip">DAY {daily.displayCycleDay} / 7</span></div>
+            <p className="mt-3 text-[10px] font-extrabold uppercase tracking-[0.2em] text-emerald-700 dark:text-emerald-300">{daily.canClaimToday ? "Today's reward preview" : "Today's reward is secured"}</p>
+            {daily.canClaimToday ? <><p className="mt-1 text-4xl font-black tracking-tight text-foreground">{daily.todayGhc.toLocaleString(undefined, { maximumFractionDigits: 2 })} <span className="text-base font-extrabold text-emerald-700 dark:text-emerald-300">GHC</span></p><p className="mt-1 text-[11px] text-muted-foreground">Preview only — server confirms the credited amount.</p></> : <p className="mt-1 text-[13px] font-bold text-foreground">Next check-in opens at 00:00 Africa/Lagos</p>}
           </div>
-          <button
-            type="button"
-            onClick={handleDismiss}
-            className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-muted"
-            aria-label="Close"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="space-y-4 px-5 py-5">
-          <div className="flex flex-col items-center text-center">
-            <div className="relative mb-3 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-teal-700 shadow-lg shadow-emerald-600/30">
-              <GhcCoinIcon size={40} />
-              <span className="absolute -bottom-1 rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-black text-amber-950">
-                DAY {daily.displayCycleDay}
-              </span>
-            </div>
-            <p className="text-3xl font-black tracking-tight text-foreground">
-              +{daily.todayGhc}{" "}
-              <span className="text-lg font-bold text-emerald-700">GHC</span>
-            </p>
-            <p className="mt-1 text-[13px] text-muted-foreground">
-              Once every 24h · next day {daily.nextDayPreview} GHC · 00:00 Africa/Lagos
-            </p>
+          <div className="gh-daily-streak-panel">
+            <div className="flex items-center justify-between"><div><p className="text-[12px] font-extrabold text-foreground">7-day consistency journey</p><p className="text-[10px] text-muted-foreground">Your current reward cycle</p></div><span className="rounded-full bg-emerald-600/10 px-2.5 py-1 text-[10px] font-extrabold text-emerald-800 dark:text-emerald-300">{daily.displayCycleDay}/7</span></div>
+            <StreakProgressStrip cycleDay={daily.displayCycleDay} claimedToday={!daily.canClaimToday} tier={tier} />
           </div>
-
-          <StreakProgressStrip
-            cycleDay={daily.displayCycleDay}
-            claimedToday={false}
-            tier={tier}
-          />
-
-          {daily.shieldsRemaining > 0 ? (
-            <p className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground">
-              <Shield size={12} className="text-emerald-600" />
-              {daily.shieldsRemaining} streak shield
-              {daily.shieldsRemaining === 1 ? "" : "s"} this month
-            </p>
-          ) : null}
-
-          <button
-            type="button"
-            disabled={claiming || !daily.canClaimToday}
-            onClick={() => void handleClaim()}
-            className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-700 text-[15px] font-bold text-white shadow-md shadow-emerald-700/25 transition hover:bg-emerald-800 disabled:opacity-60"
-          >
-            <Gift size={18} />
-            {claiming ? "Claiming…" : `Claim GHC · ${daily.todayGhc} GHC`}
-          </button>
-          <button
-            type="button"
-            onClick={handleDismiss}
-            className="w-full py-2 text-center text-[12px] font-semibold text-muted-foreground"
-          >
-            Maybe later
-          </button>
-          <p className="text-center text-[10px] leading-relaxed text-muted-foreground">
-            GHC daily utility only · once per Lagos day · not Pi Network cashback
-          </p>
+          {daily.shieldsRemaining > 0 ? <div className="gh-daily-info-tile"><Shield size={15} /><span><strong>{daily.shieldsRemaining} streak shield{daily.shieldsRemaining === 1 ? "" : "s"} available</strong><small>Helps protect eligible streak continuity</small></span></div> : null}
+          <div className="grid grid-cols-2 gap-2"><div className="gh-daily-info-tile"><Shield size={15} /><span><strong>Ledger-backed</strong><small>Verified by GreenHaven</small></span></div><div className="gh-daily-info-tile"><Clock size={15} /><span><strong>48-hour maturity</strong><small>Pending is not spendable</small></span></div></div>
+          {daily.canClaimToday ? <button type="button" disabled={claiming} onClick={() => void handleClaim()} className="gh-daily-premium-cta">{claiming ? <><span className="gh-daily-premium-spinner" /> Securing your reward…</> : <><GhcCoinIcon size={25} /> Claim {daily.todayGhc.toLocaleString(undefined, { maximumFractionDigits: 2 })} GHC <span aria-hidden>→</span></>}</button> : <div className="gh-daily-maturity-card"><Check size={17} /><span><strong>Daily check-in completed</strong><small>Your next daily reward becomes available at the next Lagos reward-day reset.</small></span></div>}
+          <button type="button" onClick={handleDismiss} disabled={claiming} className="w-full py-2 text-center text-[11px] font-bold text-muted-foreground">{daily.canClaimToday ? "Maybe later" : "Close"}</button>
+          <p className="text-center text-[9px] leading-relaxed text-muted-foreground">Daily GHC utility only · separate from Pi Network cashback and Pi payments.</p>
         </div>
-        <div className="h-[env(safe-area-inset-bottom,0px)]" />
       </div>
     </div>
   )

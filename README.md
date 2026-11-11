@@ -6,7 +6,7 @@ Production status: **NOT APPROVED** — supported Node 24.15.0 dependency-backed
 
 This repository is the canonical GreenHaven source tree. See `docs/SOURCE_OF_TRUTH.md` and `docs/CURRENT_BUILD_CONTEXT.md` before implementation or release work.
 
-## Latest implementation candidate — 0.338.53 / Run #289
+## Latest implementation candidate — 0.338.53 / Runs #289–290
 
 Run #290 sanitizes caller-supplied notification targets again at the navigation boundary, correcting the Phase 5 CI regression. Run #289 upgrades notification deep-link resolution and delivery across Feed, comments/replies, Marketplace listings/orders/responses, Pi payments, GHC transactions and daily claims. Notification taps open the exact target; details remain a separate action. Mirrored social/economy rows no longer double-count in the unified inbox. Comment/reply recipients include the post owner and bounded nested-thread participants; replies page older comments and scroll to the exact response. Marketplace order-response notices scroll to the matching timeline event. Payment and marketplace notices use the existing durable inbox RPC with dedupe and server-side block checks. The Vercel upload excludes local dependencies/build caches, and the generated migration manifest now matches the 0.338.53 package version. Focused Run #289 tests pass; full dependency-backed TypeScript/lint/build and browser/device acceptance remain outstanding. The connected Testnet schema was inspected read-only; no migration was applied. No GitHub push or Vercel deployment was performed.
 

@@ -2,12 +2,16 @@
 
 **Audit date:** 2026-11-09  
 **Last updated:** 2026-11-11  
-**Authoritative source archive:** `GREENHAVEN-0.338.43-ECOSYSTEM-30-TRACKS-ALL-41-SERVICES.zip`  
-**Current project package:** `gh-connect@0.338.52`
+**Authoritative source archive:** `GREENHAVEN-0.338.53-RUN290-NOTIFICATION-TRUST-BOUNDARY-CI-FIX.zip`  
+**Current project package:** `gh-connect@0.338.53`
 
-**Current in-place maintenance derivative:** `gh-connect@0.338.52 (Runs #250–289)`; the audit findings and historical baseline below remain preserved. The original 0.338.18 audit baseline and Run #250–278 snapshots are historical references, not current release pointers.  
+**Current in-place maintenance derivative:** `gh-connect@0.338.53 (Runs #250–290)`; the audit findings and historical baseline below remain preserved. The original 0.338.18 audit baseline and Run #250–278 snapshots are historical references, not current release pointers.  
 **Phase:** 1 of the ten-phase completion roadmap — authoritative baseline and complete audit  
 **Disposition:** **Source inventory and selected contracts verified; Phase 1 is NOT fully closed. Production remains NOT APPROVED.**
+
+## Run #290 addendum — 2026-11-11
+
+The exported notification navigation dispatcher now sanitizes caller-supplied deep-link targets at the final navigation trust boundary, before any route navigation occurs. The Phase 5 static checker now inspects the canonical sanitizer module and verifies dispatcher ordering. Focused Phase 5 checks pass 19/19; Run #289 deep-link source and behavior checks pass 37/37 and 20/20. The release metadata is 0.338.53. This does not claim a complete dependency-backed production build or browser/device acceptance. No database migration, financial mutation, GitHub push or Mainnet operation was performed. Production remains NOT APPROVED.
 
 ## Run #288 addendum — 2026-11-11
 

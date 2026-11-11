@@ -47,6 +47,7 @@ import { FilterResultState } from "./filtering/filter-result-state"
 import { matchesFilterQuery } from "@/lib/filtering/filter-utils"
 import { matchesFilterDateRange } from "@/lib/filtering/filter-contract"
 import { RewardsJourneyHero } from "./rewards-journey-hero"
+import { DailyRewardFeedCard } from "./daily-reward-experience"
 import { PiCashbackSummary } from "./pi-cashback-summary"
 import { RegistrationBonusCard } from "./registration-bonus-card"
 import { SurfaceIntro } from "./ui/product-surface"
@@ -822,6 +823,15 @@ const claimPendingReward = useCallback(
           onOpenWallet={onOpenWallet}
         />
 
+        <div className="mx-3 mt-3">
+          <DailyRewardFeedCard
+            refreshKey={tick}
+            onOpenFull={() => {
+              try { window.dispatchEvent(new CustomEvent("ghc:open-daily-claim")) } catch { /* browser event only */ }
+            }}
+          />
+        </div>
+
         <section className="mx-3 mt-3 rounded-[1.25rem] border border-border/60 bg-card px-3.5 py-3 shadow-sm" aria-labelledby="rewards-balance-summary-title">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -878,7 +888,7 @@ const claimPendingReward = useCallback(
 
         <div className="mx-3 mt-3 rounded-2xl border border-border/60 bg-card/80 px-3.5 py-3 text-[11px] leading-relaxed text-muted-foreground">
           <p className="font-semibold text-foreground">Two different rewards</p>
-          <p className="mt-1"><span className="font-semibold text-emerald-800 dark:text-emerald-300">GHC daily</span> — in-app utility, claim once per Lagos day from the feed pill.</p>
+          <p className="mt-1"><span className="font-semibold text-emerald-800 dark:text-emerald-300">GHC daily</span> — in-app utility, claim once per Lagos day from the Daily Reward card or check-in shortcut.</p>
           <p className="mt-0.5"><span className="font-semibold text-sky-800 dark:text-sky-300">PI cashback</span> — 0.5% of eligible Pi spend, calculated quarterly (not the daily claim).</p>
         </div>
         <SurfaceIntro
