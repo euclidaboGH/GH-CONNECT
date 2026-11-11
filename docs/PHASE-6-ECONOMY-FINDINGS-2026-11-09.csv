@@ -1,6 +1,0 @@
-Finding,Severity,Area,Evidence,Status,Required action
-E6-01,High auditability,PI earnings ledger,"gh_earnings_balances clamps negative available/reserved totals to zero",OPEN,"Add raw aggregates and explicit integrity anomaly signal in reviewed additive migration; test disposable PostgreSQL"
-E6-02,Critical release gate,Remote migration state,"Testnet and Mainnet migration histories not available in source archive",BLOCKED,"Capture separate read-only history/catalog evidence; reconcile every mismatch"
-E6-03,High,Concurrency,"Static contracts cover locking/idempotency but no live PostgreSQL race tests executed",OPEN,"Run concurrent transfer/reservation/settlement/reward-claim scenarios on disposable DB"
-E6-04,High,Provider settlement,"Source contracts require verified receipts; no real provider receipts supplied",OPEN,"Run authenticated Testnet payout lifecycle and recovery; retain operator evidence"
-E6-05,High,Build and device acceptance,"Node 24.15.x build and full browser/device suite not run",BLOCKED,"Install from lockfile on pinned runtime and complete release gates"
