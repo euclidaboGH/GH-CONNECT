@@ -12,7 +12,14 @@ const checks = [
   ['type-safety gate runs before TypeScript', pkg.scripts.pretypecheck.startsWith('node scripts/check-run288-type-safety.mjs &&')],
   ['permission identity behavior test runs before TypeScript', pkg.scripts.pretypecheck.includes('scripts/test-run288-permission-identity.mjs')],
   ['permission identity behavior test is part of static verification', pkg.scripts['verify:static'].includes('scripts/test-run288-permission-identity.mjs')],
-  ['package and lockfile versions agree', pkg.version === '0.338.52' && JSON.parse(readFileSync('package-lock.json', 'utf8')).version === '0.338.52'],
+  ['package and lockfile versions agree', (() => {
+    const lock = JSON.parse(readFileSync('package-lock.json', 'utf8'))
+    const rootLockVersion = lock.packages?.['']?.version
+    return typeof pkg.version === 'string'
+      && pkg.version.length > 0
+      && lock.version === pkg.version
+      && rootLockVersion === pkg.version
+  })()],
 ]
 let failed = 0
 for (const [name, ok] of checks) {
