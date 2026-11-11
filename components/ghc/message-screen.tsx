@@ -438,7 +438,7 @@ export function MessageScreen() {
         if (typeof f === "string") continue
         indexPeer(f.id || f.userId, f.displayName || f.name, f.avatarUrl || f.photo || f.profilePhoto)
       }
-      for (const m of (ghc.matches || []) as Array<Record<string, unknown> | string>) {
+      for (const m of (ghc.matches || []) as unknown as Array<Record<string, unknown> | string>) {
         if (typeof m === "string") continue
         indexPeer(m.id || m.userId, m.displayName || m.name, m.avatarUrl || m.photo || m.profilePhoto)
       }
