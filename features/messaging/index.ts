@@ -1,0 +1,15 @@
+/**
+ * Messaging feature — private threads + community chat entry via Messages tab.
+ */
+export { MessageScreen } from "@/components/ghc/message-screen"
+export {
+  ConversationItem,
+  MessageBubble,
+  MessageInput,
+  ChatHeader,
+  EmptyMessagesState,
+} from "@/components/ghc/message-components"
+
+export type { ConversationSummary } from "@/lib/domains/contracts/messaging"
+export { messagingEmptyState } from "@/lib/domains/contracts/messaging"
+export * from "@/lib/active-upgrades/chat"

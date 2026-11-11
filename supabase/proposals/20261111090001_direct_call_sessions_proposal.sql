@@ -1,0 +1,16 @@
+-- PROPOSAL ONLY — do not apply without operator approval and TURN/signaling design.
+-- Direct call session audit table (metadata only; no media blobs).
+
+-- CREATE TABLE IF NOT EXISTS public.gh_call_sessions (
+--   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+--   call_id text NOT NULL UNIQUE,
+--   kind text NOT NULL CHECK (kind IN ('voice', 'video')),
+--   initiator_user_id uuid NOT NULL,
+--   peer_user_id uuid NOT NULL,
+--   conversation_id uuid NULL,
+--   phase text NOT NULL,
+--   end_reason text NULL,
+--   created_at timestamptz NOT NULL DEFAULT now(),
+--   ended_at timestamptz NULL
+-- );
+-- ALTER TABLE public.gh_call_sessions ENABLE ROW LEVEL SECURITY;

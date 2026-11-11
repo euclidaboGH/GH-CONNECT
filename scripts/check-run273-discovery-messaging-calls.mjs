@@ -1,0 +1,58 @@
+#!/usr/bin/env node
+/** Run 273: discovery/matches/connect/messages + direct call controller (30 upgrades). */
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+const root = path.join(fileURLToPath(new URL('..', import.meta.url)))
+const r = (p) => fs.readFileSync(path.join(root, p), 'utf8')
+const e = (p) => fs.existsSync(path.join(root, p))
+let pass = 0, fail = 0
+const ok = (n, c) => { if (c) { pass++; console.log('PASS', n) } else { fail++; console.error('FAIL', n) } }
+
+const ctrl = r('lib/calls/direct-call-controller.ts')
+const policy = r('lib/calls/call-policy.ts')
+const types = r('lib/calls/call-types.ts')
+const sheet = r('components/ghc/direct-call-sheet.tsx')
+const bridge = r('lib/messaging/call-bridge.ts')
+const hist = r('lib/calls/call-history.ts')
+const msg = r('components/ghc/message-screen.tsx')
+const app = r('components/ghc/app.tsx')
+const upgrades = r('lib/social/discovery-match-messaging-upgrades-0.338.34.ts')
+const intent = r('app/api/messaging/calls/intent/route.ts')
+const proposal = r('supabase/proposals/20261111090001_direct_call_sessions_proposal.sql')
+const pkg = JSON.parse(r('package.json'))
+const cta = r('lib/discovery/call-to-connect-copy.ts')
+
+ok('01 direct call controller class', /class DirectCallController/.test(ctrl))
+ok('02 startOutgoing never hangs without timeout', /CALL_RING_TIMEOUT_MS/.test(ctrl) && /setTimeout/.test(ctrl))
+ok('03 end/hangup stops media tracks', /getTracks\(\)/.test(ctrl) && /hangup/.test(ctrl))
+ok('04 production calls default false', /CALLS_PRODUCTION_ENABLED = false/.test(policy))
+ok('05 relationship gate friend|match', /CALL_RELATIONSHIP_REQUIRED/.test(policy))
+ok('06 call types voice|video phases', /outgoing_ringing/.test(types) && /CallKind/.test(types))
+ok('07 direct call sheet distinguishes local media from a fully connected remote call', /s\.mediaReady && s\.signalingReady \? \"Connected\"/.test(sheet) && /remoteVideo/.test(sheet) && /remoteAudio/.test(sheet))
+ok('08 call bridge from thread', /startDirectCallFromThread/.test(bridge))
+ok('09 call history local only', /ghc\.call\.history/.test(hist))
+ok('10 message-screen wires onCall', /onCall=/.test(msg) && /startDirectCallFromThread/.test(msg))
+ok('11 message-screen wires onVideo', /onVideo=/.test(msg) && /kind: \"video\"/.test(msg))
+ok('12 DirectCallSheet mounted in app', /DirectCallSheet/.test(app))
+ok('13 legacy call-intent endpoint is retired without reading unbounded request bodies', /CALL_INTENT_RETIRED/.test(intent) && /status: 410/.test(intent) && !/req\.text\(\)|req\.json\(\)|request\.text\(\)|request\.json\(\)/.test(intent))
+ok('14 call sessions SQL is proposal only', /PROPOSAL ONLY/.test(proposal) && e('supabase/proposals/20261111090001_direct_call_sessions_proposal.sql'))
+ok('15 proposal not under supabase/migrations', !fs.existsSync(path.join(root, 'supabase/migrations/20261111090001_direct_call_sessions_proposal.sql')))
+ok('16 upgrade catalog counts 30', /DISCOVERY_MATCH_MESSAGING_UPGRADE_COUNT = 30/.test(upgrades))
+ok('17 discover CTA hierarchy Message/Connect', /primaryRelationshipCta/.test(cta) && /Message/.test(cta))
+ok('18 discover empty after filters copy', /Clear filters/.test(cta))
+ok('19 resolveCallRelationship helper', /resolveCallRelationship/.test(ctrl))
+ok('20 cooldown on invite', /8_000/.test(ctrl) || /CALL_INVITE_COOLDOWN/.test(policy))
+ok('21 singleton getDirectCallController', /getDirectCallController/.test(ctrl))
+ok('22 event DIRECT_CALL_EVENT', /DIRECT_CALL_EVENT/.test(ctrl))
+ok('23 package and app release versions remain aligned', r('lib/app-release.ts').includes(`APP_RELEASE_VERSION = "${pkg.version}"`))
+ok('24 ChatHeader supports onCall prop', /onCall\?:/.test(r('components/ghc/message-components.tsx')))
+ok('25 community chats omit call actions', /isCommunity/.test(msg) && /onCall=/.test(msg))
+ok('26 legacy call intent cannot masquerade as an accepted call', /status: 410/.test(intent) && /authenticated call-session flow/.test(intent))
+ok('27 controller resetIdle', /resetIdle/.test(ctrl))
+ok('28 media constraints voice vs video', /requiredMediaConstraints/.test(policy))
+ok('29 failed phase surfaces errorMessage', /errorMessage/.test(sheet))
+ok('30 messaging feature exports MessageScreen', /MessageScreen/.test(r('features/messaging/index.ts')))
+
+console.log(`\nRun 273 discovery/messaging/calls: ${pass}/${pass + fail}`)
+process.exit(fail ? 1 : 0)

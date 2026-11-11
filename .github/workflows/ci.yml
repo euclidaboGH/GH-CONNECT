@@ -1,0 +1,144 @@
+# GreenHaven / GH-CONNECT — continuous integration
+# Static gates only. No live Mainnet, no automatic financial migrations.
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop, testnet, "release/**"]
+  pull_request:
+    branches: [main, master, develop, testnet]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  static:
+    name: Static verification
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24.15.0
+          cache: npm
+
+      - name: Verify pinned Node runtime
+        run: node -e "if (process.versions.node !== '24.15.0') { console.error('Expected Node.js 24.15.0, received ' + process.versions.node); process.exit(1) }"
+
+      - name: Record npm runtime
+        run: npm --version
+
+      - name: Dependency lock integrity
+        run: node scripts/check-dependency-lock-integrity.mjs
+
+      - name: Install
+        run: |
+          npm config delete cache-dir --location=user || true
+          unset npm_config_cache_dir NPM_CONFIG_CACHE_DIR
+          npm ci --legacy-peer-deps
+
+      - name: JSX duplicate-prop guard
+        run: node scripts/check-jsx-duplicate-props.mjs
+
+      - name: Complete source regression suite
+        run: npm run verify:static
+
+      - name: Phase 5 production readiness gate
+        run: node scripts/check-phase5-production-readiness.mjs
+
+      - name: Bounded JSON runtime behavior
+        run: npm run test:bounded-json-runtime
+
+      - name: Request-boundary follow-up contracts
+        run: node scripts/check-phase1-12-request-boundary-followup.mjs
+
+      - name: Database RLS coverage
+        run: node scripts/check-database-rls-coverage.mjs
+
+      - name: SECURITY DEFINER ACL coverage
+        run: node scripts/check-security-definer-acl.mjs
+
+      - name: Marketplace integrity
+        run: node scripts/check-phase10-marketplace-integrity.mjs
+
+      - name: Cross-feature wallet reconciliation
+        run: node scripts/check-phase11-wallet-cross-feature-reconciliation.mjs
+
+      - name: Treasury completion
+        run: node scripts/check-phase7-treasury-completion.mjs
+
+      - name: Payment recovery lifecycle
+        run: npm run check:phase15-payment-recovery
+
+      - name: Payment timeline lifecycle
+        run: npm run check:phase16-payment-timeline
+
+      - name: Phase 18 marketplace payment binding
+        run: npm run check:phase18-marketplace-payment-binding
+
+      - name: Phase 19 marketplace RPC transport
+        run: npm run check:phase19-marketplace-rpc-transport
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+  build:
+    name: Production build
+    runs-on: ubuntu-24.04
+    needs: static
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24.15.0
+          cache: npm
+
+      - name: Verify pinned Node runtime
+        run: node -e "if (process.versions.node !== '24.15.0') { console.error('Expected Node.js 24.15.0, received ' + process.versions.node); process.exit(1) }"
+
+      - name: Record npm runtime
+        run: npm --version
+
+      - name: Dependency lock integrity
+        run: node scripts/check-dependency-lock-integrity.mjs
+
+      - name: Install
+        run: |
+          npm config delete cache-dir --location=user || true
+          unset npm_config_cache_dir NPM_CONFIG_CACHE_DIR
+          npm ci --legacy-peer-deps
+
+      - name: Build
+        run: npm run build
+        env:
+          # Public placeholders only — secrets stay in Vercel / operator env
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL || 'https://example.supabase.co' }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'public-anon-placeholder' }}
+          NEXT_PUBLIC_PI_SANDBOX: "true"
+
+      - name: Preserve Next.js build diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: next-build-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .next/trace
+            .next/diagnostics
+          if-no-files-found: ignore
+          retention-days: 3

@@ -1,0 +1,6 @@
+/** Wallet display helpers. These values are presentation-only; never calculate authority here. */
+export function formatAtomicDisplay(value: unknown, decimals = 6): string { const n = Number(value); if (!Number.isSafeInteger(n) || n < 0) return '—'; const d = Math.max(0, Math.min(12, Math.floor(decimals))); return (n / 10 ** d).toFixed(Math.min(d, 6)) }
+export function spendableAmount(total: unknown, reserved: unknown): number { const a = Number(total), b = Number(reserved); if (!Number.isSafeInteger(a) || !Number.isSafeInteger(b) || a < 0 || b < 0) return 0; return Math.max(0, a - b) }
+export function withdrawalDisplayState(input: { available?: boolean; consentRequired?: boolean; pending?: boolean; unavailableReason?: string }): 'ready'|'consent'|'pending'|'unavailable' { return input.pending ? 'pending' : input.consentRequired ? 'consent' : input.available ? 'ready' : 'unavailable' }
+export function normalizeLedgerCursor(value: unknown): string | null { const s = String(value ?? '').trim(); return s.length > 0 && s.length <= 256 && /^[A-Za-z0-9._:-]+$/.test(s) ? s : null }
+export function walletAssetLabel(asset: unknown): 'PI'|'GHC'|'Unknown asset' { const s = String(asset ?? '').toUpperCase(); return s === 'PI' ? 'PI' : s === 'GHC' ? 'GHC' : 'Unknown asset' }

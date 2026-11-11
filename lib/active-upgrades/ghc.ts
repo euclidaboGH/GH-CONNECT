@@ -1,0 +1,6 @@
+/** GHC UX helpers; ledger amounts and transfers remain canonical server-side. */
+export function normalizeGhcRecipient(value: unknown): string | null { const s = String(value ?? '').trim(); return /^[A-Za-z0-9][A-Za-z0-9_-]{2,127}$/.test(s) ? s : null }
+export function isGhcRequestExpired(expiresAt: unknown, now = Date.now()): boolean { const n = Number(expiresAt); return Number.isFinite(n) && n > 0 && n <= now }
+export function ghcRequestAction(status: unknown, expiresAt?: unknown, now = Date.now()): 'pay'|'cancel'|'wait'|'closed' { const s = String(status ?? '').toUpperCase(); if (s !== 'PENDING' || isGhcRequestExpired(expiresAt, now)) return ['ACCEPTED','DECLINED','CANCELLED','EXPIRED'].includes(s) ? 'closed' : 'wait'; return 'pay' }
+export function ghcAmountInputState(value: unknown): 'empty'|'invalid'|'valid' { const s = String(value ?? '').trim(); if (!s) return 'empty'; return /^(?:0|[1-9]\d{0,11})(?:\.\d{1,6})?$/.test(s) && Number(s) > 0 ? 'valid' : 'invalid' }
+export function ghcTransactionLabel(kind: unknown): string { const s = String(kind ?? '').toLowerCase(); return ({ transfer_in:'Received GHC', transfer_out:'Sent GHC', reward:'Reward', purchase:'Purchase', refund:'Refund', adjustment:'Adjustment' } as Record<string,string>)[s] ?? 'GHC activity' }
