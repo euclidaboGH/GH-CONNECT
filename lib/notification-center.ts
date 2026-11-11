@@ -168,8 +168,11 @@ export function resolveNotificationDeepLink(n: Notification): NotificationDeepLi
 }
 
 /** Dispatch one deterministic in-app navigation request after the owning surface mounts. */
-export function navigateNotificationDeepLink(link: NotificationDeepLink): void {
+export function navigateNotificationDeepLink(rawLink: NotificationDeepLink): void {
   try {
+    // Treat this exported dispatcher as a trust boundary: callers may pass
+    // hand-built targets, not only values produced by the resolver.
+    const link = sanitizeNotificationDeepLink(rawLink)
     const surface = link.open || link.tab
     const targetDetails = {
       transactionId: link.transactionId,

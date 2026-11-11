@@ -12,6 +12,7 @@ const test = (name, ok) => {
 }
 
 const center = read('lib/notification-center.ts')
+const targets = read('lib/notification-targets.ts')
 const integrity = read('lib/server/messaging/messaging-integrity.ts')
 const store = read('lib/server/messaging/message-store.ts')
 const unified = read('lib/server/notifications/unified.ts')
@@ -23,8 +24,8 @@ const bell = read('components/ghc/notification-bell.tsx')
 const pkg = JSON.parse(read('package.json'))
 const release = read('lib/app-release.ts')
 
-test('deep links are sanitized against open redirects and javascript URLs', /sanitizeNotificationDeepLink/.test(center) && /javascript:/i.test(center) && /ALLOWED_OPEN/.test(center))
-test('navigateNotificationDeepLink sanitizes before navigation', /sanitizeNotificationDeepLink\(raw\)|sanitizeNotificationDeepLink\(link\)/.test(center))
+test('deep-link target module rejects open redirects, javascript URLs and unknown surfaces', /sanitizeNotificationDeepLink/.test(targets) && /javascript:/i.test(targets) && /ALLOWED_OPEN/.test(targets) && /text\.includes\(\":\/\/\"\)/.test(targets))
+test('navigateNotificationDeepLink sanitizes untrusted input before any navigation side effect', /navigateNotificationDeepLink\(rawLink: NotificationDeepLink\)/.test(center) && /const link = sanitizeNotificationDeepLink\(rawLink\)/.test(center) && center.indexOf('const link = sanitizeNotificationDeepLink(rawLink)') < center.indexOf('navigateTo('))
 test('messaging integrity requires authenticated user', /requireMessagingAuth/.test(integrity) && /AUTH_REQUIRED/.test(integrity))
 test('messaging integrity fails closed without durable store in production', /MESSAGING_DURABILITY_UNAVAILABLE/.test(integrity))
 test('conversation membership is enforced before treating member as authorized', /requireConversationMember/.test(integrity) && /isMember/.test(integrity))
