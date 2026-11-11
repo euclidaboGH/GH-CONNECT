@@ -60,12 +60,25 @@ try {
   assert(cacheCheck.status === 0, "regenerated ignored TypeScript build caches do not fail the wallet release gate")
   assert(cacheCheck.stdout.includes("incremental build cache is excluded from source releases"), "source-release cache policy is checked")
 
+  // Vercel may run from a source archive without .git metadata while restoring
+  // ignored build caches. Exclusion rules remain mandatory in that environment.
+  const archiveFixture = join(temp, "phase26-cache-policy-no-git")
+  for (const file of requiredFiles) {
+    const destination = join(archiveFixture, file)
+    mkdirSync(join(destination, ".."), { recursive: true })
+    cpSync(join(sourceRoot, file), destination)
+  }
+  mkdirSync(join(archiveFixture, ".cache"), { recursive: true })
+  writeFileSync(join(archiveFixture, ".cache", "tsconfig.tsbuildinfo"), "{}")
+  const archiveCacheCheck = spawnSync(process.execPath, [join(archiveFixture, "scripts/check-phase26-wallet-ledger-resilience.mjs")], { cwd: archiveFixture, encoding: "utf8" })
+  assert(archiveCacheCheck.status === 0, "ignored regenerated TypeScript cache passes without Git metadata")
+
   mkdirSync(join(fixture, "src"), { recursive: true })
   writeFileSync(join(fixture, "src", "tracked.tsbuildinfo"), "{}");
   spawnSync("git", ["add", "-f", "src/tracked.tsbuildinfo"], { cwd: fixture })
   const trackedCacheCheck = spawnSync(process.execPath, [join(fixture, "scripts/check-phase26-wallet-ledger-resilience.mjs")], { cwd: fixture, encoding: "utf8" })
   assert(trackedCacheCheck.status !== 0, "tracked TypeScript build caches remain a hard failure")
-  console.log("Run 272 Vercel build-prep tests: 8/8 passed")
+  console.log("Run 272 Vercel build-prep tests: 9/9 passed")
 } finally {
   rmSync(temp, { recursive: true, force: true })
 }

@@ -648,22 +648,20 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
 
   // Post interaction handlers
   const handleLike = useCallback(
-    async (postId: string, isDouble?: boolean) => {
+    async (postId: string, _isDouble?: boolean) => {
       if (pendingLikesRef.current.has(postId)) return
       pendingLikesRef.current.add(postId)
-      const wasLiked = likedPosts.includes(postId)
       try {
-        setLikedPosts((previous) => wasLiked ? previous.filter((id) => id !== postId) : [...previous, postId])
+        // The GHC context owns the canonical likedPostIds state and server-backed toggle.
         await likePost(postId)
       } catch (error) {
         console.error("[Like Error]", error)
-        setLikedPosts((previous) => wasLiked ? [...previous, postId] : previous.filter((id) => id !== postId))
         addToast("Could not update like. Try again.", "error")
       } finally {
         pendingLikesRef.current.delete(postId)
       }
     },
-    [likedPosts, likePost, addToast]
+    [likePost, addToast]
   )
 
 

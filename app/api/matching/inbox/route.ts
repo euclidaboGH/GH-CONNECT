@@ -49,9 +49,14 @@ export async function GET(req: Request) {
       return NextResponse.json({ ok: false, durable: false, error: "MATCH_INBOX_UNAVAILABLE" }, { status: 503, headers: { "Cache-Control": "private, no-store" } })
     }
 
-    const privacyByPeer = new Map(profileResult.data.map((row) => [
-      String(row.gh_user_id || ""), readMatchInboxPrivacy(row.profile_payload),
-    ]).filter(([id]) => Boolean(id)))
+    type MatchInboxPrivacy = ReturnType<typeof readMatchInboxPrivacy>
+    const privacyEntries: Array<[string, MatchInboxPrivacy]> = profileResult.data
+      .map((row): [string, MatchInboxPrivacy] => [
+        String(row.gh_user_id || ""),
+        readMatchInboxPrivacy(row.profile_payload),
+      ])
+      .filter(([id]) => Boolean(id))
+    const privacyByPeer = new Map<string, MatchInboxPrivacy>(privacyEntries)
     const outgoingRawLikes = outgoing.filter((row) => row.signal === "like" || row.signal === "superlike")
     const incomingRawLikes = incoming.filter((row) => row.signal === "like" || row.signal === "superlike")
     const outgoingPeerIds = new Set(outgoingRawLikes.map((row) => String(row.to_user_id || "")).filter(Boolean))

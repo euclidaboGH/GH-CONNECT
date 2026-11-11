@@ -23,7 +23,7 @@ import {
   ChatHeader,
   EmptyMessagesState,
 } from "./message-components"
-import type { Conversation, Message } from "@/lib/ghc-types"
+import type { Conversation, MatchEntry, Message } from "@/lib/ghc-types"
 import { Users, MessageCircle, ArrowRight, ShieldCheck, Sparkles, Search, Images, X, FileText, AudioLines, Info } from "lucide-react"
 import { LazyImage } from "./lazy-image"
 import { navigateTo } from "@/lib/navigation/navigate"
@@ -75,13 +75,15 @@ export function MessageScreen() {
     friends,
     candidates,
     following,
+    blockedUsers,
   } = useGHC() as unknown as {
     deleteMessage?: (conversationId: string, messageId: string, deleteForEveryone?: boolean) => Promise<void>
     replyToMessage?: (conversationId: string, replyToMessageId: string, text: string) => Promise<boolean>
-    matches?: unknown[]
+    matches?: MatchEntry[]
     friends?: unknown[]
     candidates?: unknown[]
     following?: Array<Record<string, unknown> | string>
+    blockedUsers?: string[]
   }
   const ghc = {
     pinConversation: async (id: string, pinned: boolean) => {
@@ -97,7 +99,9 @@ export function MessageScreen() {
       else await messaging.unmuteConversation?.(id)
     },
     matches: Array.isArray(matches) ? matches : [],
+    matchIds: Array.isArray(matches) ? matches.map((match) => match.userId).filter(Boolean) : [],
     friends: Array.isArray(friends) ? friends : [],
+    blockedUsers: Array.isArray(blockedUsers) ? blockedUsers : [],
     candidates: Array.isArray(candidates) ? candidates : [],
     following: Array.isArray(following) ? following : [],
     refreshConversations: (messaging as { refreshConversations?: () => Promise<unknown> }).refreshConversations,

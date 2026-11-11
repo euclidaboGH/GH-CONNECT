@@ -40,7 +40,11 @@ const cachePolicyValid =
   vercelignore.split(/\r?\n/).some((line) => line.trim() === '.next/**') &&
   tsconfig.compilerOptions?.tsBuildInfoFile === '.cache/tsconfig.tsbuildinfo' &&
   cacheFiles.every((file) => {
-    if (!insideGit) return false
+    // Vercel source/build workspaces may not include .git metadata. In that
+    // case, enforce the repository and upload exclusion policy above; cache
+    // files may be regenerated/restored inside the workspace. When Git is
+    // available, additionally prove each cache is ignored and untracked.
+    if (!insideGit) return true
     const ignored = spawnSync('git', ['check-ignore', '--quiet', '--no-index', file], { cwd: root }).status === 0
     const tracked = spawnSync('git', ['ls-files', '--error-unmatch', '--', file], { cwd: root, stdio: 'ignore' }).status === 0
     return ignored && !tracked
