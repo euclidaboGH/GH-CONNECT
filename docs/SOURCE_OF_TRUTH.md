@@ -1,14 +1,14 @@
 # GreenHaven — Source of Truth & Prompt Execution Rules
 
 **Current source baseline archive:** `GREENHAVEN-0.338.43-ECOSYSTEM-30-TRACKS-ALL-41-SERVICES.zip`
-**Current working candidate:** `0.338.47`
-**Current source version:** `0.338.47`
-**Package identity:** `gh-connect@0.338.47`
+**Current working candidate:** `0.338.49`
+**Current source version:** `0.338.49`
+**Package identity:** `gh-connect@0.338.49`
 **Status:** Testnet implementation candidate derived from the user's 0.338.43 ecosystem archive. It is not a production release. Mainnet remains untouched and production is NOT APPROVED.
 
-## Current implementation authority — 0.338.47
+## Current implementation authority — 0.338.49
 
-Run #283 adds 55 tested helper capabilities across the 11 Active modules, fills five missing feature entry points, hardens connection-intent cache handling, and closes the GHC request-expiry equality boundary. The 220-target register records five implemented helper capabilities per module and 165 further targets still requiring implementation; this is an incremental tranche, not full completion. Static verification passes, while Node 24.15.0 runtime/build and browser/device acceptance remain outstanding. No SQL or live financial operations were performed. See `docs/RUN283-ACTIVE-MODULE-220-UPGRADE-REGISTER.md` and `docs/UPGRADE-WORKLOG-0.338.47.md`.
+Run #285 continues from the uploaded 0.338.47 archive. It adds a response-level Discovery privacy fallback, server-side match-inbox privacy projection (bidirectional block exclusion; hidden/no-one suppression; matches-only requires reciprocal interest), and fixes a duplicate direct-message POST by making the HTTP message repository append cache-only after the domain performs its single idempotent server write. Focused Run #285 tests pass. Testnet currently has 39 applied migration records; exact comparison finds 10 source files present and 29 missing or version-mismatched in the uploaded source, so no further migration is safe until exact source restoration and clean-database rehearsal. Vercel project buildCommand was synchronized to run the existing Webpack cache cleanup before Next.js build after the latest deployment was OOM-killed. GitHub `testnet` remains 0.338.31, so do not overwrite it from this newer uploaded archive without source synchronization. Node 24.15.0 typecheck/build and browser/device acceptance remain open.
 
 Runs #279–281 harden Wallet withdrawal snapshot isolation and least-privilege consent, retire the non-signaling call-intent endpoint, and prepare Events, Charity & Impact, Services and Creator Tools screens backed by existing canonical data. Events and Charity APIs check the canonical server-side service release gate before authentication or data access and remain 404 while Coming Soon. Services reads only durable active Marketplace service listings; Creator Tools reads the existing authenticated creator overview, now protected by durable fail-closed read/write throttles and private no-store responses. Charity displays only recorded segregated contributions and uses exact atomic PI formatting; it does not initiate donations or payments. All four new screens remain unwired into the ecosystem directory, and Seller Centre continues to use the existing Marketplace implementation. Registry contract confirms 41 services across nine categories (11 Active, 30 Coming Soon). Full static and consolidated static verification pass; dependency-backed Node 24.15.0 typecheck/lint/build and browser/device acceptance remain outstanding. Live Testnet migration history returned 38 generated records; 16 social/call migrations still require exact source restoration and dependency reconciliation before migration rehearsal or push. No SQL was applied in this run.
 
@@ -158,3 +158,6 @@ The controlling Phase 1 audit and implementation register for source release 0.3
 ## Run #263 — Connected infrastructure hardening (2026-11-10)
 
 See `docs/RUN263-20-ESSENTIAL-HARDENING-AUDIT.md` for the 20-control evidence register, live Vercel configuration updates, Supabase Testnet audit findings, and remaining release gates. Run #263 adds 20 source/CI assertions to the sequential prebuild suite. No Supabase schema, financial rows, provider state, or Mainnet resources were modified.
+
+Run #285 evidence: `docs/UPGRADE-WORKLOG-0.338.49.md`, `docs/RUN284-TESTNET-MIGRATION-SOURCE-RECONCILIATION.md`, and `docs/RUN284-TESTNET-APPLIED-MIGRATIONS.json`. The live applied migration list is not interchangeable with the local migration manifest.
+Run #285 30-point scope and completion states: `docs/RUN284-30-UPGRADE-REGISTER.md`.

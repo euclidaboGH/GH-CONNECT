@@ -38,8 +38,13 @@ function publicIdentityPayload(value: unknown, row: Record<string, unknown>) {
   const privacy = payload.privacySettings && typeof payload.privacySettings === "object"
     ? payload.privacySettings as Record<string, unknown>
     : payload.privacy && typeof payload.privacy === "object" ? payload.privacy as Record<string, unknown> : {}
-  const visibility = privacy.profileVisibility
-  if (visibility === "hidden") return null
+  const visibility = String(privacy.profileVisibility ?? payload.profileVisibility ?? "everyone").toLowerCase()
+  const whoCanDiscover = String(privacy.whoCanDiscover ?? payload.whoCanDiscover ?? "everyone").toLowerCase()
+  // The database RPC is authoritative for matches-only eligibility. This
+  // projection is a second fail-closed boundary for legacy/root-level settings
+  // and for any future RPC regression: never return an opted-out identity.
+  if (["hidden", "private", "no-one", "no_one"].includes(visibility)) return null
+  if (["hidden", "private", "no-one", "no_one"].includes(whoCanDiscover)) return null
   const locationVisible = privacy.showLocation !== false && privacy.locationPrivacy !== "hidden"
   const interestsVisible = privacy.showInterests !== false
   const bioVisible = privacy.showBio !== false

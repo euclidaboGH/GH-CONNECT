@@ -1,3 +1,5 @@
+> **LEGACY VERIFICATION FIXTURE** — retained as historical evidence; Run #284 / 0.338.48 is the current implementation worklog.
+
 # GreenHaven 0.338.47 — Run #283 Active Module Upgrade Tranche
 
 **Source:** Run #282 maintenance archive, 0.338.46.  

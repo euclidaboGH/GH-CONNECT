@@ -1,7 +1,7 @@
 # GreenHaven Testnet migration review order
 
 **Generated from:** `supabase/migrations/*.sql` and the canonical classification policy in `scripts/generate-migration-inventory.mjs`.
-**Current source inventory:** 220 migrations.
+**Current source inventory:** 221 migrations.
 
 > **This is a review order, not permission to apply.** It does not prove remote migration history, database compatibility, or Testnet/Mainnet readiness. See docs/RUN278-SUPABASE-SOURCE-DRIFT-2026-11-11.md and docs/TESTNET-RECONCILIATION-2026-11-10.md for the latest source-drift and Testnet snapshots. Never run `supabase db push` while any pending migration is held for review, approval, validation, or marked proposal. Supabase CLI does not enforce these classifications.
 
@@ -240,6 +240,7 @@ The rows are sorted by the canonical migration identifier for review. Dependenci
 | 218 | `20261111064446_call_expiry_sweeper_before_start.sql` | REVIEW_REQUIRED | APPLIED_TESTNET_ONLY_HOLD_OTHER_TARGETS |
 | 219 | `20261111064542_call_expiry_sweeper_pair_lock_order.sql` | REVIEW_REQUIRED | APPLIED_TESTNET_ONLY_HOLD_OTHER_TARGETS |
 | 220 | `20261111120001_pi_earnings_release_stale_incomplete.sql` | REQUIRED | REVIEW_THEN_APPLY |
+| 221 | `20261111131500_run285_durable_message_reactions.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
 
 ## Classification meanings
 

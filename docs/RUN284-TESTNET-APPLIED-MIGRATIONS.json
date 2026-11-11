@@ -1,0 +1,243 @@
+{
+  "project_id": "tpckwgdsjlkzscjlxiwe",
+  "applied_count": 39,
+  "exact_source_count": 10,
+  "missing_exact_source_count": 29,
+  "migrations": [
+    {
+      "version": "20261110085225",
+      "name": "phase7_durable_community_governance_reconciliation",
+      "expected_file": "20261110085225_phase7_durable_community_governance_reconciliation.sql",
+      "exact_source_present": false
+    },
+    {
+      "version": "20261110085344",
+      "name": "withdrawal_rpc_acl_and_recovery_atomicity",
+      "expected_file": "20261110085344_withdrawal_rpc_acl_and_recovery_atomicity.sql",
+      "exact_source_present": false
+    },
+    {
+      "version": "20261110085351",
+      "name": "wallet_recovery_reset_lock_race_guard",
+      "expected_file": "20261110085351_wallet_recovery_reset_lock_race_guard.sql",
+      "exact_source_present": false
+    },
+    {
+      "version": "20261110091735",
+      "name": "phase1_curation_community_guard_reconciliation",
+      "expected_file": "20261110091735_phase1_curation_community_guard_reconciliation.sql",
+      "exact_source_present": false
+    },
+    {
+      "version": "20261110092119",
+      "name": "server_only_security_definer_rpc_acl_hardening",
+      "expected_file": "20261110092119_server_only_security_definer_rpc_acl_hardening.sql",
+      "exact_source_present": false
+    },
+    {
+      "version": "20261110092226",
+      "name": "function_search_path_hardening",
+      "expected_file": "20261110092226_function_search_path_hardening.sql",
+      "exact_source_present": false
+    },
+    {
+      "version": "20261110092347",
+      "name": "remove_verified_duplicate_indexes",
+      "expected_file": "20261110092347_remove_verified_duplicate_indexes.sql",
+      "exact_source_present": false
+    },
+    {
+      "version": "20261110092407",
+      "name": "remove_verified_duplicate_indexes",
+      "expected_file": "20261110092407_remove_verified_duplicate_indexes.sql",
+      "exact_source_present": false
+    },
+    {
+      "version": "20261110093142",
+      "name": "rls_policy_dedup_and_initplan_optimization",
+      "expected_file": "20261110093142_rls_policy_dedup_and_initplan_optimization.sql",
+      "exact_source_present": false
+    },
+    {
+      "version": "20261110093227",
+      "name": "rls_policy_dedup_and_initplan_optimization",
+      "expected_file": "20261110093227_rls_policy_dedup_and_initplan_optimization.sql",
+      "exact_source_present": false
+    },
+    {
+      "version": "20261110093228",
+      "name": "supporting_foreign_key_indexes",
+      "expected_file": "20261110093228_supporting_foreign_key_indexes.sql",
+      "exact_source_present": false
+    },
+    {
+      "version": "20261110102610",
+      "name": "marketplace_orders_list_rpc_alias_fix",
+      "expected_file": "20261110102610_marketplace_orders_list_rpc_alias_fix.sql",
+      "exact_source_present": false
+    },
+    {
+      "version": "20261110174922",
+      "name": "revoke_client_table_write_and_sequence_privileges",
+      "expected_file": "20261110174922_revoke_client_table_write_and_sequence_privileges.sql",
+      "exact_source_present": true
+    },
+    {
+      "version": "20261110182120",
+      "name": "community_chat_membership_revocation_and_reconciliation",
+      "expected_file": "20261110182120_community_chat_membership_revocation_and_reconciliation.sql",
+      "exact_source_present": true
+    },
+    {
+      "version": "20261110183004",
+      "name": "community_server_filter_search_reconciliation",
+      "expected_file": "20261110183004_community_server_filter_search_reconciliation.sql",
+      "exact_source_present": true
+    },
+    {
+      "version": "20261110185525",
+      "name": "story_idempotent_create_and_owned_media_guard",
+      "expected_file": "20261110185525_story_idempotent_create_and_owned_media_guard.sql",
+      "exact_source_present": true
+    },
+    {
+      "version": "20261110185528",
+      "name": "story_read_path_and_viewer_roster_indexes",
+      "expected_file": "20261110185528_story_read_path_and_viewer_roster_indexes.sql",
+      "exact_source_present": true
+    },
+    {
+      "version": "20261110190531",
+      "name": "post_create_idempotent_owner_and_payload_guard",
+      "expected_file": "20261110190531_post_create_idempotent_owner_and_payload_guard.sql",
+      "exact_source_present": true
+    },
+    {
+      "version": "20261110193134",
+      "name": "social_feed_profile_rpc_search_path_hardening",
+      "expected_file": "20261110193134_social_feed_profile_rpc_search_path_hardening.sql",
+      "exact_source_present": true
+    },
+    {
+      "version": "20261110200232",
+      "name": "social_relationship_messaging_rpc_search_path_hardening",
+      "expected_file": "20261110200232_social_relationship_messaging_rpc_search_path_hardening.sql",
+      "exact_source_present": false
+    },
+    {
+      "version": "20261110200251",
+      "name": "gh_messaging_call_sessions",
+      "expected_file": "20261110200251_gh_messaging_call_sessions.sql",
+      "exact_source_present": false
+    },
+    {
+      "version": "20261110200634",
+      "name": "connection_accept_block_guard",
+      "expected_file": "20261110200634_connection_accept_block_guard.sql",
+      "exact_source_present": false
+    },
+    {
+      "version": "20261110201255",
+      "name": "gh_call_answer_after_accept",
+      "expected_file": "20261110201255_gh_call_answer_after_accept.sql",
+      "exact_source_present": false
+    },
+    {
+      "version": "20261110201424",
+      "name": "gh_call_signal_retention_cleanup",
+      "expected_file": "20261110201424_gh_call_signal_retention_cleanup.sql",
+      "exact_source_present": false
+    },
+    {
+      "version": "20261110202506",
+      "name": "gh_call_incoming_global_listener",
+      "expected_file": "20261110202506_gh_call_incoming_global_listener.sql",
+      "exact_source_present": false
+    },
+    {
+      "version": "20261110203513",
+      "name": "gh_relationship_block_pair_serialization",
+      "expected_file": "20261110203513_gh_relationship_block_pair_serialization.sql",
+      "exact_source_present": false
+    },
+    {
+      "version": "20261110203743",
+      "name": "gh_follow_pair_serialization",
+      "expected_file": "20261110203743_gh_follow_pair_serialization.sql",
+      "exact_source_present": false
+    },
+    {
+      "version": "20261110212304",
+      "name": "discovery_candidates_and_atomic_dm_create",
+      "expected_file": "20261110212304_discovery_candidates_and_atomic_dm_create.sql",
+      "exact_source_present": false
+    },
+    {
+      "version": "20261110212346",
+      "name": "atomic_dm_identity_profile_source_fix",
+      "expected_file": "20261110212346_atomic_dm_identity_profile_source_fix.sql",
+      "exact_source_present": false
+    },
+    {
+      "version": "20261110212932",
+      "name": "call_signal_membership_and_volume_guard",
+      "expected_file": "20261110212932_call_signal_membership_and_volume_guard.sql",
+      "exact_source_present": false
+    },
+    {
+      "version": "20261110213416",
+      "name": "relationship_privacy_server_guards",
+      "expected_file": "20261110213416_relationship_privacy_server_guards.sql",
+      "exact_source_present": false
+    },
+    {
+      "version": "20261110213431",
+      "name": "block_revokes_accepted_connections",
+      "expected_file": "20261110213431_block_revokes_accepted_connections.sql",
+      "exact_source_present": false
+    },
+    {
+      "version": "20261110213745",
+      "name": "relationship_context_counts_as_mutual",
+      "expected_file": "20261110213745_relationship_context_counts_as_mutual.sql",
+      "exact_source_present": false
+    },
+    {
+      "version": "20261110215928",
+      "name": "relationship_block_revoke_pair_guard",
+      "expected_file": "20261110215928_relationship_block_revoke_pair_guard.sql",
+      "exact_source_present": false
+    },
+    {
+      "version": "20261111063228",
+      "name": "call_transition_membership_block_atomicity",
+      "expected_file": "20261111063228_call_transition_membership_block_atomicity.sql",
+      "exact_source_present": false
+    },
+    {
+      "version": "20261111064321",
+      "name": "call_pair_lock_order_and_retry_safety",
+      "expected_file": "20261111064321_call_pair_lock_order_and_retry_safety.sql",
+      "exact_source_present": true
+    },
+    {
+      "version": "20261111064446",
+      "name": "call_expiry_sweeper_before_start",
+      "expected_file": "20261111064446_call_expiry_sweeper_before_start.sql",
+      "exact_source_present": true
+    },
+    {
+      "version": "20261111064542",
+      "name": "call_expiry_sweeper_pair_lock_order",
+      "expected_file": "20261111064542_call_expiry_sweeper_pair_lock_order.sql",
+      "exact_source_present": true
+    },
+    {
+      "version": "20261111114429",
+      "name": "run284_call_history_participant_indexes",
+      "expected_file": "20261111114429_run284_call_history_participant_indexes.sql",
+      "exact_source_present": false
+    }
+  ],
+  "observed_at": "2026-11-11"
+}

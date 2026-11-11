@@ -471,8 +471,9 @@ export interface Message {
   /** User ids for whom this message is hidden (delete-for-me) */
   hiddenFor?: string[]
   // Reactions
-  reactions?: Record<string, string[]> // emoji -> user ids
+  reactions?: Record<string, string[]> // legacy/local compatibility only; never expose durable actor lists
   reactionCounts?: Record<string, number>
+  viewerReactions?: string[] // durable reactions selected by the authenticated viewer
   // Replies & forwarding
   replyTo?: string // id of parent message
   replyToPreview?: { senderName: string; text: string }

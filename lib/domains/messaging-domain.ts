@@ -543,14 +543,31 @@ export function createMessagingDomain(deps: {
           const gate = evaluateSendPermission({ conversationId: i.conversationId })
           return gate.allowed ? null : gate.reason
         },
-        mutate: (i) => {
+        mutate: async (i) => {
           const conv = deps.getConversation?.(i.conversationId)
           const message = conv?.messages?.find((m) => m.id === i.messageId)
           if (!message) throw new Error("Message not found")
-          const next = handleMessageReaction(message, i.emoji.trim(), actorId, true)
-          if (deps.repository) {
-            deps.repository.update(i.conversationId, i.messageId, next)
+          if (isDurableMessagingEnabled()) {
+            const { IdentityService } = await import("@/lib/identity/identity-service")
+            const response = await fetch(
+              `/api/messaging/conversations/${encodeURIComponent(i.conversationId)}/messages`,
+              {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json", ...IdentityService.getAuthHeaders() },
+                body: JSON.stringify({ messageId: i.messageId, reaction: i.emoji.trim() }),
+                cache: "no-store",
+              }
+            )
+            const result = await response.json().catch(() => ({})) as {
+              ok?: boolean; error?: string; reactionCounts?: Record<string, number>; viewerReactions?: string[]
+            }
+            if (!response.ok || result.ok !== true) throw new Error(result.error || "Could not save message reaction")
+            const next = { ...message, reactionCounts: result.reactionCounts || {}, viewerReactions: result.viewerReactions || [] }
+            deps.repository?.update(i.conversationId, i.messageId, next)
+            return { message: next }
           }
+          const next = handleMessageReaction(message, i.emoji.trim(), actorId, true)
+          if (deps.repository) deps.repository.update(i.conversationId, i.messageId, next)
           return { message: next }
         },
       })

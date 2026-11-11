@@ -3,7 +3,7 @@
 
 # Phase 12 — Final integration and release readiness
 
-Release: `0.338.47` source candidate (2026-11-11; legacy verification fixture — historical detail below is not current implementation authority)
+Release: `0.338.49` source candidate (2026-11-11; legacy verification fixture — historical detail below is not current implementation authority)
 
 Current status: **NOT APPROVED for production.** Node 24.15.0 dependency-backed typecheck/lint/build, full browser/device acceptance, Testnet migration-history reconciliation and operator/provider verification remain outstanding.
 

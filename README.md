@@ -1,14 +1,16 @@
 # GreenHaven
 
-**Current source version:** `0.338.47`
+**Current source version:** `0.338.49`
 
 Production status: **NOT APPROVED** — supported Node 24.15.0 dependency-backed typecheck/lint/build, browser/device, live database/provider and operator acceptance remain outstanding.
 
 This repository is the canonical GreenHaven source tree. See `docs/SOURCE_OF_TRUTH.md` and `docs/CURRENT_BUILD_CONTEXT.md` before implementation or release work.
 
-## Latest implementation candidate — 0.338.47 / Run #283
+## Latest implementation candidate — 0.338.49 / Run #285
 
 Run #283 adds 55 tested helper capabilities across all 11 Active modules, fills Matching, Connections, Orders, GHC and Pi Payments feature entry points, and registers focused tests in the static/prebuild gates. The 220-target register is explicit: five helper capabilities per module are implemented in this tranche; 165 deeper UI/API/database feature targets remain. Static verification passes; Node 24.15.0 runtime/build and browser/device acceptance remain outstanding. No SQL, Testnet financial mutation, GitHub push, Vercel deployment or Mainnet operation was performed.
+
+Run #285 continues from the uploaded 0.338.47 baseline. It adds a response-level Discovery opt-out/privacy fallback, filters blocked peers and hidden/no-one/matches-only profiles from the match inbox, and removes a duplicate direct-message POST so the domain's idempotent server send remains the single write owner. Run #285 adds 30 focused regression assertions; the full static suite passes 3,619/3,619 with zero failures. The connected Testnet audit found 39 applied migration records; only 10 exact `(version, name)` sources are present and 29 are missing or version-mismatched in this archive; no further migration was applied. Vercel's dashboard build command was synchronized with the repository cache-cleanup command after the latest deployment was OOM-killed. GitHub's `testnet` branch remains at 0.338.31 and is not safe to overwrite from this archive without a deliberate source sync. Full Node 24.15.0 typecheck/build and browser/device acceptance remain outstanding.
 
 Derived from the 0.338.43 ecosystem candidate through Runs #279–281. Preserves all 41 ecosystem services (11 Active, 30 Coming Soon) and every release boundary. Wallet withdrawal snapshot isolation and least-privilege wallet_address consent are hardened; the obsolete non-signaling call-intent endpoint is retired. Prepared prelaunch screens now exist for Events, Charity & Impact, Services, and Creator Tools. Events discovery uses canonical community event/RSVP records with server-side public/private membership filtering; Charity displays only the authenticated user's recorded segregated contributions using exact atomic PI formatting; Services reads only durable active service listings from Marketplace; Creator Tools uses the existing creator API and shows data-source health without initiating tips or payouts. New Events and Charity APIs fail closed while their services remain Coming Soon; all four screens remain unwired into the ecosystem directory. Seller Centre functionality already exists inside Marketplace. The 41-service registry test confirms 11 Active / 30 Coming Soon across nine categories. Full static verification and the consolidated static runner pass; Node 24.15.0 dependency-backed typecheck/lint/build, browser/device acceptance and live service acceptance remain open because this workspace is on Node 22.16.0 with no dependencies installed. Live Testnet migration history is not fully reconciled to source; do not apply or replay migrations. Mainnet is untouched and production remains NOT APPROVED.
 

@@ -20,7 +20,7 @@ const checks = [
   ["public profile showcase has no financial or wallet fields", !showcase.match(/\b(wallet|balance|ledger|payout|payment)\b/i) && !showcase.match(/\bGHC\b/)],
   ["discovery relevance includes public professional interests", discovery.includes("raw.professional?.professionalInterests") && discovery.includes("const sharedInterests = interests")],
   ["profile PATCH bounds professional/business payloads and ignores client verification", profileStore.includes("sanitizeProfessionalIdentityPayload") && profileStore.includes("sanitizeBusinessIdentityPayload") && professionalIdentity.includes("Verification is never accepted here")],
-  ["people discovery projects only whitelisted public identity fields", discoverRoute.includes("publicIdentityPayload") && discoverRoute.includes("safeHttpsUrl") && discoverRoute.includes('visibility === "hidden"')],
+  ["people discovery projects only whitelisted public identity fields", discoverRoute.includes("publicIdentityPayload") && discoverRoute.includes("safeHttpsUrl") && discoverRoute.includes('includes(visibility)') && discoverRoute.includes('includes(whoCanDiscover)')],
   ["public profile projection enforces professional and nested location/interests privacy", privacyProjection.includes("preferences.showProfessionOnSocial === false") && privacyProjection.includes("delete professional.locationLabel") && privacyProjection.includes("delete professional.professionalInterests")],
 ]
 for (const [name, ok] of checks) console.log(`${ok ? "PASS" : "FAIL"} — ${name}`)

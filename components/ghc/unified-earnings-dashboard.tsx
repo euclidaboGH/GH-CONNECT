@@ -704,6 +704,7 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
         ) : null}
         {/* Single primary control — hide when compact (wallet rail already owns the CTA). */}
         {!compact ? (
+          <>
         <button
           type="button"
           onClick={() => {
@@ -732,7 +733,7 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
         {releaseStatus ? (
           <p className="mt-2 text-center text-[11px] text-muted-foreground" role="status">{releaseStatus}</p>
         ) : null}
-
+          </>
         ) : (
           <p className="text-center text-[11px] text-muted-foreground" data-compact-withdraw-hint>
             Use <span className="font-semibold text-foreground">Withdraw</span> on the Pi rail above — one path for amount, consent, PIN and submit.
