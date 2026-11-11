@@ -24,7 +24,7 @@ const checks = [
   ['PIN values are hashed server-side and are not returned by status endpoint', pinService.includes('scryptSync(pin, salt, 32)') && pinRoute.includes('getWithdrawalPinStatus') && !pinRoute.includes('pin_hash')],
   ['PIN is accurately scoped to Pi withdrawals, not advertised as universal transaction authorization', pinCard.includes('At present it protects Pi withdrawals; other transaction types keep their own authorization rules.')],
   ['Pi reserved funds are distinguished from eligible-to-withdraw funds', balance.includes('Eligible to withdraw') && balance.includes('Reserved for requests')],
-  ['Reserved funds copy explains provider execution boundary', balance.includes('not spendable while those requests remain active') && balance.includes('cannot force-release them')],
+  ['Reserved funds copy explains never-started release and uncertain provider execution boundary', balance.includes('not spendable while a request is unresolved') && balance.includes('never-started request') && balance.includes('missing ID alone is not proof')],
   ['Release control is limited by authenticated server cancellation of unstarted requests', cancelRoute.includes('cancelUnstartedPayoutRequests(auth.userId)') && ledger.includes('gh_pi_earnings_payout_cancel_unstarted')],
   ['Rewards counts approved/eligible claims separately from under-review items', rewards.includes('row.validationStatus === "eligible" || row.validationStatus === "approved"') && rewards.includes('Under review / maturity')],
   ['Mission policy explicitly states achievements do not issue GHC or Pi', rewards.includes('mission completion does not issue GHC or Pi')],

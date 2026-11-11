@@ -12,7 +12,7 @@ export const RESERVE_ON_ACCEPTED_PAYOUT_REQUEST = true
 export function humanizeReservationState(state: string | null | undefined): string {
   const s = String(state || "").toLowerCase()
   if (s === "reserved" || s === "pending_execution") {
-    return "Reserved for an open withdrawal request. Use Return reserved π to available for incomplete requests with no Pi payment id; otherwise it returns if the request fails or is cancelled by policy."
+    return "Reserved for an open withdrawal request. Return reserved π is available only when provider execution never started. If a request may have reached Pi, its reservation stays protected until the provider outcome is reconciled."
   }
   if (s === "available" || s === "eligible") {
     return "Available to withdraw (fees and limits still apply)."

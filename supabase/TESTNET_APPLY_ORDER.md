@@ -239,7 +239,7 @@ The rows are sorted by the canonical migration identifier for review. Dependenci
 | 217 | `20261111064321_call_pair_lock_order_and_retry_safety.sql` | REVIEW_REQUIRED | APPLIED_TESTNET_ONLY_HOLD_OTHER_TARGETS |
 | 218 | `20261111064446_call_expiry_sweeper_before_start.sql` | REVIEW_REQUIRED | APPLIED_TESTNET_ONLY_HOLD_OTHER_TARGETS |
 | 219 | `20261111064542_call_expiry_sweeper_pair_lock_order.sql` | REVIEW_REQUIRED | APPLIED_TESTNET_ONLY_HOLD_OTHER_TARGETS |
-| 220 | `20261111120001_pi_earnings_release_stale_incomplete.sql` | REQUIRED | REVIEW_THEN_APPLY |
+| 220 | `20261111120001_pi_earnings_release_stale_incomplete.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
 | 221 | `20261111131500_run285_durable_message_reactions.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
 
 ## Classification meanings

@@ -19,3 +19,13 @@ This review records the warnings from the 10 November 2026 CI/Vercel output. It 
 - Approve an individual install script only after confirming package ownership, source, platform behavior, and necessity.
 
 No package dependency, lockfile resolution, native install-script permission, Pi transaction, or financial behavior was changed in this run.
+
+## Run #291 dependency follow-up — 2026-11-11
+
+The successful 0.338.53 Vercel Preview build ran Node 24.22.2, which satisfies the repository's `^24.15.0` runtime and the raised Node minimum described by the `isomorphic-dompurify@3.20.0` warning. The package warning is still real semver/release hygiene debt, but it is not evidence that the current Node 24 build is running below the package's minimum. Upgrade to the maintained 4.x line only with a regenerated lockfile and the existing HTML sanitization/XSS regression suite.
+
+The lockfile confirms the deprecated `stellar-sdk@10.4.1`, `stellar-base@8.2.2` and `js-xdr@1.3.0` packages are transitive through `pi-backend@0.1.3`, not direct application dependencies. The current official `pi-apps/pi-nodejs` source package still identifies itself as `pi-backend@0.1.3` but declares `@stellar/stellar-sdk@^13.2.0`; its package entry points target `dist/index.js` and `dist/index.d.ts`, while the repository source does not publish those build artifacts or define an npm `prepare` script. A direct GitHub dependency is therefore not a safe drop-in. The correct migration is a reproducible, license-preserving internal fork/vendor build with a pinned source commit, explicit build step, Pi A2U contract tests and Testnet settlement/reconciliation acceptance. Do not use an npm override to replace the old SDK under a financial provider adapter without those tests.
+
+`eslint@9.39.5` is outside its support window. It remains paired with the current Next.js 15 lint configuration; upgrade ESLint and the Next.js config/plugin together as a planned major toolchain migration, then run the complete Node 24 typecheck, lint and production build. Do not suppress npm deprecation warnings or add `--no-warn-deprecated`.
+
+No direct `new Buffer()`/`Buffer()` constructor use was found in the application source. The runtime warning observed in prior withdrawal logs remains to be traced through the transitive Pi/Stellar dependency chain. A current `npm audit` result was not available in this source-only run; re-run it after a dependency-backed install and classify production versus development findings before release.

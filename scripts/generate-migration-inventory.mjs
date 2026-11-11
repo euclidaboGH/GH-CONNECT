@@ -33,6 +33,7 @@ const reviewRequired = new Set([
   '20261107190001_marketplace_fulfilment_tracking_timeline.sql',
   '20261108120001_gh_community_server_filter_search.sql',
   '20261108150001_repair_pin_storage_and_payout_release.sql',
+  '20261111120001_pi_earnings_release_stale_incomplete.sql',
   '20261109100001_gh_messaging_phase1_controls_search.sql',
   '20261111064321_call_pair_lock_order_and_retry_safety.sql',
   '20261111064446_call_expiry_sweeper_before_start.sql',
@@ -214,6 +215,7 @@ const notes = {
   '20261022010098_gh_social_engagement_write_integrity.sql': 'Security-sensitive durable vote/reaction/comment/save/share write-path repair. Review all RPC signatures and table columns, run disposable PostgreSQL concurrency/idempotency tests, reconcile counters, and validate two-account visibility/ownership on Testnet before applying.',
   '20261110100001_withdrawal_rpc_acl_and_recovery_atomicity.sql': 'Run #246 security repair. Equivalent source SQL was applied and postflight-verified on GH Connect Testnet on 2026-11-10 under MCP migration record withdrawal_rpc_acl_and_recovery_atomicity (generated version 20261110085344). The canonical filename/version is NOT recorded under its original version; reconcile CLI history before any future db push. Does not execute Pi transfers.',
   '20261110110001_wallet_recovery_reset_lock_race_guard.sql': 'Run #249 additive recovery race guard. Equivalent source SQL was applied and postflight-verified on GH Connect Testnet on 2026-11-10 under MCP migration record wallet_recovery_reset_lock_race_guard (generated version 20261110085351). The canonical filename/version is NOT recorded under its original version; reconcile CLI history before any future db push. Disposable PostgreSQL concurrency testing remains outstanding.',
+  '20261111120001_pi_earnings_release_stale_incomplete.sql': 'Run #291 payout-recovery safety correction. REVIEW_REQUIRED: only never-started Testnet reservations may be self-released. Processing/uncertain requests remain held because a missing persisted Pi payment ID does not prove that no provider payment was created. Verify the exact target migration history, service_role-only ACL, and reserve-release idempotency before applying; never use this RPC to clear uncertain payouts.',
   '20261111131500_run285_durable_message_reactions.sql': 'Run #285 durable message reactions. Additive server-only table and membership-checked SECURITY DEFINER RPC. REVIEW_REQUIRED: the current Testnet ledger has 29 applied entries without exact source files in the supplied archive. Do not apply until exact historical source restoration, disposable PostgreSQL clean replay, RLS/grant checks, and concurrent toggle tests pass.',
 }
 

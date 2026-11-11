@@ -3708,3 +3708,75 @@ header img[alt="GreenHaven"],
     background: color-mix(in srgb, #ffffff 97%, var(--gh-green) 3%);
   }
 }
+
+/* Run #292 — mobile-first content recovery for the four over-height modules.
+   These are composition-only overrides: all controls remain present and functional. */
+@media (max-width: 639px) {
+  /* Marketplace: single compact identity row + horizontally scrolling tools. */
+  .gh-world-marketplace > .gh-marketplace-header,
+  .gh-world-marketplace .gh-marketplace-header {
+    gap: .125rem !important;
+    padding-top: max(.125rem, env(safe-area-inset-top, 0px)) !important;
+    padding-bottom: .125rem !important;
+  }
+  .gh-marketplace-header > div:first-child { min-height: 1.875rem !important; }
+  .gh-marketplace-header h1 { font-size: .875rem !important; line-height: 1.1 !important; }
+  .gh-marketplace-header p { display: none !important; }
+  .gh-marketplace-header [role="toolbar"] { gap: .25rem !important; padding-block: .125rem !important; }
+  .gh-marketplace-header [role="toolbar"] button {
+    min-height: 1.75rem !important;
+    padding: .25rem .55rem !important;
+    font-size: .625rem !important;
+    line-height: 1 !important;
+  }
+
+  /* Community: remove the old 10.5rem hero minimum; compact the expanded header. */
+  .gh-world-community > header,
+  .gh-communities-shell > header,
+  .gh-world-community .gh-app-header-expanded {
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+  .gh-world-community .gh-app-header-expanded > div { padding-block: .125rem !important; }
+  .gh-world-community .gh-app-header-expanded > div > div:first-child { min-height: 2rem !important; }
+  .gh-world-community .gh-app-header-expanded > div > div:nth-child(2) { margin-top: .125rem !important; padding-bottom: .125rem !important; }
+  .gh-world-community .gh-app-header-expanded :where(input,button,[role="tab"] ) { min-height: 1.875rem; }
+  .gh-world-community > header > div:first-child { min-height: 0 !important; }
+  .gh-world-community > header h1 { font-size: .9rem !important; }
+
+  /* Discovery: keep search/filter controls, compress explanatory panels and outcome summary. */
+  .gh-world-discovery-header { padding-block: max(.125rem, env(safe-area-inset-top, 0px)) .125rem !important; }
+  .gh-world-discovery-header > div { min-height: 1.875rem !important; }
+  .gh-world-discovery-header > div:nth-child(2) { min-height: 1.75rem !important; }
+  .gh-discovery-intro { padding: .25rem .625rem 0 !important; }
+  .gh-discovery-intro > div { margin: 0 !important; padding: .375rem .5rem !important; border-radius: .625rem !important; }
+  .gh-discovery-intro > div p { font-size: .625rem !important; line-height: 1.25 !important; }
+  .gh-discovery-shell > section[aria-label] { margin: .25rem .625rem 0 !important; padding: .5rem .625rem !important; border-radius: .75rem !important; }
+  .gh-discovery-shell > section[aria-label] p { line-height: 1.25 !important; }
+
+  /* Messages: compact relationship summary and move inbox filters closer to the list. */
+  .gh-world-inbox > header { padding: max(.125rem, env(safe-area-inset-top, 0px)) .625rem .375rem !important; }
+  .gh-world-inbox > header h1 { font-size: .9rem !important; line-height: 1.1 !important; }
+  .gh-world-inbox > header > div:first-child p { font-size: .625rem !important; }
+  .gh-world-inbox > header > div:nth-child(2) { margin-top: .25rem !important; }
+  .gh-world-inbox > header > section[aria-label="Relationship action centre"] {
+    margin-top: .375rem !important;
+    padding: .375rem .5rem !important;
+    border-radius: .75rem !important;
+    box-shadow: none !important;
+  }
+  .gh-world-inbox > header > section[aria-label="Relationship action centre"] > div { gap: .375rem !important; }
+  .gh-world-inbox > header > section[aria-label="Relationship action centre"] :where(p,span) { line-height: 1.2 !important; }
+  .gh-world-inbox > header > section[aria-label="Relationship action centre"] .h-8.w-8 { width: 1.5rem !important; height: 1.5rem !important; }
+  .gh-world-inbox > header [role="tablist"] { margin-top: .375rem !important; }
+}
+
+/* Ensure content regions can actually shrink and own the remaining viewport. */
+.gh-world-marketplace,
+.gh-world-community,
+.gh-world-discovery,
+.gh-world-inbox { min-height: 0; }
+.gh-world-marketplace > :not(header),
+.gh-world-community > :not(header),
+.gh-world-discovery > :not(header),
+.gh-world-inbox > :not(header) { min-height: 0; }

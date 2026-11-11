@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 const steps = [
+  ["check-run292-mobile-content-layout.mjs", "Run 292 mobile content-first layout contract"],
   ["check-phase1-platform-foundation.mjs", "Phase 1 platform foundation and architecture baseline"],
   ["check-events-discovery-release-gate.mjs", "Events discovery privacy and Coming Soon release boundary"],
   ["check-charity-impact-release-gate.mjs", "Charity impact read-only privacy and Coming Soon release boundary"],

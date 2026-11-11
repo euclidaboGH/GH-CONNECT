@@ -1,6 +1,7 @@
--- REVIEW_REQUIRED / operator-applied: expand self-service release for incomplete
--- Pi Testnet payouts that never obtained provider payment evidence.
--- Does NOT release rows with provider_payment_id, provider_txid, or active lease.
+-- REVIEW_REQUIRED / operator-applied: harden self-service reservation recovery.
+-- Only requests that provably never started provider execution may be released.
+-- Processing/uncertain requests remain held: a missing persisted provider ID is
+-- not proof that Pi did not create a payment before the worker lost its lease.
 
 CREATE OR REPLACE FUNCTION public.gh_pi_earnings_payout_cancel_unstarted(p_user_id text)
 RETURNS jsonb
@@ -19,7 +20,6 @@ DECLARE
   v_unlock text;
   v_result_status text;
   v_can_release boolean;
-  v_stale_cutoff timestamptz := now() - interval '15 minutes';
 BEGIN
   IF v_user IS NULL OR length(v_user) > 160 THEN
     RETURN jsonb_build_object('ok', false, 'error', 'INVALID_INPUT');
@@ -38,28 +38,22 @@ BEGIN
      ORDER BY created_at
      FOR UPDATE
   LOOP
-    -- Safe self-service release: no provider payment evidence ever recorded.
+    -- Safe self-service release is intentionally limited to a request that
+    -- never entered provider execution. A missing payment ID is not proof that
+    -- Pi did not create a payment before a worker timed out or lost its lease.
+    -- Therefore processing/uncertain requests require provider-side reconciliation
+    -- and are never released by this user-facing RPC.
     v_can_release := (
-      v_row.provider_payment_id IS NULL
+      v_row.status = 'reserved'
+      AND v_row.network = 'Pi Testnet'
+      AND v_row.provider_payment_id IS NULL
       AND v_row.provider_txid IS NULL
-      AND (
-        (
-          v_row.status = 'reserved'
-          AND v_row.execution_started_at IS NULL
-          AND v_row.execution_lease_token IS NULL
-          AND COALESCE(v_row.execution_attempts, 0) = 0
-        )
-        OR (
-          -- Stuck "processing" / incomplete with no Pi payment identity and dead or missing lease
-          v_row.status IN ('reserved', 'processing')
-          AND (
-            v_row.execution_lease_token IS NULL
-            OR v_row.execution_started_at IS NULL
-            OR v_row.execution_started_at < v_stale_cutoff
-          )
-          AND COALESCE(v_row.execution_attempts, 0) <= 3
-        )
-      )
+      AND v_row.provider_receipt IS NULL
+      AND v_row.provider_verified_at IS NULL
+      AND v_row.execution_started_at IS NULL
+      AND v_row.execution_lease_token IS NULL
+      AND v_row.execution_lease_expires_at IS NULL
+      AND COALESCE(v_row.execution_attempts, 0) = 0
     );
 
     IF v_can_release THEN
@@ -75,11 +69,9 @@ BEGIN
       END IF;
       UPDATE public.gh_pi_earnings_payout_requests
          SET status = 'released',
-             failure_code = CASE
-               WHEN v_row.status = 'processing' THEN 'CANCELLED_BY_USER_STALE_INCOMPLETE'
-               ELSE 'CANCELLED_BY_USER_UNSTARTED'
-             END,
+             failure_code = 'CANCELLED_BY_USER_UNSTARTED',
              execution_lease_token = NULL,
+             execution_lease_expires_at = NULL,
              updated_at = now()
        WHERE id = v_row.id;
       v_count := v_count + 1;
@@ -88,27 +80,31 @@ BEGIN
         'requestId', v_row.id,
         'status', 'released',
         'grossAtomic', v_row.gross_atomic,
-        'reasonCode', CASE WHEN v_row.status = 'processing' THEN 'STALE_INCOMPLETE_RELEASED' ELSE 'UNSTARTED_REQUEST_CANCELLED' END,
-        'reason', CASE WHEN v_row.status = 'processing'
-          THEN 'The incomplete withdrawal never received a Pi payment id; reservation returned to Available.'
-          ELSE 'The withdrawal request had not started Pi provider execution.'
-        END,
+        'reasonCode', 'UNSTARTED_REQUEST_CANCELLED',
+        'reason', 'The withdrawal request had not started Pi provider execution; its reservation was returned to Available.',
         'unlockCondition', 'The reserved amount has been returned to Available.'
       ));
     ELSE
       v_result_status := v_row.status;
-      IF v_row.status = 'uncertain' THEN
-        v_reason := 'PROVIDER_OUTCOME_UNKNOWN';
-        v_unlock := 'Use Reconcile on this request. Funds unlock only after Pi confirms no payment, or settle after verified payment.';
-      ELSIF v_row.provider_payment_id IS NOT NULL OR v_row.provider_txid IS NOT NULL THEN
+      IF v_row.provider_payment_id IS NOT NULL OR v_row.provider_txid IS NOT NULL
+         OR v_row.provider_receipt IS NOT NULL OR v_row.provider_verified_at IS NOT NULL THEN
         v_reason := 'PROVIDER_EVIDENCE_PRESENT';
-        v_unlock := 'A Pi payment identifier exists. The server must reconcile with Pi before any release.';
-      ELSIF v_row.status = 'processing' THEN
+        v_unlock := 'Pi payment evidence exists. The server must reconcile the exact payment before any release or settlement.';
+      ELSIF v_row.status = 'processing'
+         AND v_row.execution_lease_token IS NOT NULL
+         AND v_row.execution_lease_expires_at > now() THEN
         v_reason := 'PROVIDER_EXECUTION_IN_PROGRESS';
-        v_unlock := 'Wait briefly for the worker, then retry Return reserved π. If still stuck after 15 minutes with no Pi payment id, retry this control.';
+        v_unlock := 'The payout worker holds an active lease. Wait for its verified outcome; this control cannot release an active execution.';
+      ELSIF v_row.status IN ('processing', 'uncertain')
+         OR v_row.execution_started_at IS NOT NULL
+         OR v_row.execution_lease_token IS NOT NULL
+         OR v_row.execution_lease_expires_at IS NOT NULL
+         OR COALESCE(v_row.execution_attempts, 0) > 0 THEN
+        v_reason := 'PROVIDER_OUTCOME_UNKNOWN';
+        v_unlock := 'The request may have reached Pi before its payment ID was saved. Only authoritative provider reconciliation can safely release or settle this reservation.';
       ELSE
         v_reason := 'EXECUTION_ALREADY_STARTED';
-        v_unlock := 'Provider execution evidence is present or lease is still active. Reconcile before release.';
+        v_unlock := 'The request is not in the never-started state required for self-service release. Contact support for reconciliation.';
       END IF;
       v_items := v_items || jsonb_build_array(jsonb_build_object(
         'requestId', v_row.id,
@@ -132,7 +128,7 @@ BEGIN
     'releasedAtomic', v_total,
     'items', v_items,
     'message', CASE WHEN v_count > 0
-      THEN 'Eligible incomplete reservations were returned to Available. Requests with Pi payment evidence stay protected until reconciled.'
+      THEN 'Eligible never-started reservations were returned to Available. Processing/uncertain requests remain protected until authoritative provider reconciliation.'
       ELSE 'No incomplete reservations were eligible for immediate release. Any remaining holds are explained below.'
     END
   );
@@ -142,4 +138,4 @@ $$;
 REVOKE ALL ON FUNCTION public.gh_pi_earnings_payout_cancel_unstarted(text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.gh_pi_earnings_payout_cancel_unstarted(text) TO service_role;
 COMMENT ON FUNCTION public.gh_pi_earnings_payout_cancel_unstarted(text) IS
-  'Self-service release of incomplete Pi Testnet payout reservations with no provider payment evidence. Never force-releases rows that have Pi payment ids.';
+  'Self-service release only for never-started Pi Testnet reservations. Processing/uncertain requests and any provider-evidence rows remain held for authoritative provider reconciliation.';

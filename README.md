@@ -1,14 +1,14 @@
 # GreenHaven
 
-**Current source version:** `0.338.53`
+**Current source version:** `0.338.55`
 
 Production status: **NOT APPROVED** — supported Node 24.15.0 dependency-backed typecheck/lint/build, browser/device, live database/provider and operator acceptance remain outstanding.
 
 This repository is the canonical GreenHaven source tree. See `docs/SOURCE_OF_TRUTH.md` and `docs/CURRENT_BUILD_CONTEXT.md` before implementation or release work.
 
-## Latest implementation candidate — 0.338.53 / Runs #289–290
+## Latest implementation candidate — 0.338.55 / Run #291
 
-Run #290 sanitizes caller-supplied notification targets again at the navigation boundary, correcting the Phase 5 CI regression. Run #289 upgrades notification deep-link resolution and delivery across Feed, comments/replies, Marketplace listings/orders/responses, Pi payments, GHC transactions and daily claims. Notification taps open the exact target; details remain a separate action. Mirrored social/economy rows no longer double-count in the unified inbox. Comment/reply recipients include the post owner and bounded nested-thread participants; replies page older comments and scroll to the exact response. Marketplace order-response notices scroll to the matching timeline event. Payment and marketplace notices use the existing durable inbox RPC with dedupe and server-side block checks. The Vercel upload excludes local dependencies/build caches, and the generated migration manifest now matches the 0.338.53 package version. Focused Run #289 tests pass; full dependency-backed TypeScript/lint/build and browser/device acceptance remain outstanding. The connected Testnet schema was inspected read-only; no migration was applied. No GitHub push or Vercel deployment was performed.
+Run #292 adds a mobile-first content recovery pass across Marketplace, Communities, Discovery and Messages, reducing oversized header and summary regions without removing controls or changing domain logic. It also records the live Testnet wallet-schema drift: a required wallet-address confirmation RPC is absent, and its source migration is not in the inspected migration history. That migration is not safe to apply in isolation because source/live migration history is unreconciled. The three uncertain Pi payouts remain reserved pending authoritative provider reconciliation. No database migration, ledger mutation, provider transfer, GitHub push or Vercel deployment was performed. Production remains NOT APPROVED; full Node 24.15.0 typecheck/lint/build and visual device acceptance remain outstanding.
 
 Run #283 adds 55 tested helper capabilities across all 11 Active modules, fills Matching, Connections, Orders, GHC and Pi Payments feature entry points, and registers focused tests in the static/prebuild gates. The 220-target register is explicit: five helper capabilities per module are implemented in this tranche; 165 deeper UI/API/database feature targets remain. Static verification passes; Node 24.15.0 runtime/build and browser/device acceptance remain outstanding. No SQL, Testnet financial mutation, GitHub push, Vercel deployment or Mainnet operation was performed.
 

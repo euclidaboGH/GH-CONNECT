@@ -34,7 +34,7 @@ const checks = [
   ['API responses are non-cacheable', /private, no-store/.test(cancel)],
   ['wallet presents the reason for each held reservation', /item\.reason/.test(wallet)],
   ['wallet presents the exact unlock condition', /item\.unlockCondition/.test(wallet)],
-  ['wallet distinguishes safe immediate release from provider reconciliation', /Safety rule:[\s\S]*?authoritative cancellation with no transaction/.test(wallet)],
+  ['wallet distinguishes never-started release from uncertain provider reconciliation', /Safety rule:[\s\S]*?never-started request[\s\S]*?missing ID alone is not proof[\s\S]*?authoritative provider reconciliation/.test(wallet)],
   ['wallet ledger shows the human reason before opaque reference', /e\.reason \|\| e\.unique_ref/.test(ledger)],
   ['withdrawal response no longer claims execution is disabled after passing the execution gate', !/execution is not enabled in this release/i.test(create)],
   ['membership purchase serializes preflight and debit per account', /ghc_membership_purchase:' \|\| p_user_id/.test(membership)],

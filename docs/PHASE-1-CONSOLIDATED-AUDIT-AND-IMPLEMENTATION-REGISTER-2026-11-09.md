@@ -2,12 +2,18 @@
 
 **Audit date:** 2026-11-09  
 **Last updated:** 2026-11-11  
-**Authoritative source archive:** `GREENHAVEN-0.338.53-RUN290-NOTIFICATION-TRUST-BOUNDARY-CI-FIX.zip`  
-**Current project package:** `gh-connect@0.338.53`
+**Authoritative source archive:** `GREENHAVEN-0.338.55-RUN292-MOBILE-WALLET-AUDIT.zip`  
+**Current project package:** `gh-connect@0.338.55`
 
-**Current in-place maintenance derivative:** `gh-connect@0.338.53 (Runs #250–290)`; the audit findings and historical baseline below remain preserved. The original 0.338.18 audit baseline and Run #250–278 snapshots are historical references, not current release pointers.  
+**Current in-place maintenance derivative:** `gh-connect@0.338.55 (Runs #250–292)`; the audit findings and historical baseline below remain preserved. The original 0.338.18 audit baseline and Run #250–278 snapshots are historical references, not current release pointers.  
 **Phase:** 1 of the ten-phase completion roadmap — authoritative baseline and complete audit  
 **Disposition:** **Source inventory and selected contracts verified; Phase 1 is NOT fully closed. Production remains NOT APPROVED.**
+
+## Run #291 addendum — 2026-11-11
+
+The user-facing Pi earnings reservation recovery path is tightened so it can release only a `reserved` Testnet request that provably never entered provider execution: no provider payment ID, txid, receipt or verification; no execution start; no lease token or expiry; and zero execution attempts. `processing` and `uncertain` requests remain held until authoritative Pi provider reconciliation. This corrects an unsafe stale-processing proposal in which an old execution-start timestamp could have been mistaken for proof that no provider payment was created. The migration is REVIEW_REQUIRED and unapplied. The new 15-check contract covers the SQL release predicate, provider evidence, lease handling, service-role-only ACL, authenticated/rate-limited route and user-facing explanation.
+
+Run #292 adds compact mobile content-first headers and summaries across Marketplace, Communities, Discovery and Messages. A non-blocking postbuild footprint report now measures the Vercel workspace and lists its largest folders/files, to investigate the 4,865 MB source-footprint report. Both connected Vercel projects have successful 0.338.53 Preview builds on Node 24.22.2 with 315 prebuild checks invoked; this is baseline evidence only, not proof for the new 0.338.55 increment. Supabase Testnet still has three uncertain Pi earnings requests totalling 3.00 π gross with no persisted provider payment ID, txid or active lease. They remain held; no financial state or migration was changed. Mainnet Supabase is inactive, current Vercel deployments are Preview-only, and production remains NOT APPROVED.
 
 ## Run #290 addendum — 2026-11-11
 

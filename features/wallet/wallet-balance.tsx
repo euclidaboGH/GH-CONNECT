@@ -483,7 +483,7 @@ export function WalletBalanceCard({
             {showReserved ? (
               <div className="mt-2 space-y-2 text-[11px] leading-relaxed text-violet-100/90">
                 <p>
-                  <strong>Reserved {maskPi(reservedAmount)}</strong> is held for incomplete withdrawal requests; it has not disappeared, but it is not spendable while those requests remain active. It returns to Available if the payout is cancelled, or is settled once Pi confirms the payment.
+                  <strong>Reserved {maskPi(reservedAmount)}</strong> is held for open withdrawal requests; it has not disappeared, but it is not spendable while a request is unresolved. The Return action is limited to requests that never started provider execution. Processing or uncertain requests stay reserved until Pi's authoritative outcome is reconciled.
                 </p>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <button
@@ -519,7 +519,7 @@ export function WalletBalanceCard({
                 ) : null}
                 {reconcileMsg ? <p className="rounded-lg border border-white/10 bg-black/20 p-2 text-[10px] leading-relaxed text-violet-100" role="status">{reconcileMsg}</p> : null}
                 <p className="text-[10px] leading-relaxed text-violet-100/60">
-                  Safety rule: a reservation returns to Available here only when the server confirms that no Pi payment id, transaction id, execution start, lease, or provider attempt exists. Once a Pi payment id exists, funds stay reserved until reconciliation proves authoritative cancellation with no transaction or verifies the payment for settlement; the UI cannot force-release them. A timeout alone never releases or forfeits your earned balance.
+                  Safety rule: this action can release only a never-started request with no Pi payment ID, transaction ID, provider receipt/verification, execution start, lease token/expiry or provider attempt. A processing/uncertain request may have reached Pi before its payment ID was saved, so a missing ID alone is not proof that no payment exists. Those funds remain reserved until authoritative provider reconciliation. A timeout alone never releases or forfeits your earned balance.
                 </p>
               </div>
             ) : null}

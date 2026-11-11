@@ -1,11 +1,14 @@
 # GreenHaven / GH-CONNECT — Full Project Bundle
 
-Baseline: **0.338.53**  
+Baseline: **0.338.54**  
 Bundle date: **2026-11-11**
 
-This is the complete source project assembled from the 0.338.53 Active Module Filters Phase 1 source archive, with the CI release-closure repair applied.
+This is the complete source project assembled from the 0.338.53 Active Module Filters Phase 1 source archive, with the Run #291 payout-recovery safety correction and postbuild footprint diagnostics applied.
 
 ## Included latest source work
+
+- Run #291: self-service Pi earnings reservation release is restricted to requests that provably never started provider execution; processing/uncertain requests remain held for authoritative provider reconciliation. Added 15 focused regression checks.
+- Run #291: added non-blocking postbuild workspace-footprint diagnostics to identify large directories/files in the Vercel build workspace.
 
 - Shared responsive filter workspace integrated across the 11 Active modules: Community, GH Chat, Connections, Matches, Marketplace, Orders, Wallet, GHC, Pi Payments, Rewards and Membership.
 - Restored `scripts/check-phase1-12-engagement-reliability.mjs`, which was referenced by `prebuild:checks` but missing from the CI checkout.
@@ -28,8 +31,8 @@ This is the complete source project assembled from the 0.338.53 Active Module Fi
 - Production remains **NOT APPROVED**.
 - Pi-funded GHC acquisition, paid business checkout, withdrawals, payouts and other financially sensitive execution paths remain gated.
 - No database migration was applied, no database push was run, and no live financial transaction was executed.
-- This bundle was not pushed to GitHub and no Vercel deployment was triggered.
-- The focused source-contract checks above passed. A complete dependency-backed Next.js build, full TypeScript/lint run and real Android/Pi Browser/desktop visual acceptance have not been established by this bundle operation.
+- The 0.338.53 baseline is now verified by successful Vercel Preview builds on both connected projects (Node 24.22.2, 315 prebuild checks invoked). The new 0.338.54 Run #291 changes have not yet been pushed or preview-built. The connected GitHub integration rejected branch creation with HTTP 403, so no remote refs/commits or PRs were changed.
+- Run #291 payout-recovery safety contract passes 15/15 locally. The postbuild footprint reporter has been exercised against the source tree; the next Vercel build must capture its postbuild directory/file measurements. Full Node 24 validation for the new increment and real Android/Pi Browser/desktop visual acceptance remain outstanding.
 - Use Node.js **24.15.0**, as pinned by the project, for the full CI/build workflow.
 
 ## Recommended next verification
