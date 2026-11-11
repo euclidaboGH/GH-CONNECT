@@ -199,13 +199,13 @@ export function DailyClaimPrompt() {
   useEffect(() => {
     const onOpen = () => {
       setOpen(true)
-      setDone(claimedToday ? { pending: true, alreadyClaimed: true } : null)
+      setDone(null)
       setError(null)
       setHint(false)
     }
     window.addEventListener("ghc:open-daily-claim", onOpen)
     return () => window.removeEventListener("ghc:open-daily-claim", onOpen)
-  }, [claimedToday])
+  }, [])
 
   // Visible until claimed — do not hide solely because status is still loading.
   
@@ -265,107 +265,122 @@ export function DailyClaimPrompt() {
       ) : null}
 
       {open && !isLocked ? (
-        <>
-          <button
-            type="button"
-            className="gh-daily-backdrop fixed inset-0 z-[149] bg-slate-950/55 backdrop-blur-sm"
-            aria-label="Close daily reward"
-            onClick={() => { if (!claiming) close() }}
-          />
           <section
-            ref={(node) => { sheetRef.current = node }}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="gh-daily-claim-title"
-            className="gh-daily-premium-dialog pointer-events-auto fixed z-[151] text-foreground"
-            style={{
-              right: "max(0.75rem, env(safe-area-inset-right))",
-              bottom: "calc(var(--gh-bottom-nav-height, 4.5rem) + env(safe-area-inset-bottom) + 0.75rem)",
-              left: "max(0.75rem, env(safe-area-inset-left))",
-              maxHeight: "min(82dvh, 44rem)",
+            ref={(node) => {
+              sheetRef.current = node
             }}
+            role="dialog"
+            aria-modal="false"
+            aria-labelledby="gh-daily-claim-title"
+            className="gh-daily-claim-popover pointer-events-auto fixed right-[max(0.75rem,env(safe-area-inset-right))] bottom-[calc(var(--gh-bottom-nav-height,4.5rem)+env(safe-area-inset-bottom)+1rem)] z-[151] w-[calc(100vw-1.5rem)] max-w-md overflow-y-auto overscroll-contain rounded-[1.35rem] border border-amber-500/25 bg-card text-foreground shadow-2xl"
+            style={{ maxHeight: "min(72dvh, 38rem)" }}
           >
-            <div className="gh-daily-premium-shell">
-              <header className="gh-daily-premium-header">
-                <div className="min-w-0">
-                  <span className="gh-daily-eyebrow"><span className="gh-daily-live-dot" /> GREENHAVEN DAILY REWARDS</span>
-                  <h2 id="gh-daily-claim-title" className="mt-1 text-lg font-black tracking-tight text-white">
-                    {done ? "Your reward is secured" : "A new day. A new reward."}
-                  </h2>
-                  <p className="mt-1 max-w-[19rem] text-[11px] leading-relaxed text-emerald-50/75">
-                    {done ? "Your claim has been recorded on the GreenHaven ledger." : "Show up, keep your streak alive and collect your daily GHC reward."}
-                  </p>
-                </div>
-                <button type="button" onClick={close} disabled={claiming} className="gh-daily-premium-close" aria-label="Close daily reward">
-                  <X size={18} />
-                </button>
-              </header>
-
-              <div className="gh-daily-premium-body">
-                {!done ? (
-                  <>
-                    <div className="gh-daily-reward-hero">
-                      <div className="gh-daily-coin-stage" aria-label="Official GreenHaven Coin logo">
-                        <span className="gh-daily-coin-orbit gh-daily-coin-orbit-one" aria-hidden />
-                        <span className="gh-daily-coin-orbit gh-daily-coin-orbit-two" aria-hidden />
-                        <span className="gh-daily-coin-disc"><GhcCoinIcon size={78} className="gh-daily-official-coin" /></span>
-                        <span className="gh-daily-day-chip">DAY {cycleDay ?? "—"} / 7</span>
-                      </div>
-                      <div className="mt-2 text-center">
-                        <p className="text-[10px] font-extrabold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-300">Today's reward preview</p>
-                        <p className="mt-1 flex items-center justify-center gap-2 text-4xl font-black tracking-tight text-slate-950 dark:text-white">
-                          {previewAmount != null ? previewAmount.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—"}
-                          <span className="text-base font-extrabold text-emerald-700 dark:text-emerald-300">GHC</span>
-                        </p>
-                        <p className="mt-1 text-[11px] text-muted-foreground">Final credited amount is confirmed by the server.</p>
-                      </div>
-                    </div>
-
-                    <div className="gh-daily-streak-panel">
-                      <div className="flex items-center justify-between gap-2">
-                        <div>
-                          <p className="text-[12px] font-extrabold text-foreground">Your 7-day reward journey</p>
-                          <p className="mt-0.5 text-[10px] text-muted-foreground">One check-in per Africa/Lagos day</p>
-                        </div>
-                        <span className="rounded-full bg-emerald-600/10 px-2.5 py-1 text-[10px] font-extrabold text-emerald-800 dark:text-emerald-300">{cycleDay ? `Day ${cycleDay} of 7` : "Daily streak"}</span>
-                      </div>
-                      <div className="mt-3 grid grid-cols-7 gap-1.5" aria-label="Seven day claim progress">
-                        {Array.from({ length: 7 }, (_, index) => {
-                          const day = index + 1
-                          const active = cycleDay != null && day < cycleDay
-                          const current = cycleDay === day
-                          return <div key={day} className={`gh-daily-day-step ${active ? "is-complete" : current ? "is-current" : ""}`} aria-label={`Day ${day}${active ? " completed" : current ? " current" : " upcoming"}`}><span>{active ? "✓" : day}</span></div>
-                        })}
-                      </div>
-                      <div className="mt-2 flex items-center justify-between text-[9px] font-semibold text-muted-foreground"><span>Consistency builds your streak</span><span>Next reset: 00:00 Lagos</span></div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="gh-daily-info-tile"><Shield size={15} /><span><strong>Ledger-backed</strong><small>Server verified</small></span></div>
-                      <div className="gh-daily-info-tile"><Clock size={15} /><span><strong>48-hour hold</strong><small>Matures before use</small></span></div>
-                    </div>
-                    {error ? <p className="rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2.5 text-[12px] font-medium text-red-700 dark:text-red-300" role="alert">{error}</p> : null}
-                    <button type="button" disabled={claiming || !canAttemptClaim} onClick={() => void claim()} className="gh-daily-premium-cta">
-                      {claiming ? <><span className="gh-daily-premium-spinner" /> Securing your reward…</> : <><GhcCoinIcon size={25} className="gh-daily-cta-coin" /> Claim today's GHC <span aria-hidden>→</span></>}
-                    </button>
-                    <p className="text-center text-[9px] leading-relaxed text-muted-foreground">Daily GHC utility reward · separate from Pi Network cashback and Pi payments.</p>
-                  </>
-                ) : (
-                  <div className="py-3 text-center">
-                    <div className="gh-daily-success-coin"><GhcCoinIcon size={82} /></div>
-                    <p className="mt-3 text-[10px] font-extrabold uppercase tracking-[0.2em] text-emerald-700 dark:text-emerald-300">Claim confirmed</p>
-                    <p className="mt-1 text-3xl font-black tracking-tight text-foreground">{done.alreadyClaimed ? "Already claimed" : formatAmount(done.amount)}</p>
-                    <p className="mx-auto mt-2 max-w-xs text-[12px] leading-relaxed text-muted-foreground">{done.pending ? "Your reward is safely recorded as pending and is not spendable until the maturity check completes." : "Your reward has been added to your available GHC balance."}</p>
-                    {done.pending ? <div className="gh-daily-maturity-card"><Clock size={17} /><span><strong>48-hour maturity window</strong><small>{done.redeemableAt ? `Expected availability: ${formatRedeemable(done.redeemableAt)}` : "Your Wallet will update when the ledger confirms maturity."}</small></span></div> : null}
-                    <button type="button" onClick={close} className="gh-daily-premium-cta mt-5">Continue to GreenHaven <span aria-hidden>→</span></button>
-                  </div>
-                )}
+            <header className="flex items-start justify-between gap-3 border-b border-border px-4 py-3.5">
+              <div className="min-w-0">
+                <h2 id="gh-daily-claim-title" className="text-base font-bold tracking-tight">
+                  {done ? "You claimed today’s GHC" : "Claim today’s GHC"}
+                </h2>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                  {done
+                    ? "Recorded on the durable ledger. Pending balance follows the maturity schedule."
+                    : "Check in every day to collect your GHC reward and keep your streak going. One claim per Lagos day; the server sets the amount, and pending rewards follow the 48-hour maturity schedule."}
+                </p>
               </div>
+              <button
+                type="button"
+                onClick={close}
+                disabled={claiming}
+                className="rounded-full p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-50"
+                aria-label="Close"
+              >
+                <X size={18} />
+              </button>
+            </header>
+
+            <div className="space-y-3 px-4 py-4">
+              {!done ? (
+                <>
+                  <div className="flex items-center gap-3 rounded-[1.75rem] border border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-transparent p-3.5">
+                    <div className="gh-daily-lightning-fab h-12 w-12 shrink-0 !shadow-md" aria-hidden>
+                      <Zap size={11} fill="currentColor" className="gh-daily-lightning-fab-bolt gh-daily-lightning-fab-bolt-1" />
+                      <span className="gh-daily-lightning-fab-coin">
+                        <GhcCoinIcon size={28} />
+                      </span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold">
+                        {previewAmount != null ? formatAmount(previewAmount) : "Daily GHC reward"}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {cycleDay ? `Cycle day ${cycleDay} of 7` : "Daily cycle"} · Preview — server finalizes amount
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-border/70 bg-muted/25 px-3.5 py-3">
+                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <Shield size={14} className="shrink-0 text-emerald-600" />
+                      <span>GHC daily utility · not Pi cashback · ledger-backed</span>
+                    </div>
+                    <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <Clock size={14} className="shrink-0" />
+                      <span>Pending GHC may wait ~48h before it becomes spendable</span>
+                    </div>
+                  </div>
+
+                  {error ? (
+                    <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-[12px] text-destructive" role="alert">
+                      {error}
+                    </p>
+                  ) : null}
+
+                  <button
+                    type="button"
+                    disabled={claiming || !canAttemptClaim}
+                    onClick={() => void claim()}
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 px-4 py-3.5 text-sm font-bold text-amber-950 shadow-md transition active:scale-[0.99] disabled:opacity-60"
+                  >
+                    {claiming ? (
+                      <>
+                        <span className="gh-daily-button-spinner" aria-hidden />
+                        Claiming…
+                      </>
+                    ) : (
+                      <>
+                        <GhcCoinIcon size={18} />
+                        Claim daily GHC
+                      </>
+                    )}
+                  </button>
+                </>
+              ) : (
+                <div className="space-y-3 text-center">
+                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/15">
+                    <GhcCoinIcon size={40} />
+                  </div>
+                  <p className="text-lg font-bold text-foreground">
+                    {done.alreadyClaimed ? "Already claimed today" : formatAmount(done.amount)}
+                  </p>
+                  {done.pending ? (
+                    <p className="text-[12px] text-muted-foreground">
+                      Held as pending until maturity
+                      {done.redeemableAt ? ` · available around ${formatRedeemable(done.redeemableAt)}` : ""}.
+                    </p>
+                  ) : (
+                    <p className="text-[12px] text-muted-foreground">Added to your available GHC balance.</p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={close}
+                    className="w-full rounded-2xl border border-border bg-background py-3 text-sm font-bold"
+                  >
+                    Done
+                  </button>
+                </div>
+              )}
             </div>
           </section>
-        </>
       ) : null}
-
     </>
   )
 

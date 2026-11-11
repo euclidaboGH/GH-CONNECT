@@ -44,6 +44,7 @@ import {
   Clock3,
 } from "lucide-react"
 import { FilterSummary } from "./filtering/filter-summary"
+import { FilterPanel } from "./filtering/filter-panel"
 import { FilterResultState } from "./filtering/filter-result-state"
 import { getMarketplaceDomain } from "@/lib/domains/compat"
 import {
@@ -2710,7 +2711,12 @@ export function MarketplaceScreen({
 
         
 {bucket === "browse" ? (
-          <>
+          <FilterPanel
+            title="Refine the marketplace"
+            description="Narrow listings by category, listing type, delivery, currency and date. Numeric price ranges stay currency-specific."
+            resultCount={listings.length}
+            activeCount={Number(Boolean(query.trim())) + Number(Boolean(category)) + Number(kindFilter !== "all") + Number(deliveryFilter !== "all") + Number(priceCurrency !== "all") + Number(Boolean(minPrice)) + Number(Boolean(maxPrice)) + Number(Boolean(browseFrom)) + Number(Boolean(browseTo))}
+          >
             <label className="relative block w-full">
               <span className="sr-only">Search listings</span>
               <Search
@@ -2825,7 +2831,7 @@ export function MarketplaceScreen({
               onClearAll={() => { setCategory(null); setKindFilter("all"); setDeliveryFilter("all"); setQuery(""); setMinPrice(""); setMaxPrice(""); setPriceCurrency("all"); setBrowseFrom(""); setBrowseTo("") }}
               ariaLabel="Active marketplace filters"
             />
-          </>
+          </FilterPanel>
         ) : null}
       </header>
 
@@ -3336,6 +3342,12 @@ export function MarketplaceScreen({
           />
         ) : bucket === "orders" ? (
           <div className="space-y-3">
+            <FilterPanel
+              title="Filter your orders"
+              description="Switch between purchases and sales while keeping the server-confirmed order lifecycle unchanged."
+              resultCount={orders.length}
+              activeCount={Number(orderRoleFilter !== "all")}
+            >
             <div className="flex flex-wrap items-center gap-1.5">
               {([
                 ["all", "All"],
@@ -3366,6 +3378,12 @@ export function MarketplaceScreen({
             <p className="text-[11px] text-muted-foreground">
               Track pay → fulfill → deliver → complete. Message opens the order thread when available.
             </p>
+            <FilterSummary
+              items={orderRoleFilter !== "all" ? [{ id: "role", label: `Role: ${orderRoleFilter}`, onRemove: () => setOrderRoleFilter("all") }] : []}
+              onClearAll={() => setOrderRoleFilter("all")}
+              ariaLabel="Active order filters"
+            />
+            </FilterPanel>
           {ordersLoading && orders.length === 0 ? (
             <LoadingState title="Loading orders" description="Checking the latest durable order status." />
           ) : orders.length === 0 ? (

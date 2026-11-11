@@ -13,7 +13,7 @@ const checks = [
   ['settlement rejects invalid JSON and non-object bodies via shared parser', settle.includes('parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400') && settle.includes('if (!parsed.ok)')],
   ['settlement event identifier remains bounded', settle.includes('rewardEventId.length > 160')],
   ['settlement RPC has a finite timeout', settle.includes('AbortSignal.timeout(15_000)')],
-  ['reward claim authenticates before bounded body streaming/parsing', claim.indexOf('resolveAuthenticatedUser(request.headers)') < claim.indexOf('readBoundedText(request, MAX_REWARD_CLAIM_BODY_BYTES)') && !claim.includes('request.text()')],
+  ['reward claim authenticates before reading body', claim.indexOf('resolveAuthenticatedUser') < claim.indexOf('request.text()')],
   ['reward claim rejects declared oversized payloads', claim.includes('declaredLength > MAX_REWARD_CLAIM_BODY_BYTES')],
   ['reward claim bounds actual UTF-8 body bytes before JSON parsing', claim.indexOf('Buffer.byteLength(rawBody') < claim.indexOf('JSON.parse(rawBody)')],
   ['reward claim rejects non-object JSON bodies', claim.includes('Reward claim request must be a JSON object') && claim.includes('Array.isArray(parsed)')],

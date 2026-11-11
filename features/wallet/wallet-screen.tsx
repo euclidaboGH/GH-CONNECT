@@ -70,6 +70,7 @@ import { PiCashbackSummary } from "@/components/ghc/pi-cashback-summary"
 import { UnifiedEarningsDashboard } from "@/components/ghc/unified-earnings-dashboard"
 import { PiWithdrawSheet } from "@/components/ghc/pi-withdraw-sheet"
 import { FilterSummary } from "@/components/ghc/filtering/filter-summary"
+import { FilterPanel } from "@/components/ghc/filtering/filter-panel"
 import { matchesFilterQuery } from "@/lib/filtering/filter-utils"
 import { WalletWithdrawalPinCard } from "@/components/ghc/wallet-withdrawal-pin-card"
 import { normalizePiTransactionIntent, paymentPurposeLabel, type PiTransactionProjection } from "@/lib/domains/pi-transaction-normalizer"
@@ -376,6 +377,7 @@ export function PremiumWalletScreen({ onBack, initialNotificationTarget }: { onB
     paymentId?: string
   }
   const [piIntents, setPiIntents] = useState<PiIntentRow[]>([])
+  const [piStatusFilter, setPiStatusFilter] = useState<"all" | "pending" | "completed" | "failed">("all")
   const [selectedPiIntent, setSelectedPiIntent] = useState<PiIntentRow | null>(null)
   const [piIntentsLoading, setPiIntentsLoading] = useState(false)
   const [piIntentsError, setPiIntentsError] = useState<string | null>(null)
@@ -614,10 +616,9 @@ export function PremiumWalletScreen({ onBack, initialNotificationTarget }: { onB
     const searchable = piIntents.filter((i) => {
       if (q && !matchesFilterQuery(q, i.purpose, i.productId, i.productLabel, i.referenceId, i.id, i.paymentId, i.status)) return false
       const status = String(i.status || "").toLowerCase()
-      if (txFilter === "pending" && !["created", "approval_pending", "approved", "user_submitted", "completion_pending", "incomplete"].includes(status)) return false
-      if (txFilter === "earned" && !["creator_earning", "reward_payout", "refund"].includes(String(i.purpose || "").toLowerCase())) return false
-      if (txFilter === "spent" && ["failed", "cancelled", "refunded"].includes(status)) return false
-      if (txFilter === "sent" || txFilter === "received") return false
+      if (piStatusFilter === "pending" && !["created", "approval_pending", "approved", "user_submitted", "completion_pending", "incomplete"].includes(status)) return false
+      if (piStatusFilter === "completed" && !["completed", "fulfilled"].includes(status)) return false
+      if (piStatusFilter === "failed" && !["failed", "cancelled", "rejected"].includes(status)) return false
       return true
     })
     const now = Date.now()
@@ -631,7 +632,7 @@ export function PremiumWalletScreen({ onBack, initialNotificationTarget }: { onB
             : 0
     if (startMs <= 0) return searchable
     return searchable.filter((i) => (i.createdAt || 0) >= startMs)
-  }, [piIntents, txDateRange, query, txFilter])
+  }, [piIntents, txDateRange, query, piStatusFilter])
 
   const [showRequestsPanel, setShowRequestsPanel] = useState(false)
   const [showFullHistory, setShowFullHistory] = useState(false)
@@ -1823,6 +1824,12 @@ const lowBalance = balance === 0 && displayPending === 0
               </div>
               {assetRail === "ghc" && (
               <>
+              <FilterPanel
+                title="Filter GHC activity"
+                description="Refine server-confirmed GHC utility records by direction, status, date and reference."
+                resultCount={filteredTxs.length}
+                activeCount={Number(txFilter !== "all") + Number(txDateRange !== "all") + Number(Boolean(query.trim()))}
+              >
               <section className="grid grid-cols-3 gap-2 rounded-2xl border border-border/70 bg-card p-3 shadow-sm" aria-label="Filtered GHC statement summary">
                 <div className="min-w-0">
                   <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Money in</p>
@@ -1903,6 +1910,7 @@ const lowBalance = balance === 0 && displayPending === 0
                   {filteredTxs.length} {filteredTxs.length === 1 ? "transaction" : "transactions"} shown
                 </p>
               </div>
+              </FilterPanel>
 
               {refreshing && filteredTxs.length === 0 ? (
                 <div className="space-y-2 rounded-2xl border border-border bg-card p-3" role="status" aria-label="Loading transactions">
@@ -1959,6 +1967,33 @@ const lowBalance = balance === 0 && displayPending === 0
                       </button>
                     </div>
                   </div>
+                  <FilterPanel
+                    title="Filter Pi payment records"
+                    description="Search provider references and filter by payment lifecycle. This view reads stored intents; it never retries or submits a payment."
+                    resultCount={filteredPiIntents.length}
+                    activeCount={Number(piStatusFilter !== "all") + Number(txDateRange !== "all") + Number(Boolean(query.trim()))}
+                  >
+                    <div className="flex flex-wrap gap-1.5" role="group" aria-label="Pi payment status filter">
+                      {(["all", "pending", "completed", "failed"] as const).map((status) => (
+                        <button key={status} type="button" aria-pressed={piStatusFilter === status} onClick={() => setPiStatusFilter(status)} className={`min-h-9 rounded-full px-3 text-[10px] font-bold capitalize transition ${piStatusFilter === status ? "bg-violet-700 text-white" : "border border-border bg-background text-muted-foreground hover:text-foreground"}`}>
+                          {status === "all" ? "All statuses" : status}
+                        </button>
+                      ))}
+                    </div>
+                    <label className="relative block">
+                      <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                      <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search purpose, product or provider reference…" aria-label="Search Pi payment records" className="min-h-11 w-full rounded-xl border border-border bg-background pl-9 pr-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-violet-500/40" />
+                    </label>
+                    <FilterSummary
+                      items={[
+                        ...(piStatusFilter !== "all" ? [{ id: "status", label: `Status: ${piStatusFilter}`, onRemove: () => setPiStatusFilter("all") }] : []),
+                        ...(txDateRange !== "all" ? [{ id: "date", label: `Date: ${txDateRange}`, onRemove: () => setTxDateRange("all") }] : []),
+                        ...(query.trim() ? [{ id: "query", label: `Search: ${query.trim()}`, onRemove: () => setQuery("") }] : []),
+                      ]}
+                      onClearAll={() => { setPiStatusFilter("all"); setTxDateRange("all"); setQuery("") }}
+                      ariaLabel="Active Pi payment filters"
+                    />
+                  </FilterPanel>
                   {!piIntentsLoading && !piIntentsError && serverReconciliation && (
                     <div className="rounded-2xl border border-border bg-card p-3" aria-label="Server payment reconciliation">
                       <div className="flex items-center justify-between gap-2">

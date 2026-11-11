@@ -31,6 +31,7 @@ import { isDurableMessagingEnabled } from "@/lib/messaging/durable-flag"
 import { apiTouchConversationPresence, apiEnsureConversationMember } from "@/lib/messaging/server-messaging-sync"
 import { buildRelationshipOutcome } from "@/lib/relationship-outcomes"
 import { FilterSummary } from "./filtering/filter-summary"
+import { FilterPanel } from "./filtering/filter-panel"
 import { matchesFilterQuery } from "@/lib/filtering/filter-utils"
 
 const MESSAGE_WINDOW = 40
@@ -1348,8 +1349,15 @@ export function MessageScreen() {
           </div>
         </section>
 
+        <FilterPanel
+          className="mt-3"
+          title="Refine your inbox"
+          description="Focus on direct messages, unread conversations, requests or community chats."
+          resultCount={list.length}
+          activeCount={Number(filter !== "all") + Number(Boolean(query.trim()))}
+        >
         <div
-          className="mt-2 flex gap-1 rounded-2xl border border-border/50 bg-muted/50 p-1"
+          className="flex gap-1 rounded-2xl border border-border/50 bg-muted/50 p-1"
           role="tablist"
           aria-label="Inbox filters"
           onKeyDown={(e) => {
@@ -1399,6 +1407,7 @@ export function MessageScreen() {
           onClearAll={() => { setFilter("all"); setQuery("") }}
           ariaLabel="Active message filters"
         />
+        </FilterPanel>
       </header>
 
       <div

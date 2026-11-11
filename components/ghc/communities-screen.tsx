@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { useSectionRefresh } from "@/hooks/use-section-refresh"
 import { useAccountFilterState } from "@/hooks/use-account-filter-state"
 import { FilterSummary } from "./filtering/filter-summary"
+import { FilterPanel } from "./filtering/filter-panel"
 import { FilterResultState } from "./filtering/filter-result-state"
 import { matchesFilterQuery } from "@/lib/filtering/filter-utils"
 import {
@@ -1305,7 +1306,12 @@ export function CommunitiesScreen() {
           </div>
         }
         secondary={
-          <>
+          <FilterPanel
+            title="Explore communities"
+            description="Search your spaces or discover communities by topic, access and activity."
+            resultCount={visibleGroups.length}
+            activeCount={Number(Boolean(searchQuery.trim())) + Number(directory === "discover" && categoryFilter !== "all") + Number(directory === "discover" && privacyFilter !== "all") + Number(directory === "my" && communityAttentionFilter !== "all")}
+          >
             <div className="relative">
               <Search
                 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
@@ -1439,7 +1445,7 @@ export function CommunitiesScreen() {
                 </label>
               </div>
             )}
-          </>
+          </FilterPanel>
         }
       />
 

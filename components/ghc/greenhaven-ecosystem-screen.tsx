@@ -30,19 +30,16 @@ import {
 } from "lucide-react"
 import { PiSupporterBadge, PiStakingStatusNote } from "@/components/ghc/pi-supporter-badge"
 import { PiPlatformCapabilitiesCard } from "@/components/ghc/pi-platform-capabilities-card"
-import { FilterSummary } from "@/components/ghc/filtering/filter-summary"
 import { openService } from "@/lib/navigation/navigate"
 import { getServiceUpgradePlan } from "@/lib/navigation/service-upgrade-plan"
 import {
   SERVICE_CATEGORIES,
-  ECOSYSTEM_SERVICES,
   getFeaturedServices,
   searchServices,
   getServiceById,
   isInteractiveStatus,
   type EcosystemService,
   type ServiceStatus,
-  type ServiceCategoryId,
 } from "@/lib/navigation/service-registry"
 
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -260,9 +257,6 @@ export function GreenHavenEcosystemScreen({
   initialFocus?: string | null
 }) {
   const [query, setQuery] = useState("")
-  const [categoryFilter, setCategoryFilter] = useState<ServiceCategoryId | "all">("all")
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "coming-soon">("all")
-  const [sortOrder, setSortOrder] = useState<"featured" | "alphabetical">("featured")
   const [focusId, setFocusId] = useState<string | null>(initialFocus || null)
   const [detailService, setDetailService] = useState<EcosystemService | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
@@ -291,32 +285,13 @@ export function GreenHavenEcosystemScreen({
   }, [focusId, query])
 
   const featured = useMemo(() => getFeaturedServices(), [])
-  const serviceCounts = useMemo(() => ({
-    all: ECOSYSTEM_SERVICES.length,
-    active: ECOSYSTEM_SERVICES.filter((service) => service.status === "ACTIVE" || service.status === "BETA").length,
-    comingSoon: ECOSYSTEM_SERVICES.filter((service) => service.status === "COMING_SOON").length,
-  }), [])
-  const filtered = useMemo(() => {
-    let services = searchServices(query)
-    if (categoryFilter !== "all") services = services.filter((service) => service.category === categoryFilter)
-    if (statusFilter === "active") services = services.filter((service) => service.status === "ACTIVE" || service.status === "BETA")
-    if (statusFilter === "coming-soon") services = services.filter((service) => service.status === "COMING_SOON")
-    if (sortOrder === "alphabetical") services = [...services].sort((a, b) => a.title.localeCompare(b.title))
-    return services
-  }, [query, categoryFilter, statusFilter, sortOrder])
+  const filtered = useMemo(() => searchServices(query), [query])
   const isSearching = Boolean(query.trim())
-  const hasFilters = isSearching || categoryFilter !== "all" || statusFilter !== "all" || sortOrder !== "featured"
-  const clearDirectoryFilters = useCallback(() => {
-    setQuery("")
-    setCategoryFilter("all")
-    setStatusFilter("all")
-    setSortOrder("featured")
-  }, [])
 
   const categoriesWithServices = useMemo(() => {
     // When not searching, omit Featured entries from category grids to avoid duplicates
     const featuredIds = new Set(
-      hasFilters ? [] : featured.map((s) => s.id)
+      isSearching ? [] : featured.map((s) => s.id)
     )
     return SERVICE_CATEGORIES.map((cat) => ({
       ...cat,
@@ -324,7 +299,7 @@ export function GreenHavenEcosystemScreen({
         (s) => s.category === cat.id && !featuredIds.has(s.id)
       ),
     })).filter((c) => c.services.length > 0)
-  }, [filtered, featured, hasFilters])
+  }, [filtered, featured, isSearching])
 
   const handleSelect = useCallback((service: EcosystemService) => {
     if (isInteractiveStatus(service.status)) {
@@ -372,39 +347,11 @@ export function GreenHavenEcosystemScreen({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search services"
-            maxLength={160}
             className="h-11 w-full min-w-0 rounded-xl border border-border/70 bg-muted/40 pl-9 pr-3 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             autoComplete="off"
             enterKeyHint="search"
           />
         </label>
-        <div className="flex min-w-0 flex-wrap items-center gap-2 pt-1">
-          <label className="min-w-0 flex-1 sm:flex-none">
-            <span className="sr-only">Filter by category</span>
-            <select
-              value={categoryFilter}
-              onChange={(event) => setCategoryFilter(event.target.value as ServiceCategoryId | "all")}
-              className="h-10 w-full min-w-[9.5rem] rounded-xl border border-border/70 bg-card px-3 text-xs font-semibold text-foreground outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            >
-              <option value="all">All categories</option>
-              {SERVICE_CATEGORIES.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}
-            </select>
-          </label>
-          <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto rounded-xl bg-muted/60 p-1 sm:flex-none" role="group" aria-label="Filter services by availability">
-            {([ ["all", `All ${serviceCounts.all}`], ["active", `Available ${serviceCounts.active}`], ["coming-soon", `Coming soon ${serviceCounts.comingSoon}`] ] as const).map(([value, label]) => (
-              <button key={value} type="button" aria-pressed={statusFilter === value} onClick={() => setStatusFilter(value)} className={`min-h-8 shrink-0 rounded-lg px-3 text-[11px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${statusFilter === value ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-                {label}
-              </button>
-            ))}
-          </div>
-          <label className="ml-auto min-w-0">
-            <span className="sr-only">Sort services</span>
-            <select value={sortOrder} onChange={(event) => setSortOrder(event.target.value as "featured" | "alphabetical")} className="h-10 w-full rounded-xl border border-border/70 bg-card px-3 text-xs font-semibold text-foreground outline-none focus-visible:ring-2 focus-visible:ring-primary">
-              <option value="featured">Featured order</option>
-              <option value="alphabetical">A–Z</option>
-            </select>
-          </label>
-        </div>
       </header>
 
       <div
@@ -434,23 +381,7 @@ export function GreenHavenEcosystemScreen({
           </div>
         </section>
 
-        <div className="mx-3 mt-3 min-[640px]:mx-4">
-          <FilterSummary
-            items={[
-              ...(query.trim() ? [{ id: "query", label: `Search: ${query.trim()}`, onRemove: () => setQuery("") }] : []),
-              ...(categoryFilter !== "all" ? [{ id: "category", label: `Category: ${SERVICE_CATEGORIES.find((category) => category.id === categoryFilter)?.label || categoryFilter}`, onRemove: () => setCategoryFilter("all") }] : []),
-              ...(statusFilter !== "all" ? [{ id: "status", label: statusFilter === "active" ? "Available services" : "Coming soon", onRemove: () => setStatusFilter("all") }] : []),
-              ...(sortOrder !== "featured" ? [{ id: "sort", label: "A–Z order", onRemove: () => setSortOrder("featured") }] : []),
-            ]}
-            onClearAll={clearDirectoryFilters}
-            ariaLabel="Active ecosystem directory filters"
-          />
-          <p className="mt-2 px-1 text-[11px] text-muted-foreground" role="status" aria-live="polite">
-            Showing <strong className="font-bold text-foreground tabular-nums">{filtered.length}</strong> of {serviceCounts.all} services across {SERVICE_CATEGORIES.length} categories
-          </p>
-        </div>
-
-        {!hasFilters ? (
+        {!isSearching ? (
           <section className="mt-4 px-3 min-[640px]:px-4" aria-label="Featured services">
             <p className="mb-2 mt-1 px-0.5 text-[12px] font-bold tracking-wide text-foreground">
               Featured
@@ -469,6 +400,12 @@ export function GreenHavenEcosystemScreen({
         ) : null}
 
         <div className="mt-5 space-y-5 px-3 pb-6 min-[640px]:px-4">
+          {isSearching ? (
+            <p className="text-[11px] text-muted-foreground" role="status">
+              {filtered.length} result{filtered.length === 1 ? "" : "s"} for “{query.trim()}”
+            </p>
+          ) : null}
+
           {categoriesWithServices.map((cat) => (
             <section key={cat.id} aria-labelledby={`eco-cat-${cat.id}`}>
               <h2
@@ -498,14 +435,14 @@ export function GreenHavenEcosystemScreen({
               <Search size={22} className="text-muted-foreground" aria-hidden />
               <p className="text-[13px] font-semibold text-foreground">No services found</p>
               <p className="max-w-xs text-[12px] text-muted-foreground">
-                No services match the current search and filter combination. Remove a filter or reset the directory to see more services.
+                Nothing matches “{query.trim()}”. Try Marketplace, Wallet, Community, or Education.
               </p>
               <button
                 type="button"
-                onClick={clearDirectoryFilters}
+                onClick={() => setQuery("")}
                 className="mt-2 min-h-11 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
-                Clear filters
+                Clear search
               </button>
             </div>
           ) : null}

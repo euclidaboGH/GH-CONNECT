@@ -563,30 +563,16 @@ export function categoryLabel(id: ServiceCategoryId): string {
 }
 
 /** Local-first search: title, description, keywords, category label */
-function normalizeServiceSearchText(value: unknown): string {
-  return String(value ?? "")
-    .normalize("NFKC")
-    .toLocaleLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-}
-
-/** Local-first token search across canonical service metadata; all tokens must match. */
 export function searchServices(query: string): EcosystemService[] {
-  const normalizedQuery = normalizeServiceSearchText(query).slice(0, 160)
-  if (!normalizedQuery) return [...ECOSYSTEM_SERVICES]
-  const tokens = normalizedQuery.split(" ").filter(Boolean)
-  return ECOSYSTEM_SERVICES.filter((service) => {
-    const haystack = normalizeServiceSearchText([
-      service.title,
-      service.description,
-      ...service.keywords,
-      categoryLabel(service.category),
-      service.status.replace(/_/g, " "),
-    ].join(" "))
-    return tokens.every((token) => haystack.includes(token))
+  const q = query.trim().toLowerCase()
+  if (!q) return [...ECOSYSTEM_SERVICES]
+  return ECOSYSTEM_SERVICES.filter((s) => {
+    if (s.title.toLowerCase().includes(q)) return true
+    if (s.description.toLowerCase().includes(q)) return true
+    if (s.keywords.some((k) => k.includes(q) || q.includes(k))) return true
+    if (categoryLabel(s.category).toLowerCase().includes(q)) return true
+    if (s.status.toLowerCase().replace(/_/g, " ").includes(q)) return true
+    return false
   })
 }
 

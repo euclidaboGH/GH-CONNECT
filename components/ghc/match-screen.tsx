@@ -37,6 +37,8 @@ import { MATCH_CLARITY } from "@/lib/discovery/match-clarity"
 import { useScrollHeader } from "@/lib/use-scroll-header"
 import { CollapsingAppHeader } from "./collapsing-app-header"
 import { PremiumSurfaceActions } from "./premium-surface-actions"
+import { FilterPanel } from "./filtering/filter-panel"
+import { FilterSummary } from "./filtering/filter-summary"
 
 export function MatchScreen() {
   useSectionRefresh("discover", () => {
@@ -354,7 +356,12 @@ export function MatchScreen() {
           </div>
         }
         secondary={
-          <div className="space-y-2">
+          <FilterPanel
+            title="Refine your matches"
+            description="Explore recent matches, mutual interest and the intentions you share."
+            resultCount={activeTab === "likes_you" ? likesYouRows.length : displayMatches.length}
+            activeCount={Number(intentionFilter !== "all")}
+          >
             <MatchTabs
               activeTab={activeTab}
               onTabChange={setActiveTab}
@@ -367,6 +374,11 @@ export function MatchScreen() {
               onChange={setIntentionFilter}
               counts={intentionCounts}
             />
+            <FilterSummary
+              items={intentionFilter !== "all" ? [{ id: "intention", label: `Intent: ${intentionFilter}`, onRemove: () => setIntentionFilter("all") }] : []}
+              onClearAll={() => setIntentionFilter("all")}
+              ariaLabel="Active match filters"
+            />
             <p className="text-[12px] leading-relaxed text-stone-600">
               A Match is mutual interest — not automatic friendship or a compatibility score. Follow and Connect are different.
             </p>
@@ -377,7 +389,7 @@ export function MatchScreen() {
             >
               Connection requests inbox
             </button>
-          </div>
+          </FilterPanel>
         }
       />
 

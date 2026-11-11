@@ -7,7 +7,7 @@ import { DurableImage } from "./durable-image"
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Check, X, User, ArrowLeft, Inbox } from "lucide-react"
+import { Check, X, User, ArrowLeft, Inbox, Search } from "lucide-react"
 import { IdentityService } from "@/lib/identity/identity-service"
 import { useGHC } from "@/contexts/ghc-context"
 import {
@@ -19,6 +19,9 @@ import {
   declineUnifiedConnectionRequest,
 } from "@/lib/domains/adapters/unified-connection-request"
 import { timeAgo } from "@/lib/ghc-data"
+import { matchesFilterQuery } from "@/lib/filtering/filter-utils"
+import { FilterSummary } from "./filtering/filter-summary"
+import { FilterPanel } from "./filtering/filter-panel"
 
 type Props = {
   onClose?: () => void
@@ -134,6 +137,7 @@ export function ConnectionRequestInbox({ onClose, initialTab = "incoming" }: Pro
     blockedUsers?: string[]
   }
   const [tab, setTab] = useState<"incoming" | "outgoing">(initialTab)
+  const [query, setQuery] = useState("")
   const [busyId, setBusyId] = useState<string | null>(null)
   const [tick, setTick] = useState<number>(0)
   const [durableAvailable, setDurableAvailable] = useState(false)
@@ -233,12 +237,14 @@ export function ConnectionRequestInbox({ onClose, initialTab = "incoming" }: Pro
     [candMap]
   )
 
-  const filteredIncoming = inbox.incoming.filter(
-    (i) => !blocked.has(i.fromUserId)
-  )
-  const filteredOutgoing = inbox.outgoing.filter(
-    (i) => !blocked.has(i.toUserId)
-  )
+  const filteredIncoming = inbox.incoming.filter((i) => !blocked.has(i.fromUserId)).filter((i) => {
+    const person = candMap.get(i.fromUserId)
+    return matchesFilterQuery(query, person?.name, i.note, ...(i.intentLabels || []), ...(i.intents || []))
+  })
+  const filteredOutgoing = inbox.outgoing.filter((i) => !blocked.has(i.toUserId)).filter((i) => {
+    const person = candMap.get(i.toUserId)
+    return matchesFilterQuery(query, person?.name, i.note, ...(i.intentLabels || []), ...(i.intents || []))
+  })
 
   const onAccept = async (fromUserId: string) => {
     setBusyId(fromUserId)
@@ -316,7 +322,18 @@ export function ConnectionRequestInbox({ onClose, initialTab = "incoming" }: Pro
         <Inbox size={18} className="text-teal-600" aria-hidden />
       </header>
 
-      <div className="flex gap-1 border-b border-border/50 px-3 py-2" role="tablist">
+      <div className="px-3 pt-3">
+      <FilterPanel
+        title="Filter connection requests"
+        description="Search by member name, shared intent or note, then switch between incoming and outgoing."
+        resultCount={list.length}
+        activeCount={Number(Boolean(query.trim())) + Number(tab !== initialTab)}
+      >
+      <label className="relative block">
+        <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden />
+        <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search people or intent…" aria-label="Search connection requests" className="min-h-11 w-full rounded-xl border border-border bg-background pl-9 pr-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-primary/40" />
+      </label>
+      <div className="flex gap-1 rounded-xl border border-border/50 bg-muted/50 p-1" role="tablist" aria-label="Request direction">
         <button
           type="button"
           role="tab"
@@ -344,17 +361,29 @@ export function ConnectionRequestInbox({ onClose, initialTab = "incoming" }: Pro
           Outgoing ({filteredOutgoing.length})
         </button>
       </div>
+      <FilterSummary
+        items={[
+          ...(query.trim() ? [{ id: "query", label: `Search: ${query.trim()}`, onRemove: () => setQuery("") }] : []),
+          ...(tab !== initialTab ? [{ id: "direction", label: `Direction: ${tab}`, onRemove: () => setTab(initialTab) }] : []),
+        ]}
+        onClearAll={() => { setQuery(""); setTab(initialTab) }}
+        ariaLabel="Active connection request filters"
+      />
+      </FilterPanel>
+      </div>
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3 pb-24">
         {list.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border px-4 py-10 text-center">
             <p className="text-sm font-semibold text-foreground">
-              {tab === "incoming" ? "No incoming requests" : "No outgoing requests"}
+              {query.trim() ? "No matching requests" : tab === "incoming" ? "No incoming requests" : "No outgoing requests"}
             </p>
             <p className="mt-1 text-[12px] text-muted-foreground">
-              {tab === "incoming"
-                ? "When someone sends a connection request, it appears here."
-                : "Requests you send will show here until they respond."}
+              {query.trim()
+                ? "Try a different name, intent or note, or clear your search."
+                : tab === "incoming"
+                  ? "When someone sends a connection request, it appears here."
+                  : "Requests you send will show here until they respond."}
             </p>
           </div>
         ) : (

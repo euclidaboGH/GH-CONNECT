@@ -43,11 +43,11 @@ import { getProductMessage } from "@/lib/i18n/product"
 import { useSectionRefresh } from "@/hooks/use-section-refresh"
 import { useAccountFilterState } from "@/hooks/use-account-filter-state"
 import { FilterSummary } from "./filtering/filter-summary"
+import { FilterPanel } from "./filtering/filter-panel"
 import { FilterResultState } from "./filtering/filter-result-state"
 import { matchesFilterQuery } from "@/lib/filtering/filter-utils"
 import { matchesFilterDateRange } from "@/lib/filtering/filter-contract"
 import { RewardsJourneyHero } from "./rewards-journey-hero"
-import { DailyRewardFeedCard } from "./daily-reward-experience"
 import { PiCashbackSummary } from "./pi-cashback-summary"
 import { RegistrationBonusCard } from "./registration-bonus-card"
 import { SurfaceIntro } from "./ui/product-surface"
@@ -823,15 +823,6 @@ const claimPendingReward = useCallback(
           onOpenWallet={onOpenWallet}
         />
 
-        <div className="mx-3 mt-3">
-          <DailyRewardFeedCard
-            refreshKey={tick}
-            onOpenFull={() => {
-              try { window.dispatchEvent(new CustomEvent("ghc:open-daily-claim")) } catch { /* browser event only */ }
-            }}
-          />
-        </div>
-
         <section className="mx-3 mt-3 rounded-[1.25rem] border border-border/60 bg-card px-3.5 py-3 shadow-sm" aria-labelledby="rewards-balance-summary-title">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -888,7 +879,7 @@ const claimPendingReward = useCallback(
 
         <div className="mx-3 mt-3 rounded-2xl border border-border/60 bg-card/80 px-3.5 py-3 text-[11px] leading-relaxed text-muted-foreground">
           <p className="font-semibold text-foreground">Two different rewards</p>
-          <p className="mt-1"><span className="font-semibold text-emerald-800 dark:text-emerald-300">GHC daily</span> — in-app utility, claim once per Lagos day from the Daily Reward card or check-in shortcut.</p>
+          <p className="mt-1"><span className="font-semibold text-emerald-800 dark:text-emerald-300">GHC daily</span> — in-app utility, claim once per Lagos day from the feed pill.</p>
           <p className="mt-0.5"><span className="font-semibold text-sky-800 dark:text-sky-300">PI cashback</span> — 0.5% of eligible Pi spend, calculated quarterly (not the daily claim).</p>
         </div>
         <SurfaceIntro
@@ -1218,6 +1209,12 @@ const claimPendingReward = useCallback(
 
           {tab === "history" && (
             <>
+              <FilterPanel
+                title="Filter reward history"
+                description="Search server-confirmed reward entries by source, status and date. Results remain read-only and ledger-authoritative."
+                resultCount={filteredServerRewardTransactions.length}
+                activeCount={Number(Boolean(historyQuery.trim())) + Number(historyStatus !== "all") + Number(Boolean(historyFrom)) + Number(Boolean(historyTo))}
+              >
               <div className="rounded-[1.25rem] border border-border/60 bg-card p-3 shadow-[var(--gh-card-shadow)]">
                 <label htmlFor="rewards-history-search" className="mb-1.5 block text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Search reward ledger</label>
                 <div className="flex items-center gap-2 rounded-xl border border-border bg-background px-3">
@@ -1239,9 +1236,10 @@ const claimPendingReward = useCallback(
                   ...(historyStatus !== "all" ? [{ id: "status", label: `Status: ${historyStatus}`, onRemove: () => setHistoryStatus("all") }] : []),
                   ...(historyFrom ? [{ id: "from", label: `From: ${historyFrom}`, onRemove: () => setHistoryFrom("") }] : []),
                   ...(historyTo ? [{ id: "to", label: `To: ${historyTo}`, onRemove: () => setHistoryTo("") }] : []),
-                ]} onClearAll={() => { setHistoryQuery(""); setHistoryStatus("all"); setHistoryFrom(""); setHistoryTo("") }} />
+                ]} onClearAll={() => { setHistoryQuery(""); setHistoryStatus("all"); setHistoryFrom(""); setHistoryTo("") }} ariaLabel="Active reward filters" />
                 <p className="mt-2 text-[10px] text-muted-foreground" role="status" aria-live="polite">{serverHistoryStatus === "ready" ? `${filteredServerRewardTransactions.length} server ledger entr${filteredServerRewardTransactions.length === 1 ? "y" : "ies"} loaded · newest first${serverHistoryHasMore ? " · older entries available" : ""}` : serverHistoryStatus === "loading_more" ? `Loading older ledger entries · ${filteredServerRewardTransactions.length} already loaded` : serverHistoryStatus === "loading" ? "Synchronizing account ledger…" : serverRewardTransactions !== null ? `Could not refresh ledger · showing ${filteredServerRewardTransactions.length} previously loaded server entr${filteredServerRewardTransactions.length === 1 ? "y" : "ies"}` : "Server ledger unavailable · showing local activity only where available"}</p>
               </div>
+              </FilterPanel>
               {serverRewardTransactions === null && serverHistoryStatus === "loading" ? <FilterResultState state="loading" description="Synchronizing your server-confirmed reward ledger…" /> : null}
               {serverRewardTransactions === null && serverHistoryStatus === "unavailable" ? <FilterResultState state="error" title="Reward ledger unavailable" description="The server-confirmed ledger could not be loaded. Your wallet balance remains separate from this history view." onRetry={() => setTick((value) => value + 1)} /> : null}
               {serverRewardTransactions !== null ? (

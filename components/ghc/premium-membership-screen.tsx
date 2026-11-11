@@ -16,6 +16,7 @@ import {
   ImageIcon,
   Headphones,
   BadgeCheck,
+  Search,
 } from "lucide-react"
 import { GhcCoinIcon } from "./ghc-coin-icon"
 import { getBoundDomainServices } from "@/lib/domains/compat"
@@ -31,6 +32,9 @@ import { isPiPaymentsAvailable } from "@/lib/gh-pay"
 import { runGhPayMembership } from "@/components/ghc/gh-pay-panel"
 import { SurfaceIntro } from "@/components/ghc/ui/product-surface"
 import { notificationSystem } from "@/lib/notifications"
+import { FilterPanel } from "@/components/ghc/filtering/filter-panel"
+import { FilterSummary } from "@/components/ghc/filtering/filter-summary"
+import { matchesFilterQuery } from "@/lib/filtering/filter-utils"
 
 function emitMembershipActivated(tier: string, method: "pi" | "ghc") {
   try {
@@ -268,6 +272,8 @@ function EntitlementIcon({ name }: { name?: string }) {
 export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
   const { addToast } = useGHC()
   const [period, setPeriod] = useState<PaidMembershipMonths>(1)
+  const [planSearch, setPlanSearch] = useState("")
+  const [planTierFilter, setPlanTierFilter] = useState<"all" | MembershipTierId>("all")
   /** Method-scoped busy — never spin both Pi and GHC from one flag */
   const [busy, setBusy] = useState<{
     tier: MembershipTierId
@@ -365,6 +371,11 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
   const compareCategories = ["All", ...Array.from(new Set(compareRows.map((row) => row.category)))]
   const visibleCompareRows = compareCategory === "All" ? compareRows : compareRows.filter((row) => row.category === compareCategory)
   const canPurchaseTier = (tier: MembershipTierId) => membershipAuthorityReady && tier !== "free" && TIER_RANK[tier] > TIER_RANK[currentTier]
+  const visiblePlanTiers = TIER_ORDER.filter((tier) => {
+    if (planTierFilter !== "all" && tier !== planTierFilter) return false
+    const plan = MEMBERSHIP_PLANS[tier]
+    return matchesFilterQuery(planSearch, plan.label, tier, ...plan.entitlements.map((key) => ENTITLEMENT_META[key]?.label || key))
+  })
   // Display authority: paid status is never inferred from local cache.
   const authoritativeStatus = membershipAuthorityReady ? serverStatus : null
   const mapEntitlementToStatus = (
@@ -1182,10 +1193,37 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
         ) : (
           /* Full-width vertical stack — every plan scrolls with the page (no clipped horizontal cards) */
           <div className="flex flex-col gap-4">
+            <FilterPanel
+              title="Explore membership tiers"
+              description="Find a plan by tier or benefit. This only filters the comparison view; it never changes your active entitlements or purchase eligibility."
+              resultCount={visiblePlanTiers.length}
+              activeCount={Number(planTierFilter !== "all") + Number(Boolean(planSearch.trim()))}
+            >
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Membership tier filter">
+                {(["all", ...TIER_ORDER] as const).map((tier) => (
+                  <button key={tier} type="button" aria-pressed={planTierFilter === tier} onClick={() => setPlanTierFilter(tier)} className={`min-h-9 rounded-full px-3 text-[10px] font-bold transition ${planTierFilter === tier ? "bg-emerald-700 text-white" : "border border-border bg-background text-muted-foreground hover:text-foreground"}`}>
+                    {tier === "all" ? "All tiers" : MEMBERSHIP_PLANS[tier].label}
+                  </button>
+                ))}
+              </div>
+              <label className="relative block">
+                <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                <input type="search" value={planSearch} onChange={(event) => setPlanSearch(event.target.value)} placeholder="Search benefits, tools or tier…" aria-label="Search membership plans and benefits" className="min-h-11 w-full rounded-xl border border-border bg-background pl-9 pr-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-emerald-600/40" />
+              </label>
+              <FilterSummary
+                items={[
+                  ...(planTierFilter !== "all" ? [{ id: "tier", label: `Tier: ${MEMBERSHIP_PLANS[planTierFilter].label}`, onRemove: () => setPlanTierFilter("all") }] : []),
+                  ...(planSearch.trim() ? [{ id: "search", label: `Search: ${planSearch.trim()}`, onRemove: () => setPlanSearch("") }] : []),
+                ]}
+                onClearAll={() => { setPlanTierFilter("all"); setPlanSearch("") }}
+                ariaLabel="Active membership filters"
+              />
+            </FilterPanel>
             <p className="px-1 text-[11px] text-muted-foreground">
-              Scroll down to review Free, VIP and VVIP. All benefits are fully visible.
+              Scroll down to review the matching plans. All benefits are fully visible.
             </p>
-            {TIER_ORDER.map((tier) => {
+            {visiblePlanTiers.length === 0 ? <p className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">No membership tier matches those filters. Clear the search or choose another tier.</p> : null}
+            {visiblePlanTiers.map((tier) => {
               const plan = MEMBERSHIP_PLANS[tier]
               const isCurrent = membershipAuthorityReady && currentTier === tier
               const price = tier === "free" ? 0 : getMembershipGhcPrice(tier, period).chargeGhc
