@@ -7,7 +7,7 @@ import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { socialDbConfigured, socialRest, socialRpc } from "@/lib/server/social/rpc"
-import { emitSocialNotification, lookupPostAuthor } from "@/lib/server/social/notifications"
+import { emitSocialNotification, lookupCommentThreadParticipants, lookupPostAuthor, lookupPostListingId } from "@/lib/server/social/notifications"
 import { getServerProfile } from "@/lib/server/identity/profile-store"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { nonDurableWriteResponse } from "@/lib/server/production-guard"
@@ -211,38 +211,36 @@ export async function POST(
       p_metadata: { postId, parentId: comment.parentId },
     }).catch(() => null)
 
-    const postAuthorId = await lookupPostAuthor(postId)
-    let replyRecipientId: string | null = null
-    if (comment.parentId) {
-      const env = readGhcServerEnv()
-      if (env.supabaseUrl && env.supabaseServiceRoleKey) {
-        try {
-          const u = new URL(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_post_comments`)
-          u.searchParams.set("id", `eq.${String(comment.parentId)}`)
-          u.searchParams.set("post_id", `eq.${postId}`)
-          u.searchParams.set("deleted_at", "is.null")
-          u.searchParams.set("select", "author_id")
-          u.searchParams.set("limit", "1")
-          const r = await fetch(u.toString(), { headers: { apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}` }, cache: "no-store" })
-          const rows = await r.json().catch(() => []) as Array<{ author_id?: string }>
-          replyRecipientId = rows[0]?.author_id ? String(rows[0].author_id) : null
-        } catch { /* notification lookup must not fail comment creation */ }
-      }
+    const [postAuthorId, listingId, participants] = await Promise.all([
+      lookupPostAuthor(postId),
+      lookupPostListingId(postId),
+      lookupCommentThreadParticipants(postId, comment.parentId ? String(comment.parentId) : null, auth.userId),
+    ])
+    const recipientIds = new Set<string>(participants.userIds)
+    if (postAuthorId && postAuthorId !== auth.userId) recipientIds.add(postAuthorId)
+    const isReply = Boolean(comment.parentId)
+    const deepLink = {
+      open: "feed", tab: "home", section: "comments", postId, commentId: comment.id,
+      parentId: comment.parentId || undefined, threadRootId: participants.threadRootId,
     }
-    const primaryRecipient = comment.parentId ? replyRecipientId : postAuthorId
-    if (primaryRecipient && primaryRecipient !== auth.userId) {
-      await emitSocialNotification({ recipientUserId: primaryRecipient, actorUserId: auth.userId,
-        type: comment.parentId ? "comment_reply" : "post_comment", entityType: "comment", entityId: comment.id,
-        title: comment.parentId ? "New reply" : "New comment",
-        body: comment.parentId ? "Someone replied to your comment" : "Someone commented on your post",
-        dedupeKey: `comment:${comment.id}:${primaryRecipient}`, metadata: { postId, commentId: comment.id, parentId: comment.parentId } })
-    }
-    // A reply also matters to the post author, unless they are actor/parent recipient.
-    if (comment.parentId && postAuthorId && postAuthorId !== auth.userId && postAuthorId !== primaryRecipient) {
-      await emitSocialNotification({ recipientUserId: postAuthorId, actorUserId: auth.userId, type: "post_comment",
-        entityType: "comment", entityId: comment.id, title: "New comment activity", body: "A conversation continued on your post",
-        dedupeKey: `post-comment:${comment.id}:${postAuthorId}`, metadata: { postId, commentId: comment.id } })
-    }
+    await Promise.all(Array.from(recipientIds).map((recipientUserId) => emitSocialNotification({
+      recipientUserId,
+      actorUserId: auth.userId,
+      type: isReply ? "comment_reply" : "post_comment",
+      entityType: "comment",
+      entityId: comment.id,
+      title: isReply ? "New reply" : "New comment",
+      body: isReply ? "Someone replied in a conversation you’re part of" : "Someone commented on a post you’re part of",
+      dedupeKey: `comment:${comment.id}:${recipientUserId}`,
+      metadata: {
+        postId,
+        commentId: comment.id,
+        parentId: comment.parentId,
+        threadRootId: participants.threadRootId,
+        listingId: listingId || undefined,
+        deepLink,
+      },
+    })))
 
     const handles = Array.from(new Set((String(comment.text || "").match(/@([a-zA-Z0-9_]{2,32})/g) || []).map(m => m.slice(1).toLowerCase()))).slice(0, 5)
     if (!handles.length) return

@@ -1910,8 +1910,9 @@ function SellerFulfilmentControls({
   return null
 }
 
-function OrderTimelinePanel({ orderId }: { orderId: string }) {
-  const [open, setOpen] = useState(false)
+function OrderTimelinePanel({ orderId, initialOpen = false, focusAt, focusAction }: { orderId: string; initialOpen?: boolean; focusAt?: number | null; focusAction?: string | null }) {
+  const [open, setOpen] = useState(initialOpen)
+  useEffect(() => { if (initialOpen) setOpen(true) }, [initialOpen])
   const [events, setEvents] = useState<Array<{ id: number; actorRole: string; eventType: string; note?: string; createdAt: number }>>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -1926,13 +1927,26 @@ function OrderTimelinePanel({ orderId }: { orderId: string }) {
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [open, orderId])
+  useEffect(() => {
+    if (!initialOpen || !open || loading || events.length === 0) return
+    const action = String(focusAction || "").toLowerCase()
+    const actionMatches = action ? events.filter((event) => String(event.eventType || "").toLowerCase() === action) : []
+    const candidates = actionMatches.length ? actionMatches : events
+    const target = typeof focusAt === "number" && Number.isFinite(focusAt)
+      ? candidates.reduce((best, event) => Math.abs(event.createdAt - focusAt) < Math.abs(best.createdAt - focusAt) ? event : best, candidates[0])
+      : candidates.reduce((best, event) => event.createdAt > best.createdAt ? event : best, candidates[0])
+    const timer = window.setTimeout(() => {
+      document.querySelector(`[data-order-event-id="${CSS.escape(String(target.id))}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" })
+    }, 120)
+    return () => window.clearTimeout(timer)
+  }, [initialOpen, open, loading, events, focusAt, focusAction])
   return <div className="mt-3 border-t border-border/50 pt-2">
     <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)} className="min-h-8 text-[11px] font-bold text-emerald-700 dark:text-emerald-300">{open ? "Hide order activity" : "View order activity"}</button>
     {open ? <div className="mt-2 space-y-2">
       {loading ? <p className="text-[11px] text-muted-foreground">Loading verified order events…</p> : null}
       {error ? <p role="alert" className="text-[11px] text-amber-700">{error}</p> : null}
       {!loading && !error && events.length === 0 ? <p className="text-[11px] text-muted-foreground">No recorded order events yet.</p> : null}
-      {events.map((event) => <div key={event.id} className="flex gap-2 text-[11px]"><span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-emerald-600"/><div><p className="font-semibold">{event.eventType.replace(/_/g, " ")} · {event.actorRole}</p>{event.note ? <p className="text-muted-foreground">{event.note}</p> : null}<p className="text-[10px] text-muted-foreground">{event.createdAt ? new Date(event.createdAt).toLocaleString() : "Time unavailable"}</p></div></div>)}
+      {events.map((event) => <div key={event.id} data-order-event-id={event.id} className="flex gap-2 text-[11px]"><span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-emerald-600"/><div><p className="font-semibold">{event.eventType.replace(/_/g, " ")} · {event.actorRole}</p>{event.note ? <p className="text-muted-foreground">{event.note}</p> : null}<p className="text-[10px] text-muted-foreground">{event.createdAt ? new Date(event.createdAt).toLocaleString() : "Time unavailable"}</p></div></div>)}
     </div> : null}
   </div>
 }
@@ -1961,9 +1975,15 @@ function validateMarketplaceBrowseFilters(value: unknown): MarketplaceBrowseFilt
 export function MarketplaceScreen({
   onBack,
   initialListingId,
+  initialOrderId,
+  initialResponseAt,
+  initialResponseAction,
 }: {
   onBack: () => void
   initialListingId?: string | null
+  initialOrderId?: string | null
+  initialResponseAt?: number | null
+  initialResponseAction?: string | null
 }) {
   const regional = useRegionalContext()
   const msg = useCallback((key: Parameters<typeof getProductMessage>[0]) => getProductMessage(key, regional.locale), [regional.locale])
@@ -2021,6 +2041,9 @@ export function MarketplaceScreen({
   const [ordersLoading, setOrdersLoading] = useState(false)
   const [orderBusy, setOrderBusy] = useState<string | null>(null)
   const [orderRoleFilter, setOrderRoleFilter] = useState<"all" | "buying" | "selling">("all")
+  const [focusedOrderId, setFocusedOrderId] = useState<string | null>(initialOrderId || null)
+  const [focusedResponseAt, setFocusedResponseAt] = useState<number | null>(initialResponseAt || null)
+  const [focusedResponseAction, setFocusedResponseAction] = useState<string | null>(initialResponseAction || null)
   const [reviewDraftOrderId, setReviewDraftOrderId] = useState<string | null>(null)
   const [reviewRating, setReviewRating] = useState(5)
   const [reviewText, setReviewText] = useState("")
@@ -2368,6 +2391,15 @@ export function MarketplaceScreen({
     return [...list].sort((a, b) => (Number(b.updatedAt || b.createdAt) || 0) - (Number(a.updatedAt || a.createdAt) || 0))
   }, [domain, tick, durableOrders, orderRoleFilter])
 
+  useEffect(() => {
+    if (bucket !== "orders" || !focusedOrderId || !orders.some((order) => order.id === focusedOrderId)) return
+    const timer = window.setTimeout(() => {
+      const row = document.querySelector(`[data-order-id="${CSS.escape(focusedOrderId)}"]`) as HTMLElement | null
+      row?.scrollIntoView({ behavior: "smooth", block: "center" })
+    }, 100)
+    return () => window.clearTimeout(timer)
+  }, [bucket, focusedOrderId, orders])
+
   const outcomeOrders = useMemo(() => {
     if (durableOrders.length) return durableOrders
     if (!domain?.getOrders) return [] as MarketplaceOrder[]
@@ -2444,11 +2476,31 @@ export function MarketplaceScreen({
         setBucket(bucketNext as typeof bucket)
       }
       const lid = String((detail as { listingId?: string }).listingId || "").trim()
+      const orderId = String((detail as { orderId?: string }).orderId || "").trim()
       if (lid) setSelectedId(lid)
+      if (orderId) {
+        setBucket("orders")
+        setOrderRoleFilter("all")
+        setFocusedOrderId(orderId)
+        const responseAt = Number((detail as { responseAt?: unknown }).responseAt)
+        setFocusedResponseAt(Number.isFinite(responseAt) && responseAt > 0 ? responseAt : null)
+        setFocusedResponseAction(String((detail as { responseAction?: unknown }).responseAction || "").slice(0, 80) || null)
+        void loadDurableOrders()
+      }
     }
     window.addEventListener("ghc:open-marketplace", onOpenMarket)
     return () => window.removeEventListener("ghc:open-marketplace", onOpenMarket)
   }, [])
+
+  useEffect(() => {
+    if (!initialOrderId) return
+    setBucket("orders")
+    setOrderRoleFilter("all")
+    setFocusedOrderId(initialOrderId)
+    setFocusedResponseAt(initialResponseAt || null)
+    setFocusedResponseAction(initialResponseAction || null)
+    void loadDurableOrders()
+  }, [initialOrderId, initialResponseAt, initialResponseAction, loadDurableOrders])
 
   if (selected) {
     return (
@@ -3354,7 +3406,7 @@ export function MarketplaceScreen({
                   isSeller,
                 })
                 return (
-                  <li key={o.id} className="rounded-[1.5rem] border border-border/50 bg-card p-4 shadow-[var(--gh-card-shadow)]">
+                  <li key={o.id} data-order-id={o.id} className={`rounded-[1.5rem] border bg-card p-4 shadow-[var(--gh-card-shadow)] ${focusedOrderId === o.id ? "border-emerald-500 ring-2 ring-emerald-500/20" : "border-border/50"}`}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold">
@@ -3468,7 +3520,7 @@ export function MarketplaceScreen({
                       ) : null}
                       {!['completed','cancelled','disputed','refunded'].includes(status) && o.paymentStatus === "verified" ? <button type="button" disabled={busy} onClick={() => void runOrderAction(o.id,"dispute")} className="min-h-9 rounded-full border border-amber-500/50 px-3 text-xs font-bold text-amber-700 dark:text-amber-300">Open dispute</button> : null}
                     </div>
-                    <OrderTimelinePanel orderId={o.id} />
+                    <OrderTimelinePanel orderId={o.id} initialOpen={focusedOrderId === o.id} focusAt={focusedResponseAt} focusAction={focusedResponseAction} />
                     <p className="mt-2 text-[11px] text-muted-foreground">Updated {new Date(o.updatedAt || o.createdAt).toLocaleString()}</p>
                     {reviewDraftOrderId === o.id ? (
                       <div className="mt-3 space-y-2 rounded-xl border border-emerald-600/25 bg-emerald-50/40 p-3 dark:bg-emerald-950/20">

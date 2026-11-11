@@ -1,15 +1,14 @@
 # GreenHaven
 
-**Current source version:** `0.338.51`
+**Current source version:** `0.338.52`
 
 Production status: **NOT APPROVED** — supported Node 24.15.0 dependency-backed typecheck/lint/build, browser/device, live database/provider and operator acceptance remain outstanding.
 
 This repository is the canonical GreenHaven source tree. See `docs/SOURCE_OF_TRUTH.md` and `docs/CURRENT_BUILD_CONTEXT.md` before implementation or release work.
 
-## Latest implementation candidate — 0.338.51 / Run #288
+## Latest implementation candidate — 0.338.52 / Run #289
 
-Run #288 removes an unsafe `as any` cast from the permissions hook, exposes the GHC context interface as a typed contract, and ensures UI permission checks use the authenticated profile identity when hydrated. Run #287 repairs duplicate module content and declaration ordering in the app shell. Focused regression gates pass; full dependency-backed typecheck/build and browser/device acceptance remain outstanding because the available Node runtime is below the project's required version and dependency installation did not complete. No database migration, payment, push or deployment was performed.
-
+Run #289 upgrades notification deep-link resolution and delivery across Feed, comments/replies, Marketplace listings/orders/responses, Pi payments, GHC transactions and daily claims. Notification taps open the exact target; details remain a separate action. Mirrored social/economy rows no longer double-count in the unified inbox. Comment/reply recipients include the post owner and bounded nested-thread participants; replies page older comments and scroll to the exact response. Marketplace order-response notices scroll to the matching timeline event. Payment and marketplace notices use the existing durable inbox RPC with dedupe and server-side block checks. The Vercel upload excludes local dependencies/build caches, and the generated migration manifest now matches the 0.338.52 package version. Focused Run #289 tests pass; full dependency-backed TypeScript/lint/build and browser/device acceptance remain outstanding. The connected Testnet schema was inspected read-only; no migration was applied. No GitHub push or Vercel deployment was performed.
 
 Run #283 adds 55 tested helper capabilities across all 11 Active modules, fills Matching, Connections, Orders, GHC and Pi Payments feature entry points, and registers focused tests in the static/prebuild gates. The 220-target register is explicit: five helper capabilities per module are implemented in this tranche; 165 deeper UI/API/database feature targets remain. Static verification passes; Node 24.15.0 runtime/build and browser/device acceptance remain outstanding. No SQL, Testnet financial mutation, GitHub push, Vercel deployment or Mainnet operation was performed.
 

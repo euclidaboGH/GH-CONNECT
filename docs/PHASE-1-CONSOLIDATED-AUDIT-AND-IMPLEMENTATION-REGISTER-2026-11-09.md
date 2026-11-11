@@ -3,9 +3,9 @@
 **Audit date:** 2026-11-09  
 **Last updated:** 2026-11-11  
 **Authoritative source archive:** `GREENHAVEN-0.338.43-ECOSYSTEM-30-TRACKS-ALL-41-SERVICES.zip`  
-**Current project package:** `gh-connect@0.338.51`
+**Current project package:** `gh-connect@0.338.52`
 
-**Current in-place maintenance derivative:** `gh-connect@0.338.51 (Runs #250–288)`; the audit findings and historical baseline below remain preserved. The original 0.338.18 audit baseline and Run #250–278 snapshots are historical references, not current release pointers.  
+**Current in-place maintenance derivative:** `gh-connect@0.338.52 (Runs #250–289)`; the audit findings and historical baseline below remain preserved. The original 0.338.18 audit baseline and Run #250–278 snapshots are historical references, not current release pointers.  
 **Phase:** 1 of the ten-phase completion roadmap — authoritative baseline and complete audit  
 **Disposition:** **Source inventory and selected contracts verified; Phase 1 is NOT fully closed. Production remains NOT APPROVED.**
 

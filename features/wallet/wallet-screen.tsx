@@ -201,7 +201,7 @@ function navigateSettingsSection(section: string) {
   }
 }
 
-export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
+export function PremiumWalletScreen({ onBack, initialNotificationTarget }: { onBack: () => void; initialNotificationTarget?: Record<string, unknown> | null }) {
   const { addToast } = useGHCShell()
   const regional = useRegionalContext()
   const workflowText = (key: Parameters<typeof getWorkflowMessage>[0]) => getWorkflowMessage(key, regional.locale)
@@ -636,6 +636,30 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   const [showRequestsPanel, setShowRequestsPanel] = useState(false)
   const [showFullHistory, setShowFullHistory] = useState(false)
   const [historyRail, setHistoryRail] = useState<"ghc" | "pi">("ghc")
+  useEffect(() => {
+    const applyWalletTarget = (detail: Record<string, unknown>) => {
+      const paymentIntentId = String(detail.paymentIntentId || "").trim()
+      const target = paymentIntentId || String(detail.transactionId || detail.referenceId || detail.payoutRequestId || detail.requestId || "").trim()
+      setTab("activity")
+      setShowFullHistory(true)
+      setTxFilter("all")
+      setTxDateRange("all")
+      setAssetRail(paymentIntentId ? "pi" : "ghc")
+      setHistoryRail(paymentIntentId ? "pi" : "ghc")
+      setQuery(target)
+      if (detail.openRequests || detail.section === "transfer-request") setShowRequestsPanel(true)
+      window.setTimeout(() => {
+        document.getElementById("ghc-wallet-activity")?.scrollIntoView({ behavior: "smooth", block: "start" })
+      }, 180)
+    }
+    if (initialNotificationTarget) applyWalletTarget(initialNotificationTarget)
+    const onOpenWalletTarget = (event: Event) => {
+      const detail = (event as CustomEvent<Record<string, unknown>>).detail || {}
+      applyWalletTarget(detail)
+    }
+    window.addEventListener("ghc:open-wallet-transaction", onOpenWalletTarget as EventListener)
+    return () => window.removeEventListener("ghc:open-wallet-transaction", onOpenWalletTarget as EventListener)
+  }, [initialNotificationTarget])
   // Phase 5: deep-link from Rewards "Open Wallet · Withdraw Pi" (and similar).
   useEffect(() => {
     let focus: string | null = null
@@ -2615,7 +2639,7 @@ const lowBalance = balance === 0 && displayPending === 0
                 {(piIntents || []).length === 0 ? (
                   <p className="py-10 text-center text-sm text-muted-foreground">No π payment intents for this account.</p>
                 ) : (
-                  (piIntents || []).map((intent: any) => (
+                  (piIntents || []).filter((intent: any) => !query.trim() || `${intent.id || ""} ${intent.referenceId || ""} ${intent.paymentId || ""} ${intent.purpose || ""} ${intent.status || ""}`.toLowerCase().includes(query.trim().toLowerCase())).map((intent: any) => (
                     <button
                       key={intent.id}
                       type="button"

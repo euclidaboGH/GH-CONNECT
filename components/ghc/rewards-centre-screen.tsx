@@ -597,7 +597,7 @@ export function RewardsCentreScreen({
         (historyStatus === "expired" && status === "expired") ||
         (historyStatus === "failed" && status === "blocked")
       const matchesDate = matchesFilterDateRange(row.createdAt, { from: historyFrom || null, to: historyTo || null })
-      const matchesSearch = matchesFilterQuery(query, row.reason, row.sourceEvent, row.ruleId, row.referenceId)
+      const matchesSearch = matchesFilterQuery(query, row.id, row.reason, row.sourceEvent, row.ruleId, row.referenceId)
       return matchesStatus && matchesDate && matchesSearch
     }).sort((a, b) => b.createdAt - a.createdAt)
   }, [snapshot.rewards, historyQuery, historyStatus, historyFrom, historyTo])
@@ -608,7 +608,7 @@ export function RewardsCentreScreen({
     return rows
       .filter((row) => historyStatus === "all" || row.status === historyStatus)
       .filter((row) => matchesFilterDateRange(row.createdAt, { from: historyFrom || null, to: historyTo || null }))
-      .filter((row) => matchesFilterQuery(query, row.reason, row.sourceEvent, row.referenceId))
+      .filter((row) => matchesFilterQuery(query, row.id, row.reason, row.sourceEvent, row.referenceId))
       .sort((a, b) => b.createdAt - a.createdAt)
   }, [serverRewardTransactions, historyQuery, historyStatus, historyFrom, historyTo])
 
@@ -641,12 +641,29 @@ export function RewardsCentreScreen({
 
   useEffect(() => {
     const tabHandler = (e: Event) => {
-      const next = (e as CustomEvent<{ tab?: Tab }>).detail?.tab
-      if (next === "opportunities" || next === "challenges" || next === "history" || next === "achievements") {
-        setTab(next)
+      const detail = (e as CustomEvent<{ tab?: Tab; rewardId?: string; claimId?: string; transactionId?: string; referenceId?: string }>).detail || {}
+      const next = detail.tab
+      if (next === "opportunities" || next === "challenges" || next === "history" || next === "achievements") setTab(next)
+      const target = String(detail.rewardId || detail.claimId || detail.transactionId || detail.referenceId || "").trim()
+      if (target) {
+        setTab("history")
+        setHistoryQuery(target)
+        window.setTimeout(() => {
+          const rows = Array.from(document.querySelectorAll<HTMLElement>("[data-reward-target]"))
+          const row = rows.find((element) => element.dataset.rewardTarget === target || element.dataset.rewardReference === target)
+          row?.scrollIntoView({ behavior: "smooth", block: "center" })
+        }, 260)
       }
     }
     window.addEventListener("ghc:open-rewards-tab", tabHandler)
+    try {
+      const saved = window.sessionStorage.getItem("ghc.notification.rewards-target")
+      if (saved) {
+        window.sessionStorage.removeItem("ghc.notification.rewards-target")
+        const target = JSON.parse(saved) as { tab?: Tab; rewardId?: string; claimId?: string; transactionId?: string; referenceId?: string }
+        tabHandler(new CustomEvent("ghc:open-rewards-tab", { detail: target }))
+      }
+    } catch { /* the delayed event remains the fallback */ }
     return () => window.removeEventListener("ghc:open-rewards-tab", tabHandler)
   }, [])
 
@@ -1219,7 +1236,7 @@ const claimPendingReward = useCallback(
               {serverRewardTransactions === null && serverHistoryStatus === "unavailable" ? <FilterResultState state="error" title="Reward ledger unavailable" description="The server-confirmed ledger could not be loaded. Your wallet balance remains separate from this history view." onRetry={() => setTick((value) => value + 1)} /> : null}
               {serverRewardTransactions !== null ? (
                 filteredServerRewardTransactions.length ? filteredServerRewardTransactions.map((row) => (
-                  <article key={row.id} className="rounded-[1.25rem] border border-border/60 bg-card px-3.5 py-3 shadow-[var(--gh-card-shadow)]">
+                  <article key={row.id} data-reward-target={row.id} data-reward-reference={row.referenceId || ""} className="rounded-[1.25rem] border border-border/60 bg-card px-3.5 py-3 shadow-[var(--gh-card-shadow)]">
                     <div className="flex items-start gap-3">
                       <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${row.status === "posted" ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" : row.status === "pending" ? "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300" : "bg-muted text-muted-foreground"}`}><GhcCoinIcon size={17} /></span>
                       <div className="min-w-0 flex-1">

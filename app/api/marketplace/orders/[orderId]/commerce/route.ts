@@ -4,6 +4,7 @@ import { loadOrder, updateCommerceOrder, updateOrderFulfilment, type Marketplace
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { parseMarketplaceFulfilmentInput } from "@/lib/marketplace/fulfilment"
 import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
+import { createUnifiedNotification } from "@/lib/server/notifications/unified"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -43,5 +44,30 @@ export async function POST(request: Request, ctx: { params: Promise<{ orderId: s
       : ["PAYMENT_REQUIRED", "INVALID_STATE", "PAID_OR_STARTED", "DISPATCH_REQUIRED", "DELIVERY_NOT_CONFIRMED", "SHIPPING_DETAILS_REQUIRED"].includes(result.error) ? 409 : 400
     return NextResponse.json({ ok: false, error: result.error }, { status, headers: { "Cache-Control": "no-store" } })
   }
-  return NextResponse.json({ ok: true, order: result.order }, { headers: { "Cache-Control": "no-store" } })
+  const updatedOrder = result.order
+  const recipientUserId = updatedOrder.buyerId === auth.userId ? updatedOrder.sellerId : updatedOrder.buyerId
+  if (recipientUserId && recipientUserId !== auth.userId) {
+    const changedAt = String(updatedOrder.updatedAt || Date.now())
+    const responseAt = Number.isFinite(Date.parse(changedAt)) ? Date.parse(changedAt) : Date.now()
+    await createUnifiedNotification({
+      recipientUserId,
+      actorUserId: auth.userId,
+      sourceType: "marketplace",
+      sourceId: orderId,
+      notificationType: "marketplace_order_response",
+      title: "Marketplace order updated",
+      body: "The other party added an update to your marketplace order.",
+      dedupeKey: `marketplace-order-response:${orderId}:${input.value.action}:${changedAt}`,
+      metadata: {
+        orderId,
+        listingId: updatedOrder.listingId,
+        status: updatedOrder.status,
+        action: input.value.action,
+        responseAction: input.value.action,
+        responseAt,
+        deepLink: { open: "marketplace", tab: "home", section: "order", orderId, listingId: updatedOrder.listingId, responseAction: input.value.action, responseAt },
+      },
+    }).catch(() => ({ ok: false }))
+  }
+  return NextResponse.json({ ok: true, order: updatedOrder }, { headers: { "Cache-Control": "no-store" } })
 }

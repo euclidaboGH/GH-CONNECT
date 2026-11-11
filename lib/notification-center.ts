@@ -10,7 +10,9 @@
  */
 
 import type { Notification, NotificationType } from "./notifications"
-import { navigateTo, openCommunity, openChat, openWallet } from "@/lib/navigation/navigate"
+import { resolveNotificationDeepLinkFromRecord, sanitizeNotificationDeepLink, type NotificationDeepLink } from "./notification-targets"
+export type { NotificationDeepLink } from "./notification-targets"
+import { navigateTo, openCommunity, openChat } from "@/lib/navigation/navigate"
 import {
   isCommunityNotification,
   communityNotificationLabel,
@@ -41,59 +43,6 @@ export const NOTIFICATION_CENTER_BUCKETS: {
   { id: "marketplace", label: "Market" },
   { id: "system", label: "System" },
 ]
-
-export type NotificationDeepLink = {
-  /** Primary app surface */
-  open?:
-    | "feed"
-    | "home"
-    | "chat"
-    | "messages"
-    | "wallet"
-    | "rewards"
-    | "membership"
-    | "communities"
-    | "discover"
-    | "matches"
-    | "profile"
-    | "settings"
-    | "marketplace"
-  tab?:
-    | "home"
-    | "discover"
-    | "matches"
-    | "messages"
-    | "communities"
-    | "profile"
-    | "wallet"
-    | "rewards"
-    | "membership"
-    | "settings"
-    | "marketplace"
-  section?:
-    | "post"
-    | "comments"
-    | "conversation"
-    | "transaction"
-    | "transfer-request"
-    | "friend-request"
-    | "connection_requests"
-    | "group-request"
-    | "membership"
-    | "verification"
-    | "security"
-  id?: string
-  postId?: string
-  conversationId?: string
-  userId?: string
-  transactionId?: string
-  requestId?: string
-  groupId?: string
-  greenHavenId?: string
-  /** Marketplace deep-link target */
-  listingId?: string
-  commentId?: string
-}
 
 const SOCIAL_TYPES = new Set<NotificationType>([
   "upvote",
@@ -209,429 +158,101 @@ export function filterByBucket(
 
 /** Resolve deep-link from notification data + type — never default to Settings. */
 
-const ALLOWED_OPEN = new Set([
-  "feed", "home", "chat", "messages", "wallet", "rewards", "membership",
-  "communities", "discover", "matches", "profile", "settings", "marketplace",
-])
-const ALLOWED_TAB = new Set([
-  "home", "discover", "matches", "messages", "communities", "profile",
-  "wallet", "rewards", "membership", "settings", "marketplace",
-])
-const ALLOWED_SECTION = new Set([
-  "post", "comments", "conversation", "transaction", "transfer-request",
-  "friend-request", "connection_requests", "group-request", "membership",
-  "verification", "security",
-])
-
-/** Phase 5: only allow in-app surfaces; strip URL-like and oversized ids. */
-export function sanitizeNotificationDeepLink(link: NotificationDeepLink): NotificationDeepLink {
-  const cleanId = (value: string | undefined, max = 120): string | undefined => {
-    if (value == null) return undefined
-    const s = String(value).trim()
-    if (!s || s.length > max) return undefined
-    if (/^https?:/i.test(s) || /^javascript:/i.test(s) || s.includes("://")) return undefined
-    return s
-  }
-  const out: NotificationDeepLink = {}
-  if (link.open && ALLOWED_OPEN.has(link.open)) out.open = link.open
-  if (link.tab && ALLOWED_TAB.has(link.tab)) out.tab = link.tab
-  if (link.section && ALLOWED_SECTION.has(link.section)) out.section = link.section
-  out.id = cleanId(link.id)
-  out.postId = cleanId(link.postId)
-  out.conversationId = cleanId(link.conversationId)
-  out.userId = cleanId(link.userId)
-  out.transactionId = cleanId(link.transactionId)
-  out.requestId = cleanId(link.requestId)
-  out.groupId = cleanId(link.groupId)
-  out.greenHavenId = cleanId(link.greenHavenId)
-  out.listingId = cleanId(link.listingId)
-  out.commentId = cleanId(link.commentId)
-  return out
-}
-
+/** Resolve every notification through the same strict target contract. */
 export function resolveNotificationDeepLink(n: Notification): NotificationDeepLink {
-  const rawData = (n.data || {}) as Record<string, unknown>
-  const correlation = rawData.correlation && typeof rawData.correlation === "object" ? rawData.correlation as Record<string, unknown> : {}
-  const data = { ...rawData, ...correlation }
-  if (data.deepLink && typeof data.deepLink === "object") {
-    const forced = data.deepLink as NotificationDeepLink
-    // Guard: social/share types must not be forced into settings
-    if (
-      SOCIAL_TYPES.has(n.type) &&
-      (forced.tab === "settings" || forced.open === "settings")
-    ) {
-      return { open: "feed", tab: "home", section: "post", postId: forced.postId || String(data.postId || "") }
-    }
-    return sanitizeNotificationDeepLink(forced)
-  }
-
-  const open = String(data.open || "").toLowerCase()
-  const link: NotificationDeepLink = {
-    id: data.id != null ? String(data.id) : n.id,
-    postId: data.postId != null ? String(data.postId) : undefined,
-    conversationId:
-      data.conversationId != null
-        ? String(data.conversationId)
-        : data.threadId != null
-          ? String(data.threadId)
-          : data.entityType === "conversation" || data.entityType === "message"
-            ? data.entityId != null
-              ? String(data.entityId)
-              : undefined
-            : undefined,
-    userId:
-      data.userId != null
-        ? String(data.userId)
-        : data.fromUserId != null
-          ? String(data.fromUserId)
-          : undefined,
-    transactionId:
-      data.transactionId != null
-        ? String(data.transactionId)
-        : data.txId != null
-          ? String(data.txId)
-          : undefined,
-    requestId: data.requestId != null ? String(data.requestId) : undefined,
-    groupId:
-      data.groupId != null
-        ? String(data.groupId)
-        : data.communityId != null
-          ? String(data.communityId)
-          : undefined,
-    greenHavenId: data.greenHavenId != null ? String(data.greenHavenId) : undefined,
-  }
-
-  // Explicit open field from emitter (preferred)
-  if (open === "feed" || open === "home" || open === "post") {
-    link.open = "feed"
-    link.tab = "home"
-    link.section = "post"
-    return sanitizeNotificationDeepLink(link)
-  }
-  if (open === "chat" || open === "messages") {
-    link.open = "chat"
-    link.tab = "messages"
-    link.section = "conversation"
-    return sanitizeNotificationDeepLink(link)
-  }
-  if (open === "wallet" || open === "transaction") {
-    link.open = "wallet"
-    link.tab = "wallet"
-    link.section = "transaction"
-    return sanitizeNotificationDeepLink(link)
-  }
-  if (open === "rewards") {
-    link.open = "rewards"
-    link.tab = "rewards"
-    return sanitizeNotificationDeepLink(link)
-  }
-  if (open === "membership" || open === "premium") {
-    link.open = "membership"
-    link.tab = "membership"
-    link.section = "membership"
-    return sanitizeNotificationDeepLink(link)
-  }
-  if (open === "communities") {
-    link.open = "communities"
-    link.tab = "communities"
-    return sanitizeNotificationDeepLink(link)
-  }
-  if (open === "matches") {
-    link.open = "matches"
-    link.tab = "matches"
-    return sanitizeNotificationDeepLink(link)
-  }
-  if (open === "discover" || open === "find") {
-    link.open = "discover"
-    link.tab = "discover"
-    return sanitizeNotificationDeepLink(link)
-  }
-  if (open === "marketplace" || open === "market" || open === "orders") {
-    link.open = "marketplace"
-    link.tab = "home"
-    if (data.listingId) link.listingId = String(data.listingId)
-    return sanitizeNotificationDeepLink(link)
-  }
-  if (open === "security" || open === "verification") {
-    link.open = "settings"
-    link.tab = "settings"
-    link.section = open === "security" ? "security" : "verification"
-    return sanitizeNotificationDeepLink(link)
-  }
-  // open === "settings" only when explicitly intended for system prefs
-  if (open === "settings" && (n.type === "system" || String(data.category) === "system")) {
-    link.open = "settings"
-    link.tab = "settings"
-    const rawSection = typeof data.section === "string" ? data.section : undefined
-    if (
-      rawSection === "post" || rawSection === "comments" ||
-      rawSection === "conversation" ||
-      rawSection === "transaction" ||
-      rawSection === "transfer-request" ||
-      rawSection === "friend-request" || rawSection === "connection_requests" ||
-      rawSection === "group-request" ||
-      rawSection === "membership" ||
-      rawSection === "verification" ||
-      rawSection === "security"
-    ) {
-      link.section = rawSection
-    }
-    return sanitizeNotificationDeepLink(link)
-  }
-
-  // Type-based routing
-  if (n.type === "message") {
-    link.open = "chat"
-    link.tab = "messages"
-    link.section = "conversation"
-  } else if (n.type === "group") {
-    link.open = "communities"
-    link.tab = "communities"
-  } else if (n.type === "match") {
-    link.open = "matches"
-    link.tab = "matches"
-  } else if (
-    n.type === "friend_request" ||
-    n.type === "connection_request" ||
-    (n as { type?: string }).type === "connection_request" ||
-    (n as { type?: string }).type === "connection"
-  ) {
-    // Connection request inbox — Matches tab hosts the inbox overlay
-    link.open = "matches"
-    link.tab = "matches"
-    link.section = "connection_requests"
-    if (!link.userId) {
-      const actor =
-        String((n.data as { actorUserId?: string; fromUserId?: string } | undefined)?.actorUserId ||
-          (n.data as { fromUserId?: string } | undefined)?.fromUserId ||
-          "")
-      if (actor) link.userId = actor
-    }
-  } else if ((n as { type?: string }).type === "connection_accept") {
-    // Open Matches; section must be a declared NotificationLink section (not tab name)
-    link.open = "matches"
-    link.tab = "matches"
-    link.section = "connection_requests"
-    if (!link.userId) {
-      const actor = String((n.data as { actorUserId?: string } | undefined)?.actorUserId || "")
-      if (actor) link.userId = actor
-    }
-  } else if (n.type === "follow") {
-    link.open = "discover"
-    link.tab = "discover"
-    if (!link.userId) {
-      const actor = String((n.data as { actorUserId?: string } | undefined)?.actorUserId || "")
-      if (actor) link.userId = actor
-    }
-  } else if (
-    n.type === "like" ||
-    n.type === "post_like" ||
-    n.type === "comment" ||
-    n.type === "post_comment" ||
-    n.type === "comment_reply" ||
-    n.type === "share" ||
-    n.type === "mention" ||
-    n.type === "story_reply" ||
-    n.type === "curation" ||
-    n.type === "upvote" ||
-    n.type === "downvote"
-  ) {
-    link.open = "feed"
-    link.tab = "home"
-    const isComment =
-      n.type === "comment" || n.type === "post_comment" || n.type === "comment_reply" || n.type === "mention" || n.type === "story_reply"
-    link.section = isComment ? "comments" : "post"
-    if (!link.postId) {
-      const d = (n.data || {}) as Record<string, unknown>
-      const pid = d.postId || d.entityId || d.post_id
-      if (pid) link.postId = String(pid)
-    }
-    } else if (
-    n.type === "marketplace_listing" ||
-    n.type === "marketplace_order" ||
-    n.type === "marketplace_comment" ||
-    n.type === "marketplace_reaction"
-  ) {
-    link.open = "marketplace"
-    link.tab = "home"
-    const d = (n.data || {}) as { listingId?: string; orderId?: string }
-    if (d.listingId) link.listingId = String(d.listingId)
-    if (d.orderId) (link as { orderId?: string }).orderId = String(d.orderId)
-  } else if (n.type === "ghc_received" || n.type === "ghc_sent" || n.type === "payment") {
-    link.open = "wallet"
-    link.tab = "wallet"
-    link.section = "transaction"
-  } else if (n.type === "reward") {
-    link.open = "rewards"
-    link.tab = "rewards"
-  } else if (n.type === "system") {
-    const b = blobOf(n)
-    if (/privacy|security|password|verification|restricted/i.test(b)) {
-      link.open = "settings"
-      link.tab = "settings"
-      link.section = /verif/i.test(b) ? "verification" : "security"
-    } else if (/reward|streak|mission|claim/i.test(b)) {
-      link.open = "rewards"
-      link.tab = "rewards"
-    } else if (/wallet|ghc|transfer|payment/i.test(b)) {
-      link.open = "wallet"
-      link.tab = "wallet"
-    } else if (/message|chat/i.test(b)) {
-      link.open = "chat"
-      link.tab = "messages"
-    } else if (/membership|vip|vvip|premium/i.test(b)) {
-      link.open = "membership"
-      link.tab = "membership"
-    } else if (/post|feed|story|like|comment/i.test(b)) {
-      link.open = "feed"
-      link.tab = "home"
-      link.section = "post"
-    } else {
-      // Safe default: Home — never Settings
-      link.open = "feed"
-      link.tab = "home"
-    }
-  } else {
-    // Unknown type — Home
-    link.open = "feed"
-    link.tab = "home"
-  }
-
-  
-  // Final safety: social / content types must never land in Settings
-  if (
-    SOCIAL_TYPES.has(n.type) &&
-    (link.open === "settings" || link.tab === "settings")
-  ) {
-    link.open = "feed"
-    link.tab = "home"
-    link.section = "post"
-  }
-
-  return sanitizeNotificationDeepLink(link)
+  return resolveNotificationDeepLinkFromRecord({
+    id: n.id,
+    type: String(n.type || "system"),
+    data: (n.data || {}) as Record<string, unknown>,
+  })
 }
 
-/** Dispatch navigation for a deep-link — Settings only when tab/open is settings. */
+/** Dispatch one deterministic in-app navigation request after the owning surface mounts. */
 export function navigateNotificationDeepLink(link: NotificationDeepLink): void {
   try {
     const surface = link.open || link.tab
+    const targetDetails = {
+      transactionId: link.transactionId,
+      paymentIntentId: link.paymentIntentId,
+      payoutRequestId: link.payoutRequestId,
+      requestId: link.requestId,
+      referenceId: link.referenceId,
+      rewardId: link.rewardId,
+      claimId: link.claimId,
+      orderId: link.orderId,
+      listingId: link.listingId,
+      postId: link.postId,
+      commentId: link.commentId,
+      parentId: link.parentId,
+      threadRootId: link.threadRootId,
+      responseAction: link.responseAction,
+      responseAt: link.responseAt,
+    }
 
-    // Primary surface via canonical navigation map
     if (surface === "wallet" || link.tab === "wallet") {
-      openWallet()
-    } else if (surface === "marketplace" || link.listingId) {
-      navigateTo("marketplace", {
-        listingId: link.listingId || undefined,
-      })
-      try {
-        if ((link as { orderId?: string }).orderId) {
-          window.dispatchEvent(
-            new CustomEvent("ghc:open-marketplace", {
-              detail: { bucket: "orders", orderId: (link as { orderId?: string }).orderId },
-            }),
-          )
-        }
-      } catch { /* */ }
+      window.dispatchEvent(new CustomEvent("ghc:open-wallet", {
+        detail: { ...targetDetails, section: link.section, openRequests: link.section === "transfer-request" },
+      }))
+    } else if (surface === "marketplace" || link.listingId || link.orderId) {
+      navigateTo("marketplace", { listingId: link.listingId || undefined })
+      window.setTimeout(() => window.dispatchEvent(new CustomEvent("ghc:open-marketplace", {
+        detail: {
+          bucket: link.orderId ? "orders" : "browse",
+          listingId: link.listingId || undefined,
+          orderId: link.orderId || undefined,
+          responseAction: link.responseAction,
+          responseAt: link.responseAt,
+        },
+      })), 120)
     } else if (surface === "rewards" || link.tab === "rewards") {
-      navigateTo("rewards")
+      window.dispatchEvent(new CustomEvent("ghc:open-rewards", {
+        detail: { ...targetDetails, tab: "history", section: link.section || "history" },
+      }))
     } else if (surface === "membership" || link.tab === "membership") {
       navigateTo("membership")
     } else if (surface === "settings" || link.tab === "settings") {
-      navigateTo("settings", {
-        section: (link.section as "main" | "wallet" | "rewards" | "membership" | "help") || "main",
-      })
+      window.dispatchEvent(new CustomEvent("ghc:open-settings", { detail: { section: link.section || "main" } }))
     } else if (surface === "communities" || link.tab === "communities") {
       if (link.groupId) openCommunity(link.groupId)
       else navigateTo("communities")
     } else if (surface === "messages" || surface === "chat" || link.tab === "messages") {
       navigateTo("messages")
+      if (link.conversationId) {
+        window.setTimeout(() => window.dispatchEvent(new CustomEvent("ghc:open-conversation", {
+          detail: { conversationId: link.conversationId, peerUserId: link.userId, kind: link.groupId ? "community" : "dm" },
+        })), 120)
+      } else if (link.userId) {
+        window.setTimeout(() => openChat(link.userId!), 120)
+      }
     } else if (surface === "matches" || link.tab === "matches") {
       navigateTo("matches")
     } else if (surface === "discover" || link.tab === "discover") {
       navigateTo("discover")
+      if (link.userId) window.setTimeout(() => window.dispatchEvent(new CustomEvent("ghc:open-profile", { detail: { userId: link.userId } })), 100)
     } else if (surface === "profile" || link.tab === "profile") {
       navigateTo("profile")
     } else if (surface === "feed" || surface === "home" || link.tab === "home") {
       navigateTo("home")
+      if (link.postId) window.setTimeout(() => window.dispatchEvent(new CustomEvent("ghc:open-post-request", {
+        detail: { postId: link.postId, commentId: link.commentId, parentId: link.parentId, threadRootId: link.threadRootId, action: link.section === "comments" ? "comment" : "focus" },
+      })), 100)
     } else if (link.tab) {
       navigateTo(String(link.tab))
     } else {
       navigateTo("home")
     }
 
-    if (link.conversationId) {
-      window.setTimeout(() => {
-        window.dispatchEvent(
-          new CustomEvent("ghc:open-conversation", {
-            detail: {
-              conversationId: link.conversationId,
-              peerUserId: link.userId,
-              kind: link.groupId ? "community" : "dm",
-            },
-          })
-        )
-      }, 120)
-    }
-    if (link.groupId && surface !== "communities" && link.tab !== "communities") {
-      openCommunity(link.groupId)
-    }
-    // Discover profile only — not for connection_requests (inbox is the target)
-    if (link.userId && link.tab === "discover" && link.section !== "connection_requests" && link.section !== "friend-request") {
-      window.dispatchEvent(
-        new CustomEvent("ghc:open-profile", {
-          detail: { userId: link.userId },
-        })
-      )
-    }
-    if (link.userId && (surface === "messages" || surface === "chat" || link.tab === "messages") && !link.conversationId) {
-      window.setTimeout(() => {
-        openChat(link.userId!)
-      }, 120)
-    }
-
+    if (link.groupId && surface !== "communities" && link.tab !== "communities") openCommunity(link.groupId)
     if (link.section === "friend-request" || link.section === "connection_requests") {
-      // Matches tab must mount before inbox overlay listens
-      window.setTimeout(() => {
-        window.dispatchEvent(
-          new CustomEvent("ghc:open-connection-inbox", {
-            detail: { focus: "incoming", userId: link.userId },
-          })
-        )
-      }, 120)
+      window.setTimeout(() => window.dispatchEvent(new CustomEvent("ghc:open-connection-inbox", {
+        detail: { focus: "incoming", userId: link.userId },
+      })), 120)
     }
-
-    if (link.postId && (link.section === "post" || link.section === "comments" || link.open === "feed" || link.tab === "home" || surface === "home" || surface === "feed")) {
-      window.setTimeout(() => {
-        window.dispatchEvent(
-          new CustomEvent("ghc:open-post", {
-            detail: {
-              postId: link.postId,
-              commentId: link.commentId,
-              action: link.section === "comments" ? "comment" : "focus",
-            },
-          })
-        )
-      }, 100)
+    if ((surface === "matches" || link.tab === "matches") && link.userId) {
+      window.setTimeout(() => window.dispatchEvent(new CustomEvent("ghc:open-match", { detail: { userId: link.userId } })), 120)
     }
-
     window.dispatchEvent(new CustomEvent("ghc:notification-deep-link", { detail: link }))
-
-    if (link.listingId) {
-      navigateTo("marketplace", { listingId: link.listingId })
-    }
-    if (link.open === "matches" || link.tab === "matches") {
-      navigateTo("matches")
-      if (link.userId) {
-        window.dispatchEvent(
-          new CustomEvent("ghc:open-match", {
-            detail: { userId: link.userId },
-          })
-        )
-      }
-    }
   } catch {
-    /* */
+    /* non-browser */
   }
 }
-
-export { communityNotificationLabel, isCommunityNotification } from "@/lib/domains/adapters/community-notification"

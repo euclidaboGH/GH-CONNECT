@@ -661,6 +661,7 @@ export function GHConnectApp() {
   >("main")
   /** Direct GHC Wallet overlay — not nested under Settings */
   const [walletOpen, setWalletOpen] = useState(false)
+  const [walletNotificationTarget, setWalletNotificationTarget] = useState<Record<string, unknown> | null>(null)
   const [showCreateHub, setShowCreateHub] = useState(false)
   const [showGlobalComposer, setShowGlobalComposer] = useState(false)
   const [globalComposeMode, setGlobalComposeMode] = useState<"post" | "story">("post")
@@ -695,6 +696,9 @@ export function GHConnectApp() {
   }, [])
 
   const [marketplaceListingId, setMarketplaceListingId] = useState<string | null>(null)
+  const [marketplaceOrderId, setMarketplaceOrderId] = useState<string | null>(null)
+  const [marketplaceResponseAt, setMarketplaceResponseAt] = useState<number | null>(null)
+  const [marketplaceResponseAction, setMarketplaceResponseAction] = useState<string | null>(null)
   /** Auto-hide bottom nav while scrolling down; reveal on scroll-up or tap */
   const [bottomNavHidden, setBottomNavHidden] = useState(false)
   useEffect(() => {
@@ -728,6 +732,7 @@ export function GHConnectApp() {
   }, [])
   const closeWallet = useCallback(() => {
     setWalletOpen(false)
+    setWalletNotificationTarget(null)
   }, [])
   useEffect(() => {
     const openEco = (e: Event) => {
@@ -750,15 +755,32 @@ export function GHConnectApp() {
     const openMarketplace = (e: Event) => {
       const detail = (e as CustomEvent).detail
       let listingId: string | null = null
+      let orderId: string | null = null
+      let responseAt: number | null = null
+      let responseAction: string | null = null
       if (detail && typeof detail === "object" && typeof (detail as { listingId?: unknown }).listingId === "string") {
         listingId = String((detail as { listingId: string }).listingId).trim() || null
       }
+      if (detail && typeof detail === "object" && typeof (detail as { orderId?: unknown }).orderId === "string") {
+        orderId = String((detail as { orderId: string }).orderId).trim() || null
+      }
+      if (detail && typeof detail === "object" && typeof (detail as { responseAt?: unknown }).responseAt === "number") {
+        const value = Number((detail as { responseAt: number }).responseAt)
+        responseAt = Number.isFinite(value) && value > 0 ? value : null
+      }
+      if (detail && typeof detail === "object" && typeof (detail as { responseAction?: unknown }).responseAction === "string") {
+        responseAction = String((detail as { responseAction: string }).responseAction).slice(0, 80) || null
+      }
       setSettingsOpen(false)
       setWalletOpen(false)
+      setWalletNotificationTarget(null)
       setEcosystemOpen(false)
       setShowCreateHub(false)
       setBottomNavHidden(false)
       setMarketplaceListingId(listingId)
+      setMarketplaceOrderId(orderId)
+      setMarketplaceResponseAt(responseAt)
+      setMarketplaceResponseAction(responseAction)
       setMarketplaceOpen(true)
     }
     window.addEventListener("ghc:open-marketplace", openMarketplace)
@@ -773,8 +795,29 @@ export function GHConnectApp() {
 
   // Deep-links from notifications / identity cards
   useEffect(() => {
-    const onWallet = () => openWallet()
-    const onRewards = () => openSettings("rewards")
+    const onWallet = (event: Event) => {
+      const detail = (event as CustomEvent<Record<string, unknown>>).detail
+      if (detail && typeof detail === "object") {
+        const hasTarget = ["transactionId", "paymentIntentId", "payoutRequestId", "requestId", "referenceId"].some((key) => typeof detail[key] === "string" && String(detail[key]).trim())
+        setWalletNotificationTarget(hasTarget ? { ...detail } : null)
+      } else {
+        setWalletNotificationTarget(null)
+      }
+      openWallet()
+    }
+    const onRewards = (event: Event) => {
+      const detail = (event as CustomEvent<Record<string, unknown>>).detail || {}
+      openSettings("rewards")
+      const target = {
+        tab: "history",
+        rewardId: detail.rewardId,
+        claimId: detail.claimId,
+        transactionId: detail.transactionId,
+        referenceId: detail.referenceId,
+      }
+      try { window.sessionStorage.setItem("ghc.notification.rewards-target", JSON.stringify(target)) } catch { /* one-shot event remains available */ }
+      window.setTimeout(() => window.dispatchEvent(new CustomEvent("ghc:open-rewards-tab", { detail: target })), 260)
+    }
     const onMembership = () => openSettings("membership")
     const onSettings = (e: Event) => {
       const section = (e as CustomEvent).detail?.section
@@ -938,17 +981,20 @@ export function GHConnectApp() {
   // request after the feed has mounted. This prevents lost synchronous events.
   useEffect(() => {
     const onOpenPost = (event: Event) => {
-      const detail = (event as CustomEvent<{ postId?: unknown; action?: unknown }>).detail || {}
+      const detail = (event as CustomEvent<{ postId?: unknown; commentId?: unknown; parentId?: unknown; threadRootId?: unknown; action?: unknown }>).detail || {}
       const postId = typeof detail.postId === "string" ? detail.postId.trim() : ""
       if (!postId) return
       const action = detail.action === "comment" || detail.action === "share" || detail.action === "insights" ? detail.action : undefined
+      const commentId = typeof detail.commentId === "string" ? detail.commentId.trim() : undefined
+      const parentId = typeof detail.parentId === "string" ? detail.parentId.trim() : undefined
+      const threadRootId = typeof detail.threadRootId === "string" ? detail.threadRootId.trim() : undefined
       startTransition(() => setTab("home"))
       window.setTimeout(() => {
-        window.dispatchEvent(new CustomEvent("ghc:open-post-ready", { detail: { postId, action } }))
+        window.dispatchEvent(new CustomEvent("ghc:open-post-ready", { detail: { postId, action, commentId, parentId, threadRootId } }))
       }, 180)
     }
-    window.addEventListener("ghc:open-post", onOpenPost as EventListener)
-    return () => window.removeEventListener("ghc:open-post", onOpenPost as EventListener)
+    window.addEventListener("ghc:open-post-request", onOpenPost as EventListener)
+    return () => window.removeEventListener("ghc:open-post-request", onOpenPost as EventListener)
   }, [setTab])
 
   // Browser back / page show: clear disposable overlays without wiping domain state
@@ -1181,7 +1227,7 @@ export function GHConnectApp() {
             >
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <Suspense fallback={<TabScreenFallback label="Wallet" />}>
-                  <PremiumWalletScreen key={screenResetKeys.wallet || 0} onBack={closeWallet} />
+                  <PremiumWalletScreen key={screenResetKeys.wallet || 0} onBack={closeWallet} initialNotificationTarget={walletNotificationTarget} />
                 </Suspense>
               </div>
             </ScreenBoundary>
@@ -1227,6 +1273,9 @@ export function GHConnectApp() {
               onDismiss={() => {
                 setMarketplaceOpen(false)
                 setMarketplaceListingId(null)
+                setMarketplaceOrderId(null)
+                setMarketplaceResponseAt(null)
+                setMarketplaceResponseAction(null)
               }}
             >
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -1235,8 +1284,14 @@ export function GHConnectApp() {
                     onBack={() => {
                       setMarketplaceOpen(false)
                       setMarketplaceListingId(null)
+                      setMarketplaceOrderId(null)
+                      setMarketplaceResponseAt(null)
+                      setMarketplaceResponseAction(null)
                     }}
                     initialListingId={marketplaceListingId}
+                    initialOrderId={marketplaceOrderId}
+                    initialResponseAt={marketplaceResponseAt}
+                    initialResponseAction={marketplaceResponseAction}
                   />
                 </Suspense>
               </div>

@@ -33,6 +33,7 @@ import {
   claimOrderForPayment,
 } from "@/lib/server/marketplace/order-store"
 import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
+import { notifyMarketplaceOrderPaid, notifyVerifiedPaymentIntent } from "@/lib/server/notifications/unified"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -121,6 +122,8 @@ export async function POST(request: Request) {
       } catch {
         /* */
       }
+      await notifyVerifiedPaymentIntent({ recipientUserId: auth.userId, intent, paymentId: intent.providerPaymentId, txid: intent.txid })
+        .catch(() => ({ ok: false }))
       if (intent.purpose === "membership" && !membershipGrant?.granted) {
         return NextResponse.json({
           ok: false, paymentCompleted: true, membershipActivationPending: true, retryable: true,
@@ -128,6 +131,16 @@ export async function POST(request: Request) {
           message: "Pi payment is fulfilled, but membership is not yet confirmed. Retry recovery; do not pay again.",
           paymentId: intent.providerPaymentId, intentId: intent.id,
         }, { status: 503, headers: { "Cache-Control": "no-store" } })
+      }
+      const existingReferenceId = String(intent.referenceId || "")
+      const existingOrderId = String(intent.metadata?.orderId || intent.metadata?.marketplaceOrderId || "").trim()
+        || (existingReferenceId.startsWith("marketplace_order_") ? existingReferenceId.replace(/^marketplace_order_/, "").trim() :
+          existingReferenceId.startsWith("market_order_") ? existingReferenceId.replace(/^market_order_/, "").trim() : "")
+      if (existingOrderId) {
+        const existingOrder = await loadOrder(existingOrderId)
+        if (existingOrder && (existingOrder.paymentStatus === "verified" || existingOrder.status === "confirmed" || existingOrder.status === "completed")) {
+          await notifyMarketplaceOrderPaid({ order: existingOrder, actorUserId: auth.userId, paymentIntentId: intent.id, paymentMethod: "pi" })
+        }
       }
       return NextResponse.json({
         ok: true,
@@ -175,6 +188,8 @@ export async function POST(request: Request) {
       metadata: { intentId: intent.id, purpose: intent.purpose },
     })
     const finalIntent = fulfilled || getPaymentIntent(intent.id) || intent
+    await notifyVerifiedPaymentIntent({ recipientUserId: auth.userId, intent: finalIntent, paymentId: finalIntent.providerPaymentId, txid: finalIntent.txid || txid })
+      .catch(() => ({ ok: false }))
 
     // Membership: grant from verified COMPLETED→FULFILLED intent (idempotent).
     // Safety net when client never reaches /api/membership/activate.
@@ -346,13 +361,10 @@ export async function POST(request: Request) {
     // Marketplace order purchase: attach verified payment when reference/metadata points at an order
     let orderFulfilment: { ok: boolean; orderId?: string; error?: string } | null = null
     try {
-      const orderId = String(
-        meta.orderId || meta.marketplaceOrderId || ""
-      ).trim() || (
-        String(finalIntent.referenceId || "").startsWith("marketplace_order_")
-          ? String(finalIntent.referenceId).replace(/^marketplace_order_/, "").trim()
-          : ""
-      )
+      const referenceId = String(finalIntent.referenceId || "")
+      const orderId = String(meta.orderId || meta.marketplaceOrderId || "").trim() ||
+        (referenceId.startsWith("marketplace_order_") ? referenceId.replace(/^marketplace_order_/, "").trim() :
+          referenceId.startsWith("market_order_") ? referenceId.replace(/^market_order_/, "").trim() : "")
       if (
         orderId &&
         (String(finalIntent.purpose || "").toLowerCase() === "marketplace" ||
@@ -438,6 +450,13 @@ export async function POST(request: Request) {
       orderFulfilment = {
         ok: false,
         error: e instanceof Error ? e.message : "ORDER_FULFIL_FAILED",
+      }
+    }
+
+    if (orderFulfilment?.ok && orderFulfilment.orderId) {
+      const fulfilledOrder = await loadOrder(orderFulfilment.orderId)
+      if (fulfilledOrder && (fulfilledOrder.paymentStatus === "verified" || fulfilledOrder.status === "confirmed" || fulfilledOrder.status === "completed")) {
+        await notifyMarketplaceOrderPaid({ order: fulfilledOrder, actorUserId: auth.userId, paymentIntentId: finalIntent.id, paymentMethod: "pi" })
       }
     }
 

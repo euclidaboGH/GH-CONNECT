@@ -21,6 +21,7 @@ import {
 } from "@/lib/server/payments/pi-api"
 import { tryGrantMembershipFromCompletedIntent } from "@/lib/server/membership/entitlement-store"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { notifyVerifiedPaymentIntent } from "@/lib/server/notifications/unified"
 import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
@@ -282,6 +283,10 @@ export async function POST(request: Request) {
         ? (await loadPaymentIntent(intent.id))
         : null) ||
       (await loadByProviderPaymentId(paymentId))
+    if (completedIntent && completedIntent.userId === auth.userId) {
+      await notifyVerifiedPaymentIntent({ recipientUserId: auth.userId, intent: completedIntent, paymentId, txid })
+        .catch(() => ({ ok: false }))
+    }
     if (completedIntent) {
       const tipSettlement = await settleVerifiedCreatorTip(completedIntent, paymentId, completedIntent.txid || txid)
       if (tipSettlement.applicable && !tipSettlement.ok) {
@@ -339,6 +344,8 @@ export async function POST(request: Request) {
         paymentId, intentId: membershipIntent.id,
       }, { status: 503, headers: { "Cache-Control": "no-store" } })
     }
+
+    const finalIntent = completedIntent || intent
 
     return reply({
       ok: true,

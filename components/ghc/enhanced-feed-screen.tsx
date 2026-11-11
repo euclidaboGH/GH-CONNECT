@@ -734,16 +734,18 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   useEffect(() => {
     let cancelled = false
     const handleOpenPostAction = async (event: Event) => {
-      const detail = (event as CustomEvent<{ postId?: unknown; commentId?: unknown; action?: unknown }>).detail
+      const detail = (event as CustomEvent<{ postId?: unknown; commentId?: unknown; parentId?: unknown; threadRootId?: unknown; action?: unknown }>).detail
       const postId = typeof detail?.postId === "string" ? detail.postId.trim() : ""
       if (!postId) return
       const action = typeof detail?.action === "string" ? detail.action : ""
       const commentId = typeof detail?.commentId === "string" ? detail.commentId.trim() : ""
+      const parentId = typeof detail?.parentId === "string" ? detail.parentId.trim() : ""
+      const threadRootId = typeof detail?.threadRootId === "string" ? detail.threadRootId.trim() : ""
       const openLoadedPost = (target: Post) => {
         if (cancelled) return
         if (action === "comment") {
           openComments(target.id)
-          if (commentId) window.setTimeout(() => window.dispatchEvent(new CustomEvent("ghc:focus-comment", { detail: { postId: target.id, commentId } })), 80)
+          if (commentId) window.setTimeout(() => window.dispatchEvent(new CustomEvent("ghc:focus-comment", { detail: { postId: target.id, commentId, parentId, threadRootId } })), 80)
         } else if (action === "share") setSharePostId(target.id)
         else if (action === "insights") setInsightsPost(target)
         try {
