@@ -483,7 +483,7 @@ export function WalletBalanceCard({
             {showReserved ? (
               <div className="mt-2 space-y-2 text-[11px] leading-relaxed text-violet-100/90">
                 <p>
-                  <strong>Reserved {maskPi(reservedAmount)}</strong> is held for open withdrawal requests; it has not disappeared, but it is not spendable while a request is unresolved. The Return action is limited to requests that never started provider execution. Processing or uncertain requests stay reserved until Pi's authoritative outcome is reconciled.
+                  <strong>Reserved {maskPi(reservedAmount)}</strong> is held for incomplete withdrawal requests; it has not disappeared, and it is not spendable while those requests remain active. The Return action is limited to requests that never started provider execution. Processing or uncertain requests stay reserved until Pi's authoritative outcome is reconciled.
                 </p>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <button
