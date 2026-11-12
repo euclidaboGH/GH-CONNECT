@@ -19,3 +19,7 @@
 26–30. engines, gates, production not approved
 
 No financial authority changes. No auto migration apply.
+
+
+## Source-only verification
+Source-level only. Node.js 24.15.0 runtime required. Production NOT APPROVED.

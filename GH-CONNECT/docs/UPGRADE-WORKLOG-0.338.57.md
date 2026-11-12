@@ -11,3 +11,7 @@ Required phrases in features/wallet/wallet-balance.tsx:
 
 Self-service release remains limited to never-started Pi Testnet requests with no provider evidence (phase3 closeout 43/43).
 Production NOT APPROVED.
+
+
+## Source-only verification
+Source-level only. Node.js 24.15.0 runtime required. Production NOT APPROVED.
