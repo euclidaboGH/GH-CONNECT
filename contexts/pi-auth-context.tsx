@@ -1,5 +1,7 @@
 "use client";
 
+import { debugLog, debugWarn, debugError } from "@/lib/client/debug-log";
+
 import React, {
   createContext,
   useContext,
@@ -287,13 +289,13 @@ const loadSDKLite = async (): Promise<void> => {
     try {
       await loadScript(url, timeout)
       if (typeof (window as any).SDKLite !== "undefined") {
-        console.log("[PiAuth] SDKLite loaded from", url)
+        debugLog("PiAuth", "SDKLite loaded from", url)
         return
       }
       lastError = new Error(`Script loaded but SDKLite global missing: ${url}`)
     } catch (e) {
       lastError = e instanceof Error ? e : new Error(String(e))
-      console.warn("[PiAuth] SDKLite candidate failed:", url, lastError.message)
+      debugWarn("PiAuth", "SDKLite candidate failed:", url, lastError.message)
     }
   }
   throw lastError || new Error("Failed to load SDKLite script")
@@ -557,10 +559,10 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
                 )
               }
             } else {
-              console.warn("[PiAuth] /api/auth/pi did not verify:", bridge)
+              debugWarn("PiAuth", "/api/auth/pi did not verify:", bridge)
             }
           } catch (bridgeErr) {
-            console.warn("[PiAuth] identity bridge network error:", bridgeErr)
+            debugWarn("PiAuth", "identity bridge network error:", bridgeErr)
           }
         }
 
@@ -729,7 +731,7 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
             setRestoredPurchases([]);
           }
         } catch (optionalErr) {
-          console.warn("[PiAuth] SDKLite optional path skipped:", optionalErr);
+          debugWarn("PiAuth", "SDKLite optional path skipped:", optionalErr);
           // Minimal sdk stub so consumers expecting sdk don't crash
           setSdk(createLocalSdkLite(identity.uid));
           setProducts([]);
@@ -740,7 +742,7 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
         setAuthMessage("Signed in with Pi");
         return;
       } catch (piErr) {
-        console.warn("[PiAuth] Official Pi auth failed:", piErr);
+        debugWarn("PiAuth", "Official Pi auth failed:", piErr);
         if (!allowLocalAuthFallback()) {
           throw piErr instanceof Error
             ? piErr
@@ -772,7 +774,7 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
             displayName: piUser?.username || null,
           });
         } catch (loginErr) {
-          console.warn("[PiAuth] Hybrid login failed, using SDKLite only:", loginErr);
+          debugWarn("PiAuth", "Hybrid login failed, using SDKLite only:", loginErr);
           const ok = await sdkLite.login();
           if (!ok) throw loginErr instanceof Error ? loginErr : new Error("Login failed");
           sdkInstance = sdkLite;

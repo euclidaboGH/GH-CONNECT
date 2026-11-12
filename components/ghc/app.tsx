@@ -106,7 +106,7 @@ function TabScreenFallback({ label }: { label: string }) {
       <div className="gh-page-container flex w-full flex-col gap-3">
         <div className="flex items-center gap-2.5">
           <div className="gh-brand-loading-blink flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-50/80 p-1.5 dark:bg-emerald-950/35" aria-hidden="true">
-            <img src="/greenhaven-mark.png" alt="" className="h-full w-full object-contain" width={36} height={30} />
+            <img src="/greenhaven-mark.png" alt="" role="presentation" className="h-full w-full object-contain" width={36} height={30} decoding="async" />
           </div>
           <div className="flex-1 space-y-1.5">
             <div className="h-3 w-2/5 gh-skeleton rounded bg-muted" />

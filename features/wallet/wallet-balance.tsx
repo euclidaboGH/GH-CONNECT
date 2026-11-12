@@ -184,6 +184,10 @@ export function WalletBalanceCard({
   }, [refreshPi])
 
   const releaseReserved = useCallback(async () => {
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      setReleaseMsg("You are offline. Reserved π is unchanged; reconnect to return incomplete reservations.")
+      return
+    }
     setReleasing(true)
     setReleaseMsg(null)
     setReconcileMsg(null)
@@ -489,7 +493,7 @@ export function WalletBalanceCard({
                   <button
                     type="button"
                     onClick={() => void releaseReserved()}
-                    disabled={releasing}
+                    disabled={releasing} aria-busy={releasing}
                     className="font-bold underline underline-offset-2 disabled:opacity-50"
                   >
                     {releasing ? "Returning reserved π…" : "Return reserved π to available"}

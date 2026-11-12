@@ -168,7 +168,7 @@ export function PostActionBar({
           aria-expanded={panel === "weight"}
           aria-controls="gh-pab-panel"
           onClick={() => setPanel((p) => (p === "weight" ? null : "weight"))}
-          className="gh-pab-btn inline-flex h-9 items-center gap-1 rounded-full border border-border/70 bg-background px-2.5 text-[11px] font-bold text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+          className="gh-pab-btn inline-flex min-h-11 items-center gap-1 rounded-full border border-border/70 bg-background px-2.5 text-[11px] font-bold text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
           title="How strongly your vote counts toward curation. Voting does not create GHC."
         >
           <span className="text-[11px] font-semibold tracking-wide text-muted-foreground">Quality</span> <span className="tabular-nums text-[12px] font-bold text-foreground">{weight}%</span>
@@ -182,7 +182,7 @@ export function PostActionBar({
           aria-expanded={panel === "info"}
           aria-controls="gh-pab-panel"
           onClick={() => setPanel((p) => (p === "info" ? null : "info"))}
-          className="gh-pab-btn inline-flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+          className="gh-pab-btn inline-flex min-h-11 min-w-11 items-center justify-center rounded-full text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
         >
           <Info size={15} aria-hidden />
         </button>

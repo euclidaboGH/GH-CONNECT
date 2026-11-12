@@ -485,8 +485,9 @@ export function PremiumWalletScreen({ onBack, initialNotificationTarget }: { onB
     // Reconcile the authoritative ledger periodically so matured 48-hour holds
     // become visible and can be retried without logout or manual navigation.
     const refreshInterval = window.setInterval(() => {
-      if (document.visibilityState === "visible" && navigator.onLine) void refreshAuthoritativeWallet()
-    }, 60_000)
+      // Pause background polling to cut battery/network load; still event-driven via ghc:wallet-refresh.
+      if (document.visibilityState === "visible" && navigator.onLine !== false) void refreshAuthoritativeWallet()
+    }, 90_000)
     return () => {
       cancelled = true
       window.clearInterval(refreshInterval)

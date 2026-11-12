@@ -105,7 +105,7 @@ function GroupCardContent({
       >
         <span className="relative flex h-[4.25rem] w-[4.25rem] shrink-0 items-center justify-center overflow-hidden rounded-[1.1rem] bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-500 text-lg font-bold text-white shadow-md ring-2 ring-emerald-500/15">
           {coverImage || groupAvatar ? (
-            <LazyImage src={coverImage || groupAvatar || ""} alt="" className="h-full w-full object-cover" />
+            <LazyImage src={coverImage || groupAvatar || ""} alt="Community cover" className="h-full w-full object-cover" />
           ) : initial}
           {onlineCount > 0 ? <span className="absolute bottom-0.5 right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card bg-emerald-400" aria-label={`${onlineCount} online`} /> : null}
         </span>

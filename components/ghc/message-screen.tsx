@@ -907,7 +907,7 @@ export function MessageScreen() {
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4" style={{ WebkitOverflowScrolling: "touch" }}>
               <section className="rounded-2xl border border-border bg-card p-4">
                 <div className="flex items-center gap-3">
-                  <LazyImage src={selected.groupPhoto || selected.participantPhoto || "/placeholder.svg?width=80&height=80"} alt="" className="h-14 w-14 rounded-full object-cover" />
+                  <LazyImage src={selected.groupPhoto || selected.participantPhoto || "/placeholder.svg?width=80&height=80"} alt="Conversation photo" className="h-14 w-14 rounded-full object-cover" />
                   <div className="min-w-0">
                     <h3 className="truncate text-base font-bold text-foreground">{selected.groupName || selected.participantName || "Conversation"}</h3>
                     <p className="text-xs text-muted-foreground">{isCommunity ? "Community conversation" : selected.conversationType === "group" ? "Group conversation" : "Direct conversation"}</p>

@@ -727,6 +727,7 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
           disabled={releaseBusy}
           className="mt-2 inline-flex min-h-11 w-full items-center justify-center rounded-full border border-amber-500/40 bg-amber-500/10 px-4 text-[13px] font-bold text-amber-950 transition hover:bg-amber-500/15 disabled:opacity-60 dark:text-amber-50"
           data-testid="wallet-release-reserved-cta"
+          aria-busy={releaseBusy}
         >
           {releaseBusy ? "Returning reserved π…" : "Return reserved π to available"}
         </button>
