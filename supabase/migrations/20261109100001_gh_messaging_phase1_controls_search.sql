@@ -1,3 +1,4 @@
+-- REVIEW_REQUIRED: source hardening completed; must pass disposable PostgreSQL rehearsal and dependency checks before Testnet application.
 -- Messaging Phase 1 closeout: durable personal controls + indexed authorized history search.
 -- Additive, service-role RPC boundary; no client table access or financial changes.
 -- Requires canonical messaging foundations:
@@ -73,7 +74,7 @@ CREATE OR REPLACE FUNCTION public.gh_set_conversation_controls(
   p_muted_until timestamptz DEFAULT NULL,
   p_clear_mute boolean DEFAULT false
 )
-RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
 DECLARE
   v_nickname text := nullif(trim(p_nickname), '');
   v_reaction text := nullif(trim(p_quick_reaction), '');
@@ -124,7 +125,7 @@ CREATE OR REPLACE FUNCTION public.gh_search_conversation_messages(
   p_conversation_id text, p_actor_id text, p_query text,
   p_limit integer DEFAULT 30, p_offset integer DEFAULT 0
 )
-RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
 DECLARE
   v_query tsquery;
   v_limit integer := least(greatest(coalesce(p_limit, 30), 1), 50);
@@ -164,7 +165,7 @@ GRANT EXECUTE ON FUNCTION public.gh_search_conversation_messages(text,text,text,
 
 -- Keep unread cursor current, but suppress read receipts when the member opts out.
 CREATE OR REPLACE FUNCTION public.gh_messaging_mark_read(p_user_id text, p_conversation_id text)
-RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
 DECLARE v_now timestamptz := now(); v_receipts_enabled boolean;
 BEGIN
   SELECT read_receipts_enabled INTO v_receipts_enabled FROM public.gh_conversation_members
@@ -188,7 +189,7 @@ REVOKE ALL ON FUNCTION public.gh_messaging_mark_read(text,text) FROM PUBLIC, ano
 GRANT EXECUTE ON FUNCTION public.gh_messaging_mark_read(text,text) TO service_role;
 
 CREATE OR REPLACE FUNCTION public.gh_get_conversation_controls(p_conversation_id text, p_actor_id text, p_target_user_id text DEFAULT NULL)
-RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.gh_conversation_members
     WHERE conversation_id = p_conversation_id AND gh_user_id = p_actor_id AND left_at IS NULL) THEN

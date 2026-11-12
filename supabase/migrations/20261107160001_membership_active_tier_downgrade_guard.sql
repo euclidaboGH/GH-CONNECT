@@ -7,7 +7,7 @@
 CREATE OR REPLACE FUNCTION public.ghc_membership_prevent_active_downgrade()
 RETURNS trigger
 LANGUAGE plpgsql
-SET search_path = pg_catalog, public
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 BEGIN
   IF OLD.tier = 'vvip'
@@ -32,6 +32,8 @@ BEFORE UPDATE OF tier, active, expires_at
 ON public.ghc_membership_entitlements
 FOR EACH ROW
 EXECUTE FUNCTION public.ghc_membership_prevent_active_downgrade();
+
+REVOKE ALL ON FUNCTION public.ghc_membership_prevent_active_downgrade() FROM PUBLIC, anon, authenticated, service_role;
 
 COMMENT ON FUNCTION public.ghc_membership_prevent_active_downgrade() IS
   'Prevents an active, unexpired VVIP entitlement from being replaced by VIP; expiry, revocation and upgrades remain possible.';

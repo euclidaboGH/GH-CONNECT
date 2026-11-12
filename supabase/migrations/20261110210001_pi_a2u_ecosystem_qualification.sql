@@ -1,3 +1,4 @@
+-- REVIEW_REQUIRED: source hardening completed; must pass disposable PostgreSQL rehearsal and dependency checks before Testnet application.
 -- Run 261: auditable five-recipient Pi Testnet A2U ecosystem qualification.
 -- This records independently verified provider settlements; it does not execute payments
 -- or claim that Pi exposes a machine-readable Pioneer KYC endpoint.
@@ -23,7 +24,7 @@ CREATE TABLE IF NOT EXISTS public.gh_pi_a2u_qualification_transactions (
   direction text NOT NULL CHECK (direction = 'app_to_user'),
   transaction_verified boolean NOT NULL CHECK (transaction_verified IS TRUE),
   developer_completed boolean NOT NULL CHECK (developer_completed IS TRUE),
-  provider_metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  provider_metadata jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (octet_length(provider_metadata::text) <= 16384),
   verified_at timestamptz NOT NULL DEFAULT now(),
   verified_by text NOT NULL CHECK (length(trim(verified_by)) BETWEEN 2 AND 100),
   created_at timestamptz NOT NULL DEFAULT now()
@@ -43,7 +44,7 @@ GRANT SELECT, INSERT ON TABLE public.gh_pi_a2u_qualification_transactions TO ser
 
 CREATE OR REPLACE FUNCTION public.gh_pi_a2u_qualification_attest_recipient(
   p_gh_user_id text, p_pi_app_uid text, p_kyc_evidence_ref text, p_verified_by text
-) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
 DECLARE v_uid text;
 BEGIN
   IF length(trim(coalesce(p_gh_user_id,''))) < 8 OR length(trim(coalesce(p_pi_app_uid,''))) < 3
@@ -68,7 +69,7 @@ BEGIN
 END; $$;
 
 CREATE OR REPLACE FUNCTION public.gh_pi_a2u_qualification_recipient_get(p_pi_app_uid text)
-RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
+RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
   SELECT CASE WHEN r.pi_app_uid IS NULL THEN jsonb_build_object('ok',false,'error','RECIPIENT_NOT_ATTESTED')
     ELSE jsonb_build_object('ok',true,'ghUserId',r.gh_user_id,'piAppUid',r.pi_app_uid,'kycStatus',r.kyc_status) END
   FROM (SELECT trim(coalesce(p_pi_app_uid,'')) AS uid) q
@@ -79,7 +80,7 @@ CREATE OR REPLACE FUNCTION public.gh_pi_a2u_qualification_record_transaction(
   p_provider_payment_id text, p_txid text, p_pi_app_uid text, p_recipient_wallet_address text, p_amount numeric,
   p_network text, p_direction text, p_transaction_verified boolean,
   p_developer_completed boolean, p_provider_metadata jsonb, p_verified_by text
-) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
 DECLARE v_id uuid; v_count integer;
 BEGIN
   IF length(trim(coalesce(p_provider_payment_id,''))) NOT BETWEEN 1 AND 200
@@ -87,6 +88,7 @@ BEGIN
      OR length(trim(coalesce(p_pi_app_uid,''))) < 3 OR trim(coalesce(p_recipient_wallet_address,'')) !~ '^G[A-Z2-7]{55}$' OR coalesce(p_amount,0) <= 0
      OR p_network <> 'Pi Testnet' OR p_direction <> 'app_to_user'
      OR p_transaction_verified IS DISTINCT FROM true OR p_developer_completed IS DISTINCT FROM true
+     OR octet_length(coalesce(p_provider_metadata,'{}'::jsonb)::text) > 16384
      OR length(trim(coalesce(p_verified_by,''))) NOT BETWEEN 2 AND 100 THEN
     RETURN jsonb_build_object('ok',false,'error','PAYMENT_NOT_QUALIFIED');
   END IF;
@@ -103,7 +105,7 @@ BEGIN
 END; $$;
 
 CREATE OR REPLACE FUNCTION public.gh_pi_a2u_qualification_summary()
-RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
+RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
   SELECT jsonb_build_object(
     'requiredCount',5,
     'qualifiedCount',(SELECT count(*) FROM public.gh_pi_a2u_qualification_transactions),

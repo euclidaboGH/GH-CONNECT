@@ -1,3 +1,4 @@
+-- REVIEW_REQUIRED: source hardening completed; must pass disposable PostgreSQL rehearsal and dependency checks before Testnet application.
 -- Phase 9.4: durable seller fulfilment, buyer tracking and immutable order activity.
 -- Additive only. Does not settle payments, release escrow, issue refunds or mutate inventory.
 
@@ -38,7 +39,7 @@ REVOKE ALL ON public.gh_marketplace_order_events FROM PUBLIC, anon, authenticate
 -- Extend the existing database-authored event capture to include fulfilment
 -- details while preserving its original allowed event_type and actor_source values.
 CREATE OR REPLACE FUNCTION public.gh_marketplace_record_order_event()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog, public, pg_temp AS $$
 DECLARE
   v_before jsonb;
   v_after jsonb;
@@ -163,7 +164,7 @@ CREATE OR REPLACE FUNCTION public.gh_marketplace_order_fulfilment_update(
   p_tracking_number text DEFAULT NULL,
   p_tracking_url text DEFAULT NULL,
   p_estimated_delivery_at timestamptz DEFAULT NULL
-) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog, public, pg_temp AS $$
 DECLARE
   r public.gh_marketplace_orders%ROWTYPE;
   v_action text:=lower(trim(coalesce(p_action,'')));
@@ -253,7 +254,7 @@ BEGIN
 END $$;
 
 CREATE OR REPLACE FUNCTION public.gh_marketplace_order_timeline(p_order_id text,p_actor_id text)
-RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=public AS $$
+RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog, public, pg_temp AS $$
 DECLARE r public.gh_marketplace_orders%ROWTYPE;
 BEGIN
   SELECT * INTO r FROM public.gh_marketplace_orders WHERE id=trim(coalesce(p_order_id,''));
@@ -273,7 +274,7 @@ BEGIN
 END $$;
 
 CREATE OR REPLACE FUNCTION public.gh_marketplace_order_get(p_id text)
-RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog, public, pg_temp AS $$
 DECLARE r public.gh_marketplace_orders%ROWTYPE;
 BEGIN
   SELECT * INTO r FROM public.gh_marketplace_orders WHERE id=trim(coalesce(p_id,''));
@@ -302,7 +303,7 @@ BEGIN
 END $$;
 
 CREATE OR REPLACE FUNCTION public.gh_marketplace_orders_list_for_user(p_user_id text)
-RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog, public, pg_temp AS $$
 DECLARE v_orders jsonb;
 BEGIN
   SELECT coalesce(jsonb_agg(public.gh_marketplace_order_get(x.id) ORDER BY x.created_at DESC),'[]'::jsonb)

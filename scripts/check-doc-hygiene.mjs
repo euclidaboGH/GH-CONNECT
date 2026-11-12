@@ -7,6 +7,8 @@ const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
 const docsRoot = join(root, 'docs')
 const required = new Set([
   'docs/SOURCE_OF_TRUTH.md',
+  'docs/RUN295_HELD_MIGRATIONS_COMPLETION.md',
+  'docs/UPGRADE-WORKLOG-0.338.55-RUN295.md',
   'docs/UPGRADE-WORKLOG-0.338.55.md',
   'docs/releases/RELEASE-MANIFEST-0.338.55.md',
   'docs/releases/DEPLOYMENT-GUIDE-0.338.55.md',

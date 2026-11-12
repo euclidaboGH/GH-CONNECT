@@ -24,7 +24,7 @@ const checks = [
   ['execution attempts must remain zero before release', /COALESCE\(v_row\.execution_attempts, 0\) = 0/.test(sql)],
   ['release returns the exact gross amount to the matching request', /v_row\.gross_atomic[\s\S]*?v_row\.id::text/.test(sql)],
   ['request is marked released only after ledger release succeeds', /IF COALESCE\(\(v_rel->>'ok'\)::boolean, false\) IS NOT TRUE THEN[\s\S]*?UPDATE public\.gh_pi_earnings_payout_requests[\s\S]*?status = 'released'/.test(sql)],
-  ['uncertain provider outcomes are never force-released', /v_row\.status = 'uncertain'[\s\S]*?PROVIDER_OUTCOME_UNKNOWN/.test(sql)],
+  ['uncertain provider outcomes are never force-released', /v_row\.status IN \('processing', 'uncertain'\)[\s\S]*?PROVIDER_OUTCOME_UNKNOWN/.test(sql)],
   ['processing provider outcomes remain reserved', /v_row\.status = 'processing'[\s\S]*?PROVIDER_EXECUTION_IN_PROGRESS/.test(sql)],
   ['started-but-reserved requests have an explicit hold reason', /EXECUTION_ALREADY_STARTED/.test(sql)],
   ['API returns per-request explanations', /items: r\.items \|\| \[\]/.test(cancel)],
