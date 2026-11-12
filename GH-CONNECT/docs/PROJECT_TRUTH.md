@@ -57,7 +57,7 @@ The earnings payout worker no longer directly selects from `gh_pi_earnings_payou
 
 ## 0.330.49 — Phase 3 wallet, rewards and membership concurrency hardening (2026-11-08)
 
-**Current source version:** `0.338.61`
+**Current source version:** `0.338.62`
 
 This increment closes several Phase 3 financial-reliability gaps. Pi withdrawal reservation recovery now reports per-request reasons and unlock conditions, and only releases a Pi Testnet reservation when it is still `reserved`, has no provider payment/txid, has no execution start/lease and has zero execution attempts. Processing/uncertain requests remain protected until an authoritative provider result; timeouts do not forfeit earned funds. Wallet ledger history prioritizes human-readable reasons over opaque references, and the withdrawal request response no longer contradicts its own execution gate. GHC membership purchase now serializes entitlement preflight and debit per account and prevents duplicate active same-tier charges or active VVIP downgrades during concurrent requests. Reward claim replay by either pending-row ID or rewardId alias resolves to the one posted credit. Pi payment recovery now looks up and validates the provider object before binding its ID, checks payer identity/network/direction/amount, and requires a verified transaction and txid before completion; recovery is durably rate limited and no-store. The new SQL migration `20261108110001_phase3_wallet_rewards_membership_concurrency_recovery.sql` is REVIEW_REQUIRED and unapplied. Its 43-check source contract passes; existing targeted Phase 3 ledger, request guard, membership, payout lifecycle/settlement/execution, wallet recovery and cross-feature reconciliation contracts pass. Live PostgreSQL concurrency, authenticated Pi Testnet payment/entitlement recovery, actual 3π reservation reconciliation, Node 24.15.0 dependency-backed typecheck/lint/build and browser/device acceptance remain outstanding. Production remains NOT APPROVED.
 
@@ -65,13 +65,13 @@ This increment closes several Phase 3 financial-reliability gaps. Pi withdrawal 
 
 ## 0.330.48 — Project-wide maintenance programme (2026-11-08)
 
-**Current source version:** `0.338.61`
+**Current source version:** `0.338.62`
 
 The source baseline is retained from 0.330.46. This increment establishes `docs/PROJECT-WIDE-MAINTENANCE-150-0.330.48.md`: 15 product/system sections and 10 explicit engineering essentials each (150 total), with security, financial authority, migration approval and external acceptance guardrails. A stale Wallet source-contract assertion was corrected to match the current UI wording (“held against Pi withdrawal requests”); no wallet ledger, reservation, payout or payment behavior changed. The maintenance register contract passes 22/22, and the complete source regression chain passes when the Node 24 runtime gate is isolated. The normal prebuild correctly blocks under the available Node 22.16.0 runtime; Node 24.15.0, dependencies, live services and device acceptance remain unavailable. Production remains NOT APPROVED.
 
 ## Historical 0.330.46 — Phase 11.2.5 Push Secret and Privacy Hardening (2026-11-08)
 
-**Current source version:** `0.338.61`
+**Current source version:** `0.338.62`
 
 Phase 11.2.4 selects standards-based Web Push with VAPID as the provider-neutral protocol. Phase 11.2.5 adds AES-256-GCM encryption for endpoint and subscription key material before storage, cryptographic P-256 VAPID keypair matching, ciphertext-only outbox claims, generic privacy-safe payloads and opaque per-notification tags. Provider acceptance is distinguished from actual device display. The SQL remains a proposal outside `supabase/migrations`, not applied and not part of the migration manifest. The vetted `web-push` package could not be installed because the npm registry is unreachable in this environment; no sender, scheduled worker, deployment keys, provider receipts or offline delivery are configured. Three channels remain separate: server-backed in-app inbox, local browser alerts and remote Web Push (disabled). Focused source/runtime contracts are added. PostgreSQL/Testnet/Mainnet, Node 24 dependency-backed build, provider sender, offline device, multi-account, browser/mobile and screen-reader acceptance remain open. Production remains NOT APPROVED.
 
@@ -79,7 +79,7 @@ Phase 11.2.4 selects standards-based Web Push with VAPID as the provider-neutral
 
 Phase 11.2.3 separates account-level in-app inbox preferences from browser/device-level local alert preferences. Authenticated GET/PATCH `/api/notifications/preferences` derives ownership from the server-verified session and persists account choices through the existing `gh_user_profiles.profile_payload.notificationPreferences` namespace when the durable profile store is configured. Browser alert choices are stored separately under account + browser-device local keys, so another device or another account on the same browser does not inherit them. Settings shows independent In-app and This device controls and refreshes browser permission state when the app regains focus/visibility. Browser permission remains an independent platform gate; denied permission must be changed in browser site settings. Legacy preference records remain readable for migration compatibility. No database migration, remote push provider, PushManager subscription lifecycle, or financial authority was added. Important limitation: profile payload persistence uses read/merge/upsert rather than a dedicated atomic preference store; concurrent profile payload writes can be last-write-wins. Cross-device sync requires the durable profile store and live acceptance. Remote Web Push remains NOT CONFIGURED. Focused preference source/runtime checks pass 17/17 and 12/12; prior notification action, priority, account-isolation, delivery, service-worker and RPC privilege suites pass. Node 24 dependency-backed build, live cross-device, mobile/browser/screen-reader and Testnet/Mainnet acceptance remain open. Production remains NOT APPROVED.
 
-**Current source version:** `0.338.61`
+**Current source version:** `0.338.62`
 
 ---
 
@@ -127,37 +127,37 @@ Phase 9.2 adds seller-facing listing health indicators (low stock, drafts, incom
 
 Completed the remaining source-level messaging abuse-control consistency work. Every messaging API rate-limit bucket now uses the shared Supabase-backed durable rate-limit control plane with fail-closed behavior when the RPC is unavailable: direct-conversation creation, inbox preference writes, conversation presence reads/writes, global presence heartbeats, messaging privacy preference reads/writes, community membership provisioning and read receipts. Existing quota values are preserved. No schema migration, financial authority or messaging data model was changed. The Priority 8 contract gate passes 49/49; messaging route scan finds no process-local `checkRateLimit` calls. Legacy messaging, inbox, media hydration, bounded JSON, private-surface durable-control and repository consistency checks pass. Node 24.15.x dependency-backed typecheck/lint/build, browser/device/screen-reader and live Supabase/Testnet acceptance remain outstanding. Production is NOT APPROVED.
 
-**Current source version:** `0.338.61`
+**Current source version:** `0.338.62`
 
 ## 0.330.33 — Priority 8 Messages transformation (2026-11-07)
 
 The Messages inbox now has a dedicated Archived lane while active inbox filters exclude archived conversations. Pin/archive/restore/mute/unmute actions use the authenticated server-side per-member preferences API, and the inbox hydrates those preferences across sessions/devices. Conversation-specific drafts survive thread close, app navigation, thread switching and network reconciliation; the previous thread draft is not deleted when opening another conversation. Conversation pin/archive/mute actions are available on touch layouts and keyboard focus, message actions are touch-visible and keyboard-reachable, message bubbles use group rather than false button semantics, and the composer enforces and displays the server's 8,000-character limit. Existing authenticated durable conversation/message storage, active membership checks, idempotent sends, owned-media validation, privacy, read receipts, presence and durable fail-closed message send/read controls remain canonical. Dedicated Priority 8 source contract passes 43/43; existing messaging, media, bounded JSON, private-surface, accessibility and repository checks pass. No migration or financial authority changed. Node 24.15.x dependency-backed typecheck/lint/build, browser/Android/Pi Browser/screen-reader and live Supabase/Testnet acceptance remain outstanding. Production is NOT APPROVED.
 
-**Current source version:** `0.338.61`
+**Current source version:** `0.338.62`
 
 ## 0.330.32 — Priority 7 Communities governance and accessibility closeout (2026-11-07)
 
 Community moderation history and safety reports now have authenticated server endpoints, moderator-only reads, server-derived actor identity, transactional moderator-role revalidation for audit appends, and durable report create/resolve RPC paths. Moderator UI hydrates durable history and report queues, retaining session fallback only when server data is unavailable. Key community controls use 44px touch targets, the community content region is keyboard-focusable and named, and reduced-motion preferences are respected. The migration `20261107170001_phase7_durable_community_governance.sql` is REVIEW_REQUIRED and unapplied; the server path requires server-only Supabase credentials and `GHC_GOVERNANCE_SERVER=1`. Phase 7 source closeout checks pass, but live DB/RLS, Node 24.15.x production build, browser/screen-reader/mobile-device and Testnet acceptance remain open. Production is NOT APPROVED.
 
-**Current source version:** `0.338.61`
+**Current source version:** `0.338.62`
 
 ## 0.330.31 — Priority 7 Communities discovery and participation correctness (2026-11-07)
 
 Community directory “Most members” sorting now uses the server aggregate member count instead of a partial member-ID projection. “Needs attention” and the Community pulse share a non-negative unread-count policy so legacy `unreadCount` is used only as a chat fallback and is not double-counted. Community event dates accept ISO strings, Unix seconds and millisecond timestamps; malformed dates remain unknown. External resource links reject embedded credentials while retaining the HTTPS/same-origin-relative allowlist. Community cards distinguish pending requests from new joins and expose canonical invitation acceptance/decline actions; approval-required and invite-only privacy modes remain distinct in the hub. No migration, membership/governance authority, chat policy or financial behavior changed. Priority 7 source/runtime contracts and consolidated `verify:static` pass (57/57); Node 24.15.x prebuild/typecheck/lint/build and browser/device/live infrastructure acceptance remain outstanding. Production is NOT APPROVED.
 
-**Current source version:** `0.338.61`
+**Current source version:** `0.338.62`
 
 ## 0.330.30 — Priority 7 Communities transformation (2026-11-07)
 
 Community participation pulse controls now open distinct Board, Chat and moderator-request focus filters instead of sending every action to the same generic unread sort. Legacy event rows without canonical IDs receive deterministic render keys; community event/resource URLs are restricted to HTTPS or safe same-origin relative paths in both normalization and rendering; malformed resource rows and ordering values are handled safely. Governance durability is now reported as session-only until a real server persistence path confirms a durable write, even when the optional mirror flag is enabled. No database migration, membership authority, chat policy, moderation decision authority, GHC/Pi financial behavior or entitlement behavior changed. Priority 7 source checks pass; Node 24.15.x dependency-backed typecheck/lint/build and browser/device/Testnet/operator acceptance remain outstanding. Production is NOT APPROVED.
 
-**Current source version:** `0.338.61`
+**Current source version:** `0.338.62`
 
 ## 0.330.29 — Priority 6 Settings transformation (2026-11-07)
 
 Settings now opens with a coordinated control-centre overview showing privacy posture, enabled notification categories, locale and appearance, with direct navigation to the corresponding subsections. Individual preference changes now submit narrow partial patches instead of spreading a stale render-time settings snapshot, preventing rapid toggles from overwriting unrelated values. Discovery radius and age ranges are bounded. Existing server-backed messaging privacy and delayed SDK persistence remain unchanged. No migration, financial action, permission grant or notification-delivery guarantee was added. Node 24.15.x build and external acceptance remain open. Production is NOT APPROVED.
 
-**Current source version:** `0.338.61`
+**Current source version:** `0.338.62`
 
 ## 0.330.28 — Priority 5 Profile transformation (2026-11-07)
 

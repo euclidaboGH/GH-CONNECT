@@ -6,6 +6,7 @@ const root = process.cwd()
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
 const docsRoot = join(root, 'docs')
 const required = new Set([
+  'docs/UPGRADE-WORKLOG-0.338.62.md',
   'docs/UPGRADE-WORKLOG-0.338.61.md',
   'docs/SOURCE_OF_TRUTH.md',
   'docs/RUN295_HELD_MIGRATIONS_COMPLETION.md',
