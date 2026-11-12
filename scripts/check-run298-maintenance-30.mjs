@@ -23,7 +23,7 @@ const earn = r('components/ghc/unified-earnings-dashboard.tsx')
 const premium = r('lib/ui/premium-interaction.ts')
 const priority3 = r('scripts/check-priority3-rewards-wallet-pin.mjs')
 
-ok('01 version 0.338.58', pkg.version === '0.338.58')
+ok('01 version >= 0.338.58 (same 0.338 line)', (() => { const m = /^0\.338\.(\d+)$/.exec(pkg.version); return Boolean(m) && Number(m[1]) >= 58 })())
 ok('02 debug-log module', /export function debugLog/.test(debug) && /NODE_ENV !== "production"/.test(debug))
 ok('03 pi-auth uses debugLog', /debugLog\("PiAuth"/.test(auth))
 ok('04 pi-auth uses debugWarn', /debugWarn\("PiAuth"/.test(auth))

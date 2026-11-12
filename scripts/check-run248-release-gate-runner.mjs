@@ -51,7 +51,13 @@ const parityChecks = [
   'scripts/check-run269-client-table-write-acl.mjs',
 ]
 check('prebuild visual and database ACL checks are mirrored in static verification', parityChecks.every((script) => hasNodeScript(manifest, script, options) && hasNodeScript(verify, script, options)))
-check('Vercel build shell clears injected npm cache-dir configuration after cache preparation', /prepare-vercel-build\.mjs && unset npm_config_cache_dir NPM_CONFIG_CACHE_DIR && npm run build/.test(vercel.buildCommand ?? ''))
+// 0.338.62: the cache-prep step is fail-soft (a partial tree must not hard-fail the build), so accept either the
+// strict `&&` chain or the fail-soft group. In both forms cache preparation must run first, and the injected
+// npm cache-dir variables must be unset before `npm run build`.
+const buildCommand = vercel.buildCommand ?? ''
+const strictChain = /prepare-vercel-build\.mjs && unset npm_config_cache_dir NPM_CONFIG_CACHE_DIR && npm run build/.test(buildCommand)
+const failSoftChain = /^\(node scripts\/prepare-vercel-build\.mjs \|\| rm -rf \.next\/cache\/webpack\)[^;]*;\s*unset npm_config_cache_dir NPM_CONFIG_CACHE_DIR;\s*npm run build$/.test(buildCommand)
+check('Vercel build shell clears injected npm cache-dir configuration after cache preparation', strictChain || failSoftChain)
 
 const passed = checks.filter(Boolean).length
 console.log(`\nRun 248 release-gate runner contract: ${passed}/${checks.length} passed; ${parsed.length} prebuild checks retained.`)

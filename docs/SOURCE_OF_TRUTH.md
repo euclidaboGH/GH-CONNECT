@@ -1,10 +1,14 @@
 # GreenHaven / GH-CONNECT — Source of Truth
 
 **Current source baseline archive:** `GREENHAVEN-0.338.55-RUN295-HELD-MIGRATIONS-HARDENED.zip` (user-uploaded authoritative baseline)
-**Current working candidate:** `0.338.56` / Run #296
-**Current source version:** `0.338.56`
-**Package identity:** `gh-connect@0.338.56`
+**Current working candidate:** `0.338.62` (builds on Run #296/#297; see `docs/UPGRADE-WORKLOG-0.338.62.md`)
+**Current source version:** `0.338.62`
+**Package identity:** `gh-connect@0.338.62`
 **Active development branch:** no remote branch or commit was created by this run.
+
+## Current release note — 0.338.62 (Vercel build command)
+
+The Vercel `buildCommand` in `vercel.json` is fail-soft for cache preparation: `(node scripts/prepare-vercel-build.mjs || rm -rf .next/cache/webpack) 2>/dev/null || true; unset npm_config_cache_dir NPM_CONFIG_CACHE_DIR; npm run build`. Any Build Command override in the Vercel dashboard supersedes this file and must be cleared. The repository root must contain `package.json`, `vercel.json` and `scripts/prepare-vercel-build.mjs`. Production remains NOT APPROVED.
 
 ## Candidate addition — Run #297 (on top of 0.338.56, version unchanged)
 
