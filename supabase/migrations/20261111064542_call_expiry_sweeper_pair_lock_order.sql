@@ -1,3 +1,11 @@
+-- Dependency guard: these call RPCs operate on public.gh_call_sessions, which is created only by
+-- supabase/proposals/20261111090001_direct_call_sessions_proposal.sql. Fail closed with a clear message.
+DO $guard$ BEGIN
+  IF to_regclass('public.gh_call_sessions') IS NULL OR to_regclass('public.gh_call_signals') IS NULL THEN
+    RAISE EXCEPTION 'GH_CALL_TABLES_MISSING: apply the direct call sessions proposal (public.gh_call_sessions, public.gh_call_signals) before this migration';
+  END IF;
+END $guard$;
+
 CREATE OR REPLACE FUNCTION public.gh_call_start(p_call_id text,p_conversation_id text,p_actor_id text,p_media_kind text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $function$
 DECLARE v_peer text; v_member_count integer; v_row public.gh_call_sessions; v_stale record; v_expired_id text;

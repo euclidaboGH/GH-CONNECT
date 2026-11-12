@@ -48,6 +48,7 @@ const reviewRequired = new Set([
   '20261110200001_supporting_foreign_key_indexes.sql',
   '20261110174922_revoke_client_table_write_and_sequence_privileges.sql',
   '20261110125500_pi_wallet_address_binding_and_verified_a2u_diagnostics.sql',
+  '20261112100001_financial_stale_hold_reaper.sql',
   '20261110210001_pi_a2u_ecosystem_qualification.sql',
   '20261110182120_community_chat_membership_revocation_and_reconciliation.sql',
   '20261110183004_community_server_filter_search_reconciliation.sql',

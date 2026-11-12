@@ -17,6 +17,12 @@ Bundle date: **2026-11-12**
 
 See `RUN296-ONBOARDING-REGISTRATION-DELIVERY.md` for details and verification limits.
 
+## Run #297 candidate — stale financial hold release
+
+- `20261112100001_financial_stale_hold_reaper.sql` (REVIEW_REQUIRED, unapplied), cron route, daily cron, `check:run297-stale-hold-reaper`.
+- Releases only never-started Pi reservations and unsettled GHC withdrawal locks older than 24h; provider-uncertain items are reported, not released.
+- See `RUN297-STALE-HOLD-RELEASE-DELIVERY.md`.
+
 ## Preserved Run #295 baseline
 
 The six held migrations (#192, #194, #195, #196, #199 and #216) remain unchanged and classified for review. Their PostgreSQL rehearsal and release gates remain outstanding.

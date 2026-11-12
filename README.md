@@ -6,6 +6,10 @@ Production status: **NOT APPROVED** — supported Node 24.15.0 dependency-backed
 
 This repository is the canonical GreenHaven source tree. See `docs/SOURCE_OF_TRUTH.md` and `docs/CURRENT_BUILD_CONTEXT.md` before implementation or release work.
 
+## Candidate addition — Run #297 (stale-hold release)
+
+Automatic 24-hour release of never-started Pi earnings reservations and unsettled GHC withdrawal locks, with provider-uncertain items reported rather than released. Review-required migration, `CRON_SECRET`-protected cron route, daily Vercel cron. See `RUN297-STALE-HOLD-RELEASE-DELIVERY.md`. Unapplied; production NOT APPROVED.
+
 ## Latest implementation candidate — 0.338.56 / Run #296
 
 Run #296 fixes incomplete onboarding/profile registration by requiring explicit, valid details, confirming every step is durably saved, uploading profile photos to durable storage, and rejecting server-side completion while any required field is missing. See `RUN296-ONBOARDING-REGISTRATION-DELIVERY.md`.

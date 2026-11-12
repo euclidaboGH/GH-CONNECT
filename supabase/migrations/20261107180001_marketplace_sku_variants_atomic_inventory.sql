@@ -58,7 +58,13 @@ DECLARE
   v_count integer := 0;
 BEGIN
   IF trim(coalesce(p_listing_id,'')) = '' OR trim(coalesce(p_seller_id,'')) = '' OR
-     jsonb_typeof(p_variants) IS DISTINCT FROM 'array' OR CASE WHEN jsonb_typeof(p_variants)='array' THEN jsonb_array_length(p_variants) ELSE 101 END > 100 THEN
+     jsonb_typeof(p_variants) IS DISTINCT FROM 'array' THEN
+    RETURN jsonb_build_object('ok',false,'error','INVALID_INPUT');
+  END IF;
+  -- Separate statement: plpgsql ends an IF condition at the first THEN, so a
+  -- CASE expression inside the condition is a syntax error. Reached only once
+  -- p_variants is known to be an array.
+  IF jsonb_array_length(p_variants) > 100 THEN
     RETURN jsonb_build_object('ok',false,'error','INVALID_INPUT');
   END IF;
   SELECT * INTO l FROM public.gh_marketplace_listings WHERE id = p_listing_id FOR UPDATE;
@@ -79,6 +85,9 @@ BEGIN
     v_price := CASE WHEN coalesce(v->>'price','') ~ '^([0-9]+)(\.[0-9]{1,8})?$' THEN (v->>'price')::numeric ELSE -1 END;
     v_currency := upper(trim(coalesce(v->>'currency',l.currency)));
     v_stock := CASE WHEN coalesce(v->>'stockOnHand','') ~ '^[0-9]{1,7}$' THEN (v->>'stockOnHand')::integer ELSE -1 END;
+    IF v ? 'active' AND jsonb_typeof(v->'active') IS DISTINCT FROM 'boolean' THEN
+      RETURN jsonb_build_object('ok',false,'error','INVALID_VARIANT');
+    END IF;
     IF v_id = '' OR length(v_id) > 80 OR v_sku = '' OR length(v_sku) > 64 OR
        v_label = '' OR length(v_label) > 120 OR v_id ~ '[[:cntrl:]]' OR v_sku ~ '[[:cntrl:]]' OR v_label ~ '[[:cntrl:]]' OR v_price < 0 OR v_price > 1000000 OR
        v_stock < 0 OR v_stock > 1000000 OR v_currency NOT IN ('GHC','PI') OR
@@ -248,7 +257,7 @@ BEGIN
   PERFORM public.gh_marketplace_release_expired_reservations();
   SELECT * INTO existing FROM public.gh_marketplace_orders WHERE buyer_id=v_buyer AND client_request_id=v_key;
   IF FOUND THEN
-    IF existing.listing_id<>v_listing_id OR existing.quantity<>v_qty OR existing.variant_id<>p_variant_id THEN
+    IF existing.listing_id<>v_listing_id OR existing.quantity<>v_qty OR existing.variant_id IS DISTINCT FROM p_variant_id THEN
       RETURN jsonb_build_object('ok',false,'error','IDEMPOTENCY_CONFLICT');
     END IF;
     RETURN jsonb_build_object('ok',true,'idempotent',true,'order',public.gh_marketplace_order_get(existing.id));
@@ -298,6 +307,9 @@ BEGIN
   ELSIF to_regprocedure('public.gh_marketplace_order_create_reserved(jsonb,text)') IS NULL
         AND to_regprocedure('public.gh_marketplace_order_create_reserved_pre_variant(jsonb,text)') IS NOT NULL THEN
     NULL; -- already renamed by an earlier idempotent application
+  ELSIF to_regprocedure('public.gh_marketplace_order_create_reserved(jsonb,text)') IS NOT NULL
+        AND to_regprocedure('public.gh_marketplace_order_create_reserved_pre_variant(jsonb,text)') IS NOT NULL THEN
+    NULL; -- full re-run: original already preserved; the wrapper is replaced below
   ELSE
     RAISE EXCEPTION 'MARKETPLACE_RESERVED_RPC_RENAME_STATE_CONFLICT';
   END IF;
