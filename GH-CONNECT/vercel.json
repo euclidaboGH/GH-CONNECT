@@ -1,6 +1,6 @@
 {
   "framework": "nextjs",
-  "buildCommand": "node scripts/prepare-vercel-build.mjs && unset npm_config_cache_dir NPM_CONFIG_CACHE_DIR && npm run build",
+  "buildCommand": "if [ -f scripts/prepare-vercel-build.mjs ]; then node scripts/prepare-vercel-build.mjs; else echo '[vercel-build] prepare-vercel-build.mjs missing — skipping cache clean'; fi && unset npm_config_cache_dir NPM_CONFIG_CACHE_DIR && npm run build",
   "installCommand": "unset npm_config_cache_dir NPM_CONFIG_CACHE_DIR; npm ci --legacy-peer-deps",
   "headers": [
     {

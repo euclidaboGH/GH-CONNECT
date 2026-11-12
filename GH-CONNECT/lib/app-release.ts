@@ -1,5 +1,5 @@
 /** Release identity; session integrity and release gates are versioned with this source. */
-export const APP_RELEASE_VERSION = "0.338.60"
+export const APP_RELEASE_VERSION = "0.338.61"
 
 /** Concise, privacy-safe release note shown in the authenticated in-app update notice. */
 export const APP_RELEASE_SUMMARY =

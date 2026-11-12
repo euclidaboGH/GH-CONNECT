@@ -3,9 +3,9 @@
 **Audit date:** 2026-11-09  
 **Last updated:** 2026-11-11  
 **Authoritative source archive:** `GREENHAVEN-0.338.55-RUN292-MOBILE-WALLET-AUDIT.zip`  
-**Current project package:** `gh-connect@0.338.60`
+**Current project package:** `gh-connect@0.338.61`
 
-**Current in-place maintenance derivative:** `gh-connect@0.338.60 (Runs #250–298)`; the audit findings and historical baseline below remain preserved. The original 0.338.18 audit baseline and Run #250–278 snapshots are historical references, not current release pointers.  
+**Current in-place maintenance derivative:** `gh-connect@0.338.61 (Runs #250–298)`; the audit findings and historical baseline below remain preserved. The original 0.338.18 audit baseline and Run #250–278 snapshots are historical references, not current release pointers.  
 **Phase:** 1 of the ten-phase completion roadmap — authoritative baseline and complete audit  
 **Disposition:** **Source inventory and selected contracts verified; Phase 1 is NOT fully closed. Production remains NOT APPROVED.**
 
@@ -231,4 +231,4 @@ Phase 8 corrected an application-vs-database commission precision mismatch: app-
 
 ## Run #296 registration integrity update (2026-11-12)
 
-The active source package is now `gh-connect@0.338.60`. Run #296 prevents incomplete onboarding through explicit field selection, durable step-by-step profile saves, authenticated durable avatar uploads and a server-side completion gate. See `RUN296-ONBOARDING-REGISTRATION-DELIVERY.md`.
+The active source package is now `gh-connect@0.338.61`. Run #296 prevents incomplete onboarding through explicit field selection, durable step-by-step profile saves, authenticated durable avatar uploads and a server-side completion gate. See `RUN296-ONBOARDING-REGISTRATION-DELIVERY.md`.
