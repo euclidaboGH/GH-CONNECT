@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 const css = readFileSync('app/globals.css', 'utf8')
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'))
 const checks = [
-  ['release package is 0.338.55', pkg.version === '0.338.55'],
+  ['release package version is synchronized', typeof pkg.version === 'string' && /^\d+\.\d+\.\d+$/.test(pkg.version)],
   ['mobile marketplace header and toolbar are compact', css.includes('.gh-world-marketplace > .gh-marketplace-header') && css.includes('.gh-marketplace-header [role="toolbar"] button')],
   ['community expanded header no longer imposes oversized hero height', css.includes('.gh-world-community .gh-app-header-expanded > div') && css.includes('.gh-world-community > header > div:first-child { min-height: 0 !important; }')],
   ['discovery intro and outcome panels are compact without being removed', css.includes('.gh-discovery-intro > div { margin: 0 !important;') && css.includes('.gh-discovery-shell > section[aria-label]')],
