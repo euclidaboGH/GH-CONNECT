@@ -3,9 +3,9 @@
 **Audit date:** 2026-11-09  
 **Last updated:** 2026-11-11  
 **Authoritative source archive:** `GREENHAVEN-0.338.55-RUN292-MOBILE-WALLET-AUDIT.zip`  
-**Current project package:** `gh-connect@0.338.55`
+**Current project package:** `gh-connect@0.338.56`
 
-**Current in-place maintenance derivative:** `gh-connect@0.338.55 (Runs #250–292)`; the audit findings and historical baseline below remain preserved. The original 0.338.18 audit baseline and Run #250–278 snapshots are historical references, not current release pointers.  
+**Current in-place maintenance derivative:** `gh-connect@0.338.56 (Runs #250–296)`; the audit findings and historical baseline below remain preserved. The original 0.338.18 audit baseline and Run #250–278 snapshots are historical references, not current release pointers.  
 **Phase:** 1 of the ten-phase completion roadmap — authoritative baseline and complete audit  
 **Disposition:** **Source inventory and selected contracts verified; Phase 1 is NOT fully closed. Production remains NOT APPROVED.**
 
@@ -13,7 +13,7 @@
 
 The user-facing Pi earnings reservation recovery path is tightened so it can release only a `reserved` Testnet request that provably never entered provider execution: no provider payment ID, txid, receipt or verification; no execution start; no lease token or expiry; and zero execution attempts. `processing` and `uncertain` requests remain held until authoritative Pi provider reconciliation. This corrects an unsafe stale-processing proposal in which an old execution-start timestamp could have been mistaken for proof that no provider payment was created. The migration is REVIEW_REQUIRED and unapplied. The new 15-check contract covers the SQL release predicate, provider evidence, lease handling, service-role-only ACL, authenticated/rate-limited route and user-facing explanation.
 
-Run #292 adds compact mobile content-first headers and summaries across Marketplace, Communities, Discovery and Messages. A non-blocking postbuild footprint report now measures the Vercel workspace and lists its largest folders/files, to investigate the 4,865 MB source-footprint report. Both connected Vercel projects have successful 0.338.53 Preview builds on Node 24.22.2 with 315 prebuild checks invoked; this is baseline evidence only, not proof for the new 0.338.55 increment. Supabase Testnet still has three uncertain Pi earnings requests totalling 3.00 π gross with no persisted provider payment ID, txid or active lease. They remain held; no financial state or migration was changed. Mainnet Supabase is inactive, current Vercel deployments are Preview-only, and production remains NOT APPROVED.
+Run #292 added compact mobile content-first headers and summaries across Marketplace, Communities, Discovery and Messages. A non-blocking postbuild footprint report now measures the Vercel workspace and lists its largest folders/files, to investigate the 4,865 MB source-footprint report. Both connected Vercel projects have successful 0.338.53 Preview builds on Node 24.22.2 with 315 prebuild checks invoked; this is baseline evidence only, not proof for the new 0.338.55 increment. Supabase Testnet still has three uncertain Pi earnings requests totalling 3.00 π gross with no persisted provider payment ID, txid or active lease. They remain held; no financial state or migration was changed. Mainnet Supabase is inactive, current Vercel deployments are Preview-only, and production remains NOT APPROVED.
 
 ## Run #290 addendum — 2026-11-11
 
@@ -227,3 +227,8 @@ Phase 7 identified and corrected a production identity-namespace fallback in `re
 Phase 8 corrected an application-vs-database commission precision mismatch: app-side marketplace commission calculations now use eight-decimal integer arithmetic matching the immutable seller-proceeds SQL snapshot. Added `scripts/check-phase8-cross-domain-settlement.mjs`, `scripts/test-phase8-cross-domain-settlement.mjs`, and the phase report `docs/PHASE-8-MARKETPLACE-MEMBERSHIP-CROSS-DOMAIN-SETTLEMENT-2026-11-09.md`; the new check/test are wired into `prebuild` and `verify:static`.
 
 **Outstanding release blocker P8-02:** application fee settings remain configurable through `GHC_MARKETPLACE_PLATFORM_FEE_BPS` and `GHC_MARKETPLACE_MIN_PLATFORM_FEE_MINOR`, while the SQL snapshot hardcodes 500 basis points and has no minimum-fee floor. Until an additive DB-backed shared policy is designed and rehearsed, deployments must use 500 basis points and no minimum fee. Phase 8 remains source-level and partially complete; no SQL migration was applied and no financial/Testnet/Production transaction was executed.
+
+
+## Run #296 registration integrity update (2026-11-12)
+
+The active source package is now `gh-connect@0.338.56`. Run #296 prevents incomplete onboarding through explicit field selection, durable step-by-step profile saves, authenticated durable avatar uploads and a server-side completion gate. See `RUN296-ONBOARDING-REGISTRATION-DELIVERY.md`.

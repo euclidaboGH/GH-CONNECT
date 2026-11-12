@@ -74,6 +74,41 @@ function filterPersistableUrls(urls: string[], max: number): string[] {
   return urls.filter(isPersistableMediaUrl).slice(0, max)
 }
 
+
+const REQUIRED_ONBOARDING_GENDERS = new Set(["male", "female", "non-binary"])
+const REQUIRED_ONBOARDING_MODES = new Set(["friendship", "dating", "networking"])
+const REQUIRED_CONNECTION_INTENTS = new Set([
+  "friendship", "dating", "networking", "business", "collaboration",
+  "communities", "mentorship",
+])
+
+/** Server-side registration gate. Returns field keys only; never returns profile values. */
+export function getOnboardingProfileGaps(
+  profile: ServerProfileRecord | null | undefined
+): string[] {
+  if (!profile) return ["profile"]
+  const gaps: string[] = []
+  if (!profile.displayName || profile.displayName.trim().length < 2) gaps.push("displayName")
+  if (profile.age == null || !Number.isInteger(profile.age) || profile.age < 18 || profile.age > 120) gaps.push("age")
+  if (!profile.gender || !REQUIRED_ONBOARDING_GENDERS.has(profile.gender.trim().toLowerCase())) gaps.push("gender")
+  if (!profile.city?.trim()) gaps.push("city")
+  if (!profile.country?.trim()) gaps.push("country")
+  if (!profile.primaryMode || !REQUIRED_ONBOARDING_MODES.has(profile.primaryMode.trim().toLowerCase())) gaps.push("primaryMode")
+  const intents = Array.isArray(profile.connectionIntents)
+    ? profile.connectionIntents.map((value) => value.trim().toLowerCase()).filter((value) => REQUIRED_CONNECTION_INTENTS.has(value))
+    : []
+  if (intents.length < 1) gaps.push("connectionIntents")
+  const interests = Array.isArray(profile.interests)
+    ? profile.interests.map((value) => value.trim()).filter(Boolean)
+    : []
+  if (new Set(interests.map((value) => value.toLowerCase())).size < 3) gaps.push("interests")
+  const photos = Array.isArray(profile.photos)
+    ? profile.photos.filter((value) => typeof value === "string" && isPersistableMediaUrl(value) && !/placeholder/i.test(value))
+    : []
+  if (photos.length < 1) gaps.push("photos")
+  return gaps
+}
+
 function asStringArray(v: unknown, max: number): string[] {
   if (!Array.isArray(v)) return []
   return v
@@ -370,6 +405,9 @@ export async function getServerProfile(
       mem.set(key, fromDb)
       return fromDb
     }
+    // In production, a database read failure must never fall back to stale
+    // process memory for an identity or onboarding decision.
+    if (isProd()) return null
   }
   return mem.get(key) || null
 }
@@ -438,9 +476,9 @@ export function serverProfileToClientPartial(
     hometown: rec.hometown || "",
     education: rec.education || "",
     status: rec.status || "",
-    age: rec.age ?? 18,
-    gender: rec.gender || "prefer-not-to-say",
-    primaryMode: rec.primaryMode || "social",
+    age: rec.age,
+    gender: rec.gender || "",
+    primaryMode: rec.primaryMode || "",
     interests: rec.interests,
     connectionIntents: rec.connectionIntents,
     skills: rec.skills,

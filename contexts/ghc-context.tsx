@@ -222,8 +222,8 @@ export interface GHCContextType {
   restoreFromBackup: () => Promise<boolean>
 
   // Profile actions
-  updateProfile: (updates: Partial<Profile>) => Promise<void>
-  completeOnboarding: () => Promise<void>
+  updateProfile: (updates: Partial<Profile>) => Promise<boolean>
+  completeOnboarding: () => Promise<boolean>
   localProfiles: Array<LocalProfileRecord>
   switchLocalProfile: (localId: string) => void
   createLocalProfile: (profile: Partial<Profile>) => void
@@ -2329,20 +2329,20 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     [getDomainState, identityUserId]
   )
 
-  const updateProfile = useCallback(async (updates: Partial<Profile>) => {
+  const updateProfile = useCallback(async (updates: Partial<Profile>): Promise<boolean> => {
     try {
       // UX-layer validation (compatibility); domain re-validates on mutate path
       if (updates.displayName && !validation.isValidName(updates.displayName)) {
         addToast("Invalid name format", "error")
-        return
+        return false
       }
       if (updates.bio && !validation.isValidBio(updates.bio)) {
         addToast("Bio must be between 10 and 500 characters", "error")
-        return
+        return false
       }
       if (updates.age && !validation.isValidAge(updates.age)) {
         addToast("Age must be between 18 and 120", "error")
-        return
+        return false
       }
       if (
         updates.displayName &&
@@ -2350,7 +2350,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         spamDetection.isSpammyProfile(updates.bio, updates.displayName)
       ) {
         addToast("Your profile update was flagged as spam", "error")
-        return
+        return false
       }
 
       const sanitized: Partial<Profile> = sanitizeProfileMediaPartial({
@@ -2380,7 +2380,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       const result = await domains.identity.updateProfile(sanitized)
       if (!result.ok) {
         addToast(result.error, "error")
-        return
+        return false
       }
 
       setState((s) => {
@@ -2412,7 +2412,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
             : "Profile queued for sync",
           "info"
         )
-        return
+        return false
       }
 
       try {
@@ -2435,7 +2435,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
             const full = { ...result.data, ...sanitized }
             window.localStorage.setItem("ghc.profile", JSON.stringify(full))
           } catch { /* */ }
-          return
+          return false
         }
         // Merge durable server media back without wiping local data previews
         const persistedProfile = persisted.profile
@@ -2457,7 +2457,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           maxRetries: 3,
         })
         addToast("Profile saved on this device — server not confirmed. Will retry.", "info")
-        return
+        return false
       }
 
       try {
@@ -2486,25 +2486,21 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       }
       analytics.trackEvent("profile_update", { fields: Object.keys(updates) }, state.profile.displayName)
       addToast("Profile updated", "success")
+      return true
     } catch (error) {
       errorLogger.logError(error instanceof Error ? error : new Error(String(error)))
       addToast("Failed to update profile", "error")
+      return false
     }
   }, [addToast, domains.identity, state.isOnline, state.profile])
 
-  const completeOnboarding = useCallback(async () => {
+  const completeOnboarding = useCallback(async (): Promise<boolean> => {
     try {
-      const bound = getBoundDomainServices()
-      const result = bound?.identity
-        ? await bound.identity.completeOnboarding()
-        : { ok: false as const, error: "Services not ready" }
-      if (!result.ok) {
-        addToast(("error" in result && result.error) || "Onboarding failed", "error")
-        return
-      }
-      // Persist on server identity bridge (Pi-verified mapping).
+      // Persist on server identity bridge first. The server independently checks
+      // every required registration field before changing the identity lifecycle.
       // Client state advances only after authoritative success (or local-dev fallback).
       let serverOk = false
+      let serverRejectedIncompleteProfile = false
       try {
         const headers = {
           "Content-Type": "application/json",
@@ -2517,6 +2513,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         })
         const body = await res.json().catch(() => ({}))
         serverOk = Boolean(res.ok && body?.ok && body?.identity?.onboardingCompleted === true)
+        serverRejectedIncompleteProfile = res.status === 422 || body?.error === "ONBOARDING_PROFILE_INCOMPLETE"
         if (!serverOk) {
           console.warn("[completeOnboarding] server did not confirm", body?.error || res.status)
         }
@@ -2525,12 +2522,23 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       }
 
       const { allowLocalAuthFallback } = await import("@/lib/system-config")
-      if (!serverOk && !allowLocalAuthFallback()) {
+      if (!serverOk && (serverRejectedIncompleteProfile || !allowLocalAuthFallback())) {
         addToast(
-          "Could not save onboarding on the server. Please check your connection and try again.",
+          serverRejectedIncompleteProfile
+            ? "Some required registration details are still missing. Return to the indicated steps and complete them."
+            : "Could not save onboarding on the server. Please check your connection and try again.",
           "error"
         )
-        return
+        return false
+      }
+
+      const bound = getBoundDomainServices()
+      const domainResult = bound?.identity
+        ? await bound.identity.completeOnboarding()
+        : { ok: false as const, error: "Services not ready" }
+      if (!domainResult.ok) {
+        addToast(("error" in domainResult && domainResult.error) || "Onboarding could not be finalized", "error")
+        return false
       }
 
       IdentityService.setOnboardingCompleted()
@@ -2557,11 +2565,13 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       try {
         await persistServerProfile({ ...profile, onboarded: true })
       } catch {
-        /* offline — local cache still holds this session */
+        /* server identity is authoritative; local cache still holds this session */
       }
+      return true
     } catch (error) {
       errorLogger.logError(error instanceof Error ? error : new Error(String(error)))
       addToast("Onboarding could not be completed. Please try again.", "error")
+      return false
     }
   }, [addToast, state.profile])
 

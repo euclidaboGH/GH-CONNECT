@@ -1,12 +1,17 @@
 # GreenHaven
 
-**Current source version:** `0.338.55`
+**Current source version:** `0.338.56`
 
 Production status: **NOT APPROVED** — supported Node 24.15.0 dependency-backed typecheck/lint/build, browser/device, live database/provider and operator acceptance remain outstanding.
 
 This repository is the canonical GreenHaven source tree. See `docs/SOURCE_OF_TRUTH.md` and `docs/CURRENT_BUILD_CONTEXT.md` before implementation or release work.
 
-## Latest implementation candidate — 0.338.55 / Run #291
+## Latest implementation candidate — 0.338.56 / Run #296
+
+Run #296 fixes incomplete onboarding/profile registration by requiring explicit, valid details, confirming every step is durably saved, uploading profile photos to durable storage, and rejecting server-side completion while any required field is missing. See `RUN296-ONBOARDING-REGISTRATION-DELIVERY.md`.
+
+
+## Previous baseline — Run #292 / 0.338.55
 
 Run #292 adds a mobile-first content recovery pass across Marketplace, Communities, Discovery and Messages, reducing oversized header and summary regions without removing controls or changing domain logic. It also records the live Testnet wallet-schema drift: a required wallet-address confirmation RPC is absent, and its source migration is not in the inspected migration history. That migration is not safe to apply in isolation because source/live migration history is unreconciled. The three uncertain Pi payouts remain reserved pending authoritative provider reconciliation. No database migration, ledger mutation, provider transfer, GitHub push or Vercel deployment was performed. Production remains NOT APPROVED; full Node 24.15.0 typecheck/lint/build and visual device acceptance remain outstanding.
 

@@ -1,14 +1,14 @@
 # GreenHaven / GH-CONNECT — Source of Truth
 
-**Current source baseline archive:** `GREENHAVEN-0.338.55-RUN292-MOBILE-WALLET-AUDIT.zip`
-**Current working candidate:** `0.338.55`
-**Current source version:** `0.338.55`
-**Package identity:** `gh-connect@0.338.55`
-**Active development branch:** not yet created; GitHub branch creation returned HTTP 403 (`Resource not accessible by integration`). No remote refs or commits were changed. The 0.338.54 source bundle is available for review/import.
+**Current source baseline archive:** `GREENHAVEN-0.338.55-RUN295-HELD-MIGRATIONS-HARDENED.zip` (user-uploaded authoritative baseline)
+**Current working candidate:** `0.338.56` / Run #296
+**Current source version:** `0.338.56`
+**Package identity:** `gh-connect@0.338.56`
+**Active development branch:** no remote branch or commit was created by this run.
 
-## Current implementation authority — 0.338.55 / Run #292
+## Current implementation authority — 0.338.56 / Run #296
 
-Run #292 adds a mobile-first content recovery pass for Marketplace, Communities, Discovery and Messages, reducing oversized header/summary height while preserving controls and domain behavior. Live Testnet inspection confirms `gh_pi_wallet_authorization_confirm_provider_address(text,text,text,text)` is absent and its source migration is not recorded in the inspected history. The migration also changes payout and wallet authorization schema and must not be applied in isolation while the source/live migration sequence is unreconciled. Three uncertain requests totalling 3.00 π remain reserved; no release, settlement, retry or replacement payment was made. No live migration or production deployment was performed. Node 24.15.0 build and visual acceptance remain pending.
+Run #296 hardens onboarding and profile registration. It removes the synthetic age-18 and default friendship-intent values; requires a valid date of birth/adult age, gender, structured location, primary connection mode, at least one explicit connection intent, three distinct interests and a durable profile photo; waits for server-confirmed profile persistence before advancing; uploads onboarding photos through the existing authenticated durable-media pipeline; and adds an independent server-side required-field gate before Pi identity completion. An explicit HTTP 422 incomplete-profile rejection cannot be bypassed by local-development fallback. Production profile reads fail closed rather than using stale process memory after a database read failure. Focused source-contract verification passes 18/18. The six Run #295 held migrations remain unchanged. Full Node 24.15.0 dependency-backed typecheck/lint/build, PostgreSQL rehearsal, Pi Browser/device acceptance and a new Preview deployment remain outstanding. No Supabase migration, live Testnet record, financial state, GitHub remote or Vercel deployment was changed. Production remains NOT APPROVED.
 
 ## Historical implementation authority — 0.338.40
 

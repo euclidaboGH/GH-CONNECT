@@ -1,58 +1,35 @@
 # GreenHaven / GH-CONNECT — Full Project Bundle
 
-Baseline: **0.338.54**  
-Bundle date: **2026-11-11**
+Baseline: **0.338.55 / RUN295**  
+Delivery: **0.338.56 / RUN296 — Onboarding Registration Integrity**  
+Bundle date: **2026-11-12**
 
-This is the complete source project assembled from the 0.338.53 Active Module Filters Phase 1 source archive, with the Run #291 payout-recovery safety correction and postbuild footprint diagnostics applied.
+## Run #296 onboarding and profile registration fixes
 
-## Included latest source work
+- Removed the fake age-18 registration default and require a valid date of birth for adult-age calculation.
+- Removed the implicit connection-intent default; users must actively choose their primary mode and at least one connection goal.
+- Required server-confirmed profile persistence before moving through registration steps.
+- Added durable authenticated profile-photo uploads during onboarding.
+- Added server-side required-field validation before Pi identity onboarding completion.
+- Prevented local-development fallback from bypassing an explicit incomplete-profile rejection.
+- Prevented production onboarding decisions from falling back to stale in-memory profile records when durable reads fail.
+- Removed fabricated age/gender/primary-mode defaults from server profile projection.
 
-- Run #291: self-service Pi earnings reservation release is restricted to requests that provably never started provider execution; processing/uncertain requests remain held for authoritative provider reconciliation. Added 15 focused regression checks.
-- Run #291: added non-blocking postbuild workspace-footprint diagnostics to identify large directories/files in the Vercel build workspace.
+See `RUN296-ONBOARDING-REGISTRATION-DELIVERY.md` for details and verification limits.
 
-- Shared responsive filter workspace integrated across the 11 Active modules: Community, GH Chat, Connections, Matches, Marketplace, Orders, Wallet, GHC, Pi Payments, Rewards and Membership.
-- Restored `scripts/check-phase1-12-engagement-reliability.mjs`, which was referenced by `prebuild:checks` but missing from the CI checkout.
-- Updated the engagement regression assertion to match the implemented notification request-array flow.
-- Updated the legacy Phase 12 verification fixture with a clearly labelled 0.338.53 baseline reference, without changing its historical content or claiming release approval.
+## Preserved Run #295 baseline
 
-## Focused verification performed for this bundle
+The six held migrations (#192, #194, #195, #196, #199 and #216) remain unchanged and classified for review. Their PostgreSQL rehearsal and release gates remain outstanding.
 
-- Engagement reliability regression: 16/16
-- Phase 10 release closure: 16/16
-- Phase 10 platform acceptance: 24/24
-- Phase 24 final release review: PASS
-- Release hygiene: 15/15
-- Project truth: 11/11
-- Migration source manifest: 221/221
-- Active module filter panel contracts: 14/14
+## Verification
 
-## Important release and verification boundaries
+- Run #296 onboarding registration integrity contract: PASS (18 assertions).
+- Package and lockfile JSON validation: PASS; both report version 0.338.56.
+- Full dependency-backed TypeScript, lint, Next.js build and browser E2E are outstanding because this workspace has no installed dependencies and only Node 22.16.0; the project requires Node 24.15.0.
 
-- Production remains **NOT APPROVED**.
-- Pi-funded GHC acquisition, paid business checkout, withdrawals, payouts and other financially sensitive execution paths remain gated.
-- No database migration was applied, no database push was run, and no live financial transaction was executed.
-- The 0.338.53 baseline is now verified by successful Vercel Preview builds on both connected projects (Node 24.22.2, 315 prebuild checks invoked). The new 0.338.54 Run #291 changes have not yet been pushed or preview-built. The connected GitHub integration rejected branch creation with HTTP 403, so no remote refs/commits or PRs were changed.
-- Run #291 payout-recovery safety contract passes 15/15 locally. The postbuild footprint reporter has been exercised against the source tree; the next Vercel build must capture its postbuild directory/file measurements. Full Node 24 validation for the new increment and real Android/Pi Browser/desktop visual acceptance remain outstanding.
-- Use Node.js **24.15.0**, as pinned by the project, for the full CI/build workflow.
+## Safety and release boundary
 
-## Recommended next verification
-
-From the project root, run:
-
-```bash
-node scripts/check-phase1-12-engagement-reliability.mjs
-node scripts/check-phase10-release-closure.mjs
-node scripts/check-phase10-platform-acceptance.mjs
-node scripts/check-phase24-release-review.mjs
-node scripts/check-release-hygiene.mjs
-node scripts/check-project-truth.mjs
-node scripts/check-migration-source-manifest.mjs
-node scripts/check-active-module-filter-panels.mjs
-npm run verify:static
-npm run prebuild
-npm run typecheck
-npm run lint
-npm run build
-```
-
-Run the complete workflow under Node 24.15.0 with dependencies installed from the committed lockfile.
+- No live Supabase/Testnet data or schema was changed.
+- No migrations were applied or pushed.
+- No GitHub push, Vercel deployment or financial transaction was performed.
+- Production remains **NOT APPROVED** pending full CI/build and Pi Browser acceptance.

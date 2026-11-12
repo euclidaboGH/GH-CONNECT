@@ -8,6 +8,7 @@ import { ageFromBornDate, isAdultFromBornDate, maxBornDateForMinAge } from "@/li
 import { useGHC } from "@/contexts/ghc-context"
 import { INTERESTS } from "@/lib/ghc-data"
 import { compressForAvatar } from "@/lib/media/compress-image"
+import { uploadDurableMedia } from "@/lib/media/upload-client"
 import type { OnboardingStep, Gender, PrimaryMode } from "@/lib/ghc-types"
 
 import {
@@ -242,7 +243,7 @@ export function Onboarding() {
       return parts.length > 1 ? parts.slice(1).join(" ") : ""
     })(),
     displayName: safeProfile.displayName || piUsername || "",
-    age: safeProfile.age || 18,
+    age: typeof safeProfile.age === "number" ? safeProfile.age : 0,
     bornDate: (safeProfile as any).bornDate || "",
     gender: safeProfile.gender && safeProfile.gender !== "prefer-not-to-say" ? safeProfile.gender : "",
     city: safeProfile.city || "",
@@ -252,8 +253,8 @@ export function Onboarding() {
       ? parseLegacyLocation(safeProfile.city || "", safeProfile.country || "")
       : null) as StructuredLocation | null,
     bio: safeProfile.bio || "",
-    primaryMode: safeProfile.primaryMode || "friendship",
-    connectionIntents: (() => { const n = normalizeIntents((safeProfile as { connectionIntents?: string[] }).connectionIntents); return n.length ? n : (["friendship"] as ConnectionIntentId[]) })(),
+    primaryMode: safeProfile.primaryMode || "",
+    connectionIntents: (() => { const n = normalizeIntents((safeProfile as { connectionIntents?: string[] }).connectionIntents); return n })(),
     interests: safeProfile.interests || [],
     photos: safeProfile.photos || [],
   })
@@ -283,9 +284,8 @@ export function Onboarding() {
       if (cleanName.length < 2 || cleanName.length > 60 || !looksLikeWords(cleanName))
         nextErrors.displayName = "First name and surname must form a valid full name."
       const derived = formData.bornDate ? ageFromBornDate(formData.bornDate) : null
-      const ageNum = derived !== null ? derived : Number(formData.age)
-      if (formData.bornDate && !isAdultFromBornDate(formData.bornDate)) nextErrors.age = "You must be at least 18 years old."
-      else if (!Number.isFinite(ageNum) || ageNum < 18 || ageNum > 120) nextErrors.age = "You must be 18–120 years old."
+      if (!formData.bornDate) nextErrors.age = "Enter your date of birth to continue."
+      else if (derived === null || !isAdultFromBornDate(formData.bornDate)) nextErrors.age = "You must be at least 18 years old and enter a valid date."
       if (
         !formData.structuredLocation?.countryId ||
         !formData.structuredLocation?.admin1Id ||
@@ -304,6 +304,11 @@ export function Onboarding() {
         nextErrors.gender = "Please select your gender to continue."
       }
     }
+    if (step === 2) {
+      const intents = normalizeIntents(formData.connectionIntents)
+      if (intents.length < 1) nextErrors.connectionIntents = "Choose at least one connection goal."
+      if (!["friendship", "dating", "networking"].includes(formData.primaryMode)) nextErrors.primaryMode = "Choose a valid primary connection mode."
+    }
     if (step === 3 && formData.interests.length < 3) nextErrors.interests = "Choose at least 3 interests."
     if (step === 4 && formData.photos.length < 1) nextErrors.photos = "Add a profile photo to continue."
     setErrors(nextErrors)
@@ -314,7 +319,7 @@ export function Onboarding() {
     if (!validateStep()) return
     if (step === 1) {
       const fullName = `${formData.firstName} ${formData.lastName}`.trim().replace(/\s+/g, " ")
-      await updateProfile({
+      const saved = await updateProfile({
         displayName: fullName,
         age: formData.bornDate ? (ageFromBornDate(formData.bornDate) ?? formData.age) : formData.age,
         bornDate: formData.bornDate,
@@ -325,26 +330,34 @@ export function Onboarding() {
         locationPrivacy: "locality",
         bio: formData.bio.trim().replace(/\s+/g, " "),
       })
+      if (!saved) { setErrors((p) => ({ ...p, persistence: "We could not securely save these details. Check your connection and try again." })); return }
+      setErrors((p) => ({ ...p, persistence: "" }))
       setStep(2)
     } else if (step === 2) {
-      await updateProfile({
+      const saved = await updateProfile({
         primaryMode: formData.primaryMode as PrimaryMode,
         connectionIntents: normalizeIntents((formData as { connectionIntents?: string[] }).connectionIntents),
       } as Partial<import("@/lib/ghc-types").Profile>)
+      if (!saved) { setErrors((p) => ({ ...p, persistence: "Your connection choices were not saved. Please retry." })); return }
+      setErrors((p) => ({ ...p, persistence: "" }))
       try {
         saveConnectionIntents(IdentityService.getCurrentUserId(), normalizeIntents((formData as { connectionIntents?: string[] }).connectionIntents) as ConnectionIntentId[])
       } catch { /* */ }
       setStep(3)
     } else if (step === 3) {
-      await updateProfile({ interests: formData.interests })
+      const saved = await updateProfile({ interests: formData.interests })
+      if (!saved) { setErrors((p) => ({ ...p, persistence: "Your interests were not saved. Please retry." })); return }
+      setErrors((p) => ({ ...p, persistence: "" }))
       setStep(4)
     } else if (step === 4) {
-      await updateProfile({ photos: formData.photos })
+      const saved = await updateProfile({ photos: formData.photos })
+      if (!saved) { setErrors((p) => ({ ...p, persistence: "Your profile photo was not saved. Please retry." })); return }
+      setErrors((p) => ({ ...p, persistence: "" }))
       setStep(5)
     } else if (step === 5) {
       setFinishing(true)
       try {
-        await updateProfile({
+        const saved = await updateProfile({
           photos: formData.photos,
           city: formData.city,
           country: formData.country,
@@ -352,9 +365,16 @@ export function Onboarding() {
           locationPrivacy: "locality",
           bio: formData.bio,
           interests: formData.interests,
-          displayName: formData.displayName.trim().replace(/\s+/g, " "),
+          displayName: `${formData.firstName} ${formData.lastName}`.trim().replace(/\s+/g, " "),
+          age: formData.bornDate ? (ageFromBornDate(formData.bornDate) ?? undefined) : undefined,
+          gender: formData.gender as Gender,
+          primaryMode: formData.primaryMode as PrimaryMode,
+          connectionIntents: normalizeIntents(formData.connectionIntents),
         })
-        await completeOnboarding()
+        if (!saved) { setErrors((p) => ({ ...p, persistence: "Your profile details could not be confirmed on the server. Nothing has been marked complete; please retry." })); return }
+        setErrors((p) => ({ ...p, persistence: "" }))
+        const completed = await completeOnboarding()
+        if (!completed) setErrors((p) => ({ ...p, persistence: "Registration was not confirmed. Review any missing details and try again." }))
       } finally {
         setFinishing(false)
       }
@@ -367,8 +387,16 @@ export function Onboarding() {
     setUploading(true)
     try {
       const compressed = await compressForAvatar(file)
-      setFormData((p) => ({ ...p, photos: [...p.photos, compressed] }))
-      setErrors((p) => ({ ...p, photos: "" }))
+      const blob = await fetch(compressed).then((response) => response.blob())
+      const uploaded = await uploadDurableMedia(blob, {
+        fileName: `onboarding-avatar-${Date.now()}.${blob.type === "image/webp" ? "webp" : "jpg"}`,
+        category: "avatars",
+      })
+      if (!uploaded.ok || uploaded.kind !== "image") {
+        throw new Error(uploaded.ok ? "The uploaded file is not an image." : uploaded.userMessage || uploaded.error)
+      }
+      setFormData((p) => ({ ...p, photos: [...p.photos, uploaded.url] }))
+      setErrors((p) => ({ ...p, photos: "", persistence: "" }))
     } catch (err) {
       console.error("[onboarding] Photo upload failed:", err)
       setErrors((p) => ({
@@ -570,6 +598,7 @@ export function Onboarding() {
                     <label className="mb-1.5 block text-[12px] font-bold text-white/60">First name *</label>
                     <input
                       type="text"
+                      required
                       value={formData.firstName}
                       onChange={(e) => {
                         const firstName = e.target.value
@@ -590,6 +619,7 @@ export function Onboarding() {
                     <label className="mb-1.5 block text-[12px] font-bold text-white/60">Surname *</label>
                     <input
                       type="text"
+                      required
                       value={formData.lastName}
                       onChange={(e) => {
                         const lastName = e.target.value
@@ -614,6 +644,8 @@ export function Onboarding() {
                     <label className="mb-1.5 block text-[12px] font-bold text-white/60">Date of birth *</label>
                     <input
                       type="date"
+                      required
+                      aria-required="true"
                       max={maxBornDateForMinAge(18)}
                       value={formData.bornDate}
                       onChange={(e) => {
@@ -644,7 +676,6 @@ export function Onboarding() {
                       <option value="male">Male</option>
                       <option value="female">Female</option>
                       <option value="non-binary">Non-binary</option>
-                      <option value="prefer-not-to-say">Prefer not to say</option>
                     </select>
                     {errors.gender && <p className="mt-1 text-xs text-rose-400">{errors.gender}</p>}
                   </div>
@@ -764,6 +795,8 @@ export function Onboarding() {
                   )
                 })}
               </div>
+              {errors.connectionIntents && <p role="alert" className="text-center text-xs text-rose-400">{errors.connectionIntents}</p>}
+              {errors.primaryMode && <p role="alert" className="text-center text-xs text-rose-400">{errors.primaryMode}</p>}
               <p className="text-center text-[11px] text-white/35">
                 Multi-select is fine — Discover uses these to rank people for you.
               </p>
@@ -894,9 +927,9 @@ export function Onboarding() {
                 <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-300 ring-2 ring-emerald-400/30 shadow-[0_0_30px_rgba(16,185,129,0.35)]">
                   <Check size={32} strokeWidth={2.5} />
                 </div>
-                <h1 className="text-[1.65rem] font-black tracking-tight text-white">You&apos;re all set!</h1>
+                <h1 className="text-[1.65rem] font-black tracking-tight text-white">Review your profile</h1>
                 <p className="mx-auto mt-2 max-w-xs text-[14px] text-white/50">
-                  Your profile is ready. Time to make meaningful connections!
+                  Check your details below, then finish registration to enter GreenHaven.
                 </p>
               </div>
 
@@ -958,6 +991,7 @@ export function Onboarding() {
               onClick={() => void handleNext()}
               disabled={
                 finishing ||
+                (step === 2 && (normalizeIntents(formData.connectionIntents).length < 1 || !["friendship", "dating", "networking"].includes(formData.primaryMode))) ||
                 (step === 3 && formData.interests.length < 3) ||
                 (step === 1 && (
                   !formData.gender ||
