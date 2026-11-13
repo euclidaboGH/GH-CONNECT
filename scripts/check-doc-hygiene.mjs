@@ -6,6 +6,9 @@ const root = process.cwd()
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
 const docsRoot = join(root, 'docs')
 const required = new Set([
+  'docs/RUN299-20-POINT-BUILD-REMEDIATION.md',
+  'docs/RUN300-20-POINT-RELEASE-CI-HARDENING.md',
+  'docs/RUN301-20-POINT-RELEASE-GATE-HARDENING.md',
   'docs/UPGRADE-WORKLOG-0.338.62.md',
   'docs/UPGRADE-WORKLOG-0.338.61.md',
   'docs/SOURCE_OF_TRUTH.md',

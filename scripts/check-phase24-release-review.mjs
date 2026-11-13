@@ -10,6 +10,8 @@ const release = read('lib/app-release.ts')
 const readme = read('README.md')
 const truth = read('docs/PROJECT_TRUTH.md')
 const readiness = read('docs/PHASE-12-FINAL-INTEGRATION-RELEASE-READINESS.md')
+const acceptance = read('docs/PHASE-1-12-SYSTEM-WIDE-ACCEPTANCE.md')
+const worklog = read(`docs/UPGRADE-WORKLOG-${pkg.version}.md`)
 const prebuild = pkg.scripts['prebuild:checks'] ?? ''
 const verify = pkg.scripts['verify:static'] ?? ''
 const version = pkg.version
@@ -17,7 +19,7 @@ const version = pkg.version
 if (pkg.version !== version) failures.push(`package version must be ${version}`)
 if (lock.version !== version || lock.packages?.['']?.version !== version) failures.push('package-lock root version is not synchronized')
 if (!release.includes(`APP_RELEASE_VERSION = "${version}"`)) failures.push('in-app release version is not synchronized')
-for (const [name, content] of [['README', readme], ['project truth', truth], ['release readiness', readiness]]) {
+for (const [name, content] of [['README', readme], ['project truth', truth], ['release readiness', readiness], ['Phase 1–12 acceptance', acceptance], ['current worklog', worklog]]) {
   if (!content.includes(version)) failures.push(`${name} does not identify current baseline ${version}`)
 }
 if (!/production status:\s*\*\*NOT APPROVED\*\*/i.test(readme)) failures.push('README must preserve the production NOT APPROVED boundary')
