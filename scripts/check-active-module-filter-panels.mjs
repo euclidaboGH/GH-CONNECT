@@ -14,7 +14,7 @@ const membership = read("components/ghc/premium-membership-screen.tsx")
 const registry = read("lib/navigation/service-registry.ts")
 
 const checks = [
-  ["shared filter panel keeps controls visible on desktop and collapsible on narrow screens", panel.includes("sm:hidden") && panel.includes("hidden sm:block") && panel.includes("aria-expanded") && panel.includes("aria-controls")],
+  ["shared filter panel is compact and explicitly collapsible on every viewport", panel.includes("defaultExpanded = false") && panel.includes("hidden={!expanded}") && panel.includes("aria-expanded={expanded}") && panel.includes("aria-controls={contentId}")],
   ["shared filter panel exposes live result counts and active-filter count", panel.includes('aria-live="polite"') && panel.includes("activeCount > 0")],
   ["community directory uses shared responsive filter workspace", community.includes('title="Explore communities"') && community.includes("resultCount={visibleGroups.length}")],
   ["GH Chat inbox uses shared responsive filter workspace", messages.includes('title="Refine your inbox"') && messages.includes("resultCount={list.length}")],

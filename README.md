@@ -1,14 +1,14 @@
 # GreenHaven
 
-**Current source version:** `0.338.65`
+**Current source version:** `0.338.66`
 
 Production status: **NOT APPROVED** — supported Node 24.15.0 dependency-backed typecheck/lint/build, browser/device, live database/provider and operator acceptance remain outstanding.
 
 This repository is the canonical GreenHaven source tree. See `docs/SOURCE_OF_TRUTH.md` and `docs/CURRENT_BUILD_CONTEXT.md` before implementation or release work.
 
-## Latest implementation — Run #302 / 0.338.65
+## Latest implementation — Run #303 / 0.338.66
 
-Run #302 hardens Pi withdrawal authorization: only the Pi Platform-verified wallet address can be bound to consent; browser SDK values are comparison-only; legacy UID-only consent remains inactive; grant failures preserve safe diagnostics; and client authorization is single-flight with bounded requests. Twenty focused upgrades and 27 source assertions were added. No migration, financial mutation, GitHub push or deployment was performed. Node 24.15.0 dependency-backed typecheck/lint/build and live Pi Testnet acceptance remain required. Production remains NOT APPROVED.
+Run #303 standardizes compact filter/search behaviour across Discovery, Messages, Communities, Marketplace, Wallet/GHC, Pi Payments, Rewards and Membership. Filter trays are collapsed by default on all screen sizes, while primary search inputs remain visible. Discovery suggestions and global search are viewport-bounded. It also fixes the Vercel TypeScript failure by safely rejecting a null Pi `/v2/me` response before wallet-address access. Twenty focused upgrades are documented in `docs/UPGRADE-WORKLOG-0.338.66.md`. No migration, financial mutation, GitHub push or deployment was performed. Node 24.15.0 typecheck/lint/build and device acceptance remain required. Production remains NOT APPROVED.
 
 ## Candidate addition — Run #297 (stale-hold release)
 

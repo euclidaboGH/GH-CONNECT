@@ -2716,8 +2716,7 @@ export function MarketplaceScreen({
             description="Narrow listings by category, listing type, delivery, currency and date. Numeric price ranges stay currency-specific."
             resultCount={listings.length}
             activeCount={Number(Boolean(query.trim())) + Number(Boolean(category)) + Number(kindFilter !== "all") + Number(deliveryFilter !== "all") + Number(priceCurrency !== "all") + Number(Boolean(minPrice)) + Number(Boolean(maxPrice)) + Number(Boolean(browseFrom)) + Number(Boolean(browseTo))}
-          >
-            <label className="relative block w-full">
+            persistentContent={<label className="relative block w-full">
               <span className="sr-only">Search listings</span>
               <Search
                 size={16}
@@ -2746,8 +2745,8 @@ export function MarketplaceScreen({
                   <X size={15} />
                 </button>
               ) : null}
-            </label>
-
+            </label>}
+          >
             {showCategories ? (
               <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide" role="group" aria-label="Categories">
                 <button

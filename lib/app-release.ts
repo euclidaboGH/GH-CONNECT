@@ -1,6 +1,6 @@
 /** Release identity; session integrity and release gates are versioned with this source. */
-export const APP_RELEASE_VERSION = "0.338.65"
+export const APP_RELEASE_VERSION = "0.338.66"
 
 /** Concise, privacy-safe release note shown in the authenticated in-app update notice. */
 export const APP_RELEASE_SUMMARY =
-  "Run #302 hardens Pi withdrawal wallet proof, preserves actionable 409 diagnostics, requires Platform-verified wallet binding and adds 20 focused authorization upgrades. No migration, ledger mutation, payout or production approval is changed."
+  "Run #303 makes filter trays compact across the app, keeps primary search visible, bounds discovery/global search and fixes the Pi wallet-consent nullability build error. No migration, ledger mutation, payout or production approval is changed."

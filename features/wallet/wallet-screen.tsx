@@ -1830,6 +1830,10 @@ const lowBalance = balance === 0 && displayPending === 0
                 description="Refine server-confirmed GHC utility records by direction, status, date and reference."
                 resultCount={filteredTxs.length}
                 activeCount={Number(txFilter !== "all") + Number(txDateRange !== "all") + Number(Boolean(query.trim()))}
+                persistentContent={<label className="relative block">
+                  <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                  <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search description, reference or transaction ID…" className="min-h-10 w-full rounded-xl border border-border bg-card py-2 pl-9 pr-3 text-sm outline-none ring-emerald-500/30 focus-visible:ring-2" aria-label="Search GHC transactions by description or reference" />
+                </label>}
               >
               <section className="grid grid-cols-3 gap-2 rounded-2xl border border-border/70 bg-card p-3 shadow-sm" aria-label="Filtered GHC statement summary">
                 <div className="min-w-0">
@@ -1881,21 +1885,6 @@ const lowBalance = balance === 0 && displayPending === 0
                     </span>
                   </button>
                 ))}
-              </div>
-              <div className="relative">
-                <Search
-                  size={14}
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                  aria-hidden="true"
-                />
-                <input
-                  type="search"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search description, reference or transaction ID…"
-                  className="min-h-11 w-full rounded-2xl border border-border bg-card py-2.5 pl-9 pr-3 text-sm outline-none ring-emerald-500/30 focus-visible:ring-2"
-                  aria-label="Search GHC transactions by description or reference"
-                />
               </div>
               <FilterSummary
                 items={[
@@ -1973,6 +1962,10 @@ const lowBalance = balance === 0 && displayPending === 0
                     description="Search provider references and filter by payment lifecycle. This view reads stored intents; it never retries or submits a payment."
                     resultCount={filteredPiIntents.length}
                     activeCount={Number(piStatusFilter !== "all") + Number(txDateRange !== "all") + Number(Boolean(query.trim()))}
+                    persistentContent={<label className="relative block">
+                      <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                      <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search purpose, product or provider reference…" aria-label="Search Pi payment records" className="min-h-10 w-full rounded-xl border border-border bg-background pl-9 pr-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-violet-500/40" />
+                    </label>}
                   >
                     <div className="flex flex-wrap gap-1.5" role="group" aria-label="Pi payment status filter">
                       {(["all", "pending", "completed", "failed"] as const).map((status) => (
@@ -1981,10 +1974,6 @@ const lowBalance = balance === 0 && displayPending === 0
                         </button>
                       ))}
                     </div>
-                    <label className="relative block">
-                      <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden />
-                      <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search purpose, product or provider reference…" aria-label="Search Pi payment records" className="min-h-11 w-full rounded-xl border border-border bg-background pl-9 pr-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-violet-500/40" />
-                    </label>
                     <FilterSummary
                       items={[
                         ...(piStatusFilter !== "all" ? [{ id: "status", label: `Status: ${piStatusFilter}`, onRemove: () => setPiStatusFilter("all") }] : []),

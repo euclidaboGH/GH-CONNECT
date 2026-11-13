@@ -74,7 +74,7 @@ export function SearchBar({
               onSearch(event.target.value)
             }}
             onFocus={() => setIsFocused(true)}
-            onBlur={() => window.setTimeout(() => setIsFocused(false), 180)}
+            onBlur={() => setIsFocused(false)}
             onKeyDown={(event) => {
               if (
                 event.key === "Enter" &&
@@ -109,15 +109,15 @@ export function SearchBar({
         </button>
       </div>
 
-      {!searchQuery && (
-        <div className="flex flex-wrap gap-1.5 px-0.5">
-          <span className="text-[10px] font-semibold text-muted-foreground">Try:</span>
+      {!searchQuery && !isFocused && (
+        <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto whitespace-nowrap px-0.5 scrollbar-hide">
+          <span className="shrink-0 text-[10px] font-semibold text-muted-foreground">Try:</span>
           {["Lagos", "Tech", "Mentorship"].map((term) => (
             <button
               key={term}
               type="button"
               onClick={() => submitSearch(term)}
-              className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-semibold text-foreground transition hover:bg-primary/10 hover:text-primary"
+              className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-[10px] font-semibold text-foreground transition hover:bg-primary/10 hover:text-primary"
             >
               {term}
             </button>
@@ -135,14 +135,16 @@ export function SearchBar({
               ? "Recent searches & suggestions"
               : "Suggested searches"}
           </p>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex max-h-24 flex-wrap gap-1.5 overflow-y-auto overscroll-contain">
             {visibleSearches.map((search) => (
               <button
                 key={search}
                 type="button"
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => submitSearch(search)}
-                className="rounded-full bg-muted/40 px-3 py-1.5 text-xs font-semibold text-foreground/90 transition hover:bg-emerald-50 hover:text-emerald-700"
+                role="option"
+                aria-selected="false"
+                className="rounded-full bg-muted/40 px-3 py-1.5 text-[11px] font-semibold text-foreground/90 transition hover:bg-emerald-50 hover:text-emerald-700"
               >
                 {search}
               </button>

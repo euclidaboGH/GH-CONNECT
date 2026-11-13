@@ -1,14 +1,14 @@
 # GreenHaven / GH-CONNECT — Source of Truth
 
 **Current source baseline archive:** `GREENHAVEN-0.338.64-RUN301-RELEASE-GATE-CI-FIXES.zip` (user-uploaded authoritative baseline; SHA-256 `a82eb2810bbb35705b8aade5cc390417b1b8944637a9070226db36f48868ac39`)
-**Current working candidate:** `0.338.65` (Run #302; derived from the user-uploaded 0.338.64 archive)
-**Current source version:** `0.338.65`
-**Package identity:** `gh-connect@0.338.65`
+**Current working candidate:** `0.338.66` (Run #303; derived from the user-uploaded 0.338.64 archive)
+**Current source version:** `0.338.66`
+**Package identity:** `gh-connect@0.338.66`
 **Active development branch:** no remote branch or commit was created by this run.
 
-## Current release note — 0.338.65 (Run #302 Pi withdrawal authorization hardening)
+## Current release note — 0.338.66 (Run #303 compact filters/search and Vercel type fix)
 
-Run #302 hardens Pi withdrawal authorization: only the Pi Platform-verified wallet address can be bound to consent; browser SDK values are comparison-only; a later exact provider `to_address` confirmation remains a trusted server verification; legacy UID-only consent remains inactive; grant failures preserve safe diagnostics; and client authorization is single-flight with bounded requests. Twenty focused upgrades and 27 source assertions were added. No migration, financial mutation, GitHub push or Vercel deployment was performed. Node 24.15.0 dependency-backed typecheck/lint/build and live Pi Testnet acceptance remain required. Production remains NOT APPROVED.
+Run #303 makes shared filter trays collapsed by default on every viewport, adds a persistent primary-search slot, keeps key search fields available in Communities, Marketplace, Membership, Rewards, GHC and Pi Payments, keeps Messages search outside its filter tray, and bounds Discovery suggestions/global search to the available viewport. It also guards the Pi `/v2/me` response against null before dereferencing `walletAddress`, fixing the exact TypeScript error in the supplied Vercel log. Twenty focused upgrades and 25 source assertions are registered. No migration, financial mutation, dependency bump, GitHub push or Vercel deployment was performed. The prior Run #302 wallet hardening is retained. Supported Node 24.15.0 typecheck/lint/build and browser/device acceptance remain required; production remains NOT APPROVED.
 
 ## Previous release note — 0.338.63 (Run #299 build remediation)
 

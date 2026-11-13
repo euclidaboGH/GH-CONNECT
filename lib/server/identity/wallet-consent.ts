@@ -58,6 +58,7 @@ export async function verifyWalletConsentProof(
 
   // Trusted server-side verification with the Pi Platform.
   const piUser = await deps.verifyPiAccessToken(token)
+  if (!piUser || typeof piUser !== "object") return { ok: false, error: "PI_TOKEN_INVALID" }
   const verifiedPiUid = typeof piUser?.uid === "string" ? piUser.uid.trim() : ""
   if (!verifiedPiUid || verifiedPiUid.length > 160) return { ok: false, error: "PI_TOKEN_INVALID" }
 

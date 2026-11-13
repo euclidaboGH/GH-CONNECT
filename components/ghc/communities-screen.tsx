@@ -1311,8 +1311,7 @@ export function CommunitiesScreen() {
             description="Search your spaces or discover communities by topic, access and activity."
             resultCount={visibleGroups.length}
             activeCount={Number(Boolean(searchQuery.trim())) + Number(directory === "discover" && categoryFilter !== "all") + Number(directory === "discover" && privacyFilter !== "all") + Number(directory === "my" && communityAttentionFilter !== "all")}
-          >
-            <div className="relative">
+            persistentContent={<div className="relative">
               <Search
                 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                 aria-hidden
@@ -1335,7 +1334,8 @@ export function CommunitiesScreen() {
                   <X size={15} />
                 </button>
               ) : null}
-            </div>
+            </div>}
+          >
             <FilterSummary className="mt-2" items={[
               ...(searchQuery ? [{ id: "search", label: `Search: ${searchQuery}`, onRemove: () => setSearchQuery("") }] : []),
               ...(directory === "discover" && categoryFilter !== "all" ? [{ id: "category", label: `Topic: ${categoryFilter}`, onRemove: () => setCategoryFilter("all") }] : []),

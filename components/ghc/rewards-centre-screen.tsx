@@ -1214,14 +1214,13 @@ const claimPendingReward = useCallback(
                 description="Search server-confirmed reward entries by source, status and date. Results remain read-only and ledger-authoritative."
                 resultCount={filteredServerRewardTransactions.length}
                 activeCount={Number(Boolean(historyQuery.trim())) + Number(historyStatus !== "all") + Number(Boolean(historyFrom)) + Number(Boolean(historyTo))}
+                persistentContent={<label className="flex min-w-0 items-center gap-2 rounded-xl border border-border bg-background px-3">
+                  <Search size={15} className="shrink-0 text-muted-foreground" aria-hidden="true" />
+                  <input id="rewards-history-search" type="search" value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} placeholder="Search reason, activity or reference" className="h-10 min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground/70" />
+                  {historyQuery ? <button type="button" onClick={() => setHistoryQuery("")} className="rounded-full p-1 text-muted-foreground hover:bg-muted" aria-label="Clear search"><X size={14} /></button> : null}
+                </label>}
               >
               <div className="rounded-[1.25rem] border border-border/60 bg-card p-3 shadow-[var(--gh-card-shadow)]">
-                <label htmlFor="rewards-history-search" className="mb-1.5 block text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Search reward ledger</label>
-                <div className="flex items-center gap-2 rounded-xl border border-border bg-background px-3">
-                  <Search size={15} className="shrink-0 text-muted-foreground" aria-hidden="true" />
-                  <input id="rewards-history-search" value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} placeholder="Search reason, activity or reference" className="h-10 min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground/70" />
-                  {historyQuery ? <button type="button" onClick={() => setHistoryQuery("")} className="rounded-full p-1 text-muted-foreground hover:bg-muted" aria-label="Clear search"><X size={14} /></button> : null}
-                </div>
                 <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Filter reward transaction status">
                   {(["all", "posted", "pending", "reversed", "expired", "failed"] as const).map((value) => (
                     <button key={value} type="button" onClick={() => setHistoryStatus(value)} aria-pressed={historyStatus === value} className={`min-h-8 rounded-full px-3 text-[10px] font-bold capitalize transition ${historyStatus === value ? "bg-[var(--gh-green)] text-white" : "border border-border bg-background text-muted-foreground hover:text-foreground"}`}>{value === "all" ? "All" : value.replace(/_/g, " ")}</button>

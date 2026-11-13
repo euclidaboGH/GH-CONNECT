@@ -1,0 +1,47 @@
+#!/usr/bin/env node
+/** Run #303: compact, stable filter and search workspaces across active modules. */
+import { readFileSync } from 'node:fs'
+const read = (path) => readFileSync(path, 'utf8')
+const panel = read('components/ghc/filtering/filter-panel.tsx')
+const community = read('components/ghc/communities-screen.tsx')
+const marketplace = read('components/ghc/marketplace-screen.tsx')
+const membership = read('components/ghc/premium-membership-screen.tsx')
+const rewards = read('components/ghc/rewards-centre-screen.tsx')
+const wallet = read('features/wallet/wallet-screen.tsx')
+const messages = read('components/ghc/message-screen.tsx')
+const matches = read('components/ghc/match-screen.tsx')
+const search = read('components/ghc/search-bar.tsx')
+const globalSearch = read('components/ghc/global-search.tsx')
+const consent = read('lib/server/identity/wallet-consent.ts')
+const checks = []
+const test = (name, ok) => { checks.push(Boolean(ok)); console.log(`${ok ? 'PASS' : 'FAIL'} Run #303: ${name}`) }
+
+test('filter trays default to collapsed on every viewport', /defaultExpanded = false/.test(panel))
+test('filter disclosure is available on desktop and mobile', /inline-flex min-h-9 shrink-0/.test(panel) && !/sm:hidden/.test(panel))
+test('collapsed state uses the native hidden attribute to remove layout height', /hidden={!expanded}/.test(panel))
+test('filter toggle exposes expanded state and controlled content', /aria-expanded={expanded}/.test(panel) && /aria-controls={contentId}/.test(panel))
+test('filter tray state changes only from explicit user interaction', panel.includes('onClick={() => setExpanded((value) => !value)}'))
+test('primary search slot remains visible when filters are collapsed', panel.includes('persistentContent ? <div'))
+test('filter result count remains live and compact', /aria-live="polite"/.test(panel) && /results/.test(panel))
+test('active filter count is surfaced in the collapsed disclosure label', /activeCount > 0 \? `Filters · \$\{activeCount\}`/.test(panel))
+test('filter content is not forced visible on desktop', /hidden={!expanded}/.test(panel) && !/hidden sm:block/.test(panel))
+test('community search remains outside the collapsible facet tray', /persistentContent={<div className="relative">/.test(community))
+test('community topics, access and directory facets remain collapsible', community.includes('aria-label="Community directory"') && community.includes('aria-label="Access filter"'))
+test('marketplace listing search remains immediately accessible', /persistentContent={<label className="relative block w-full">/.test(marketplace))
+test('marketplace price, currency, delivery and date facets remain inside tray', marketplace.includes('Price currency') && marketplace.includes('Minimum price') && marketplace.includes('Delivery'))
+test('membership benefit search remains immediately accessible', /persistentContent={<label className="relative block">/.test(membership) && membership.includes('Search membership plans and benefits'))
+test('rewards ledger search remains immediately accessible', /persistentContent={<label className="flex min-w-0 items-center gap-2/.test(rewards))
+test('GHC transaction search remains immediately accessible', wallet.includes('Search GHC transactions by description or reference') && wallet.includes('persistentContent='))
+test('Pi payment search remains immediately accessible', wallet.includes('Search Pi payment records') && wallet.includes('persistentContent='))
+test('message inbox search remains outside the filter tray', messages.indexOf('<ConversationSearchBar') < messages.indexOf('<FilterPanel'))
+test('match discovery facets use the shared compact filter workspace', matches.includes('title="Refine your matches"') && matches.includes('<FilterPanel'))
+test('discovery suggestion chips use a single compact horizontal strip', search.includes('overflow-x-auto whitespace-nowrap') && search.includes('!isFocused'))
+test('search suggestions are height-bounded and independently scrollable', search.includes('max-h-24') && search.includes('overflow-y-auto overscroll-contain'))
+test('search suggestion blur does not rely on a delayed timer race', !search.includes('window.setTimeout(() => setIsFocused(false)'))
+test('global search modal is viewport-bounded and scroll-contained', globalSearch.includes('max-h-[82dvh]') && globalSearch.includes('overscroll-contain'))
+test('wallet consent safely rejects a null Pi /v2/me response before dereference', /if \(!piUser \|\| typeof piUser !== "object"\) return \{ ok: false, error: "PI_TOKEN_INVALID" \}/.test(consent))
+test('filter/search redesign adds no SQL migration or financial execution path', !/supabase\/migrations/.test(read('docs/UPGRADE-WORKLOG-0.338.66.md')) && !/createPayment\(|executeSpend\(|settlePayment\(/.test(panel + search))
+
+const failed = checks.filter((value) => !value).length
+console.log(`\nRun #303 filter/search density: ${checks.length - failed}/${checks.length} passed; ${failed} failed.`)
+if (failed) process.exit(1)

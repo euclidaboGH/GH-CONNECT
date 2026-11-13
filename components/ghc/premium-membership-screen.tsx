@@ -1198,6 +1198,10 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
               description="Find a plan by tier or benefit. This only filters the comparison view; it never changes your active entitlements or purchase eligibility."
               resultCount={visiblePlanTiers.length}
               activeCount={Number(planTierFilter !== "all") + Number(Boolean(planSearch.trim()))}
+              persistentContent={<label className="relative block">
+                <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                <input type="search" value={planSearch} onChange={(event) => setPlanSearch(event.target.value)} placeholder="Search benefits, tools or tier…" aria-label="Search membership plans and benefits" className="min-h-10 w-full rounded-xl border border-border bg-background pl-9 pr-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-emerald-600/40" />
+              </label>}
             >
               <div className="flex flex-wrap gap-1.5" role="group" aria-label="Membership tier filter">
                 {(["all", ...TIER_ORDER] as const).map((tier) => (
@@ -1206,10 +1210,6 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
                   </button>
                 ))}
               </div>
-              <label className="relative block">
-                <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden />
-                <input type="search" value={planSearch} onChange={(event) => setPlanSearch(event.target.value)} placeholder="Search benefits, tools or tier…" aria-label="Search membership plans and benefits" className="min-h-11 w-full rounded-xl border border-border bg-background pl-9 pr-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-emerald-600/40" />
-              </label>
               <FilterSummary
                 items={[
                   ...(planTierFilter !== "all" ? [{ id: "tier", label: `Tier: ${MEMBERSHIP_PLANS[planTierFilter].label}`, onRemove: () => setPlanTierFilter("all") }] : []),

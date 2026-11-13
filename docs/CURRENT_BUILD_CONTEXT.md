@@ -1,18 +1,18 @@
-## Run #302 — Current source authority (2026-11-13)
+## Run #303 — Current source authority (2026-11-13)
 
-- Current source candidate: **0.338.65** (derived from user-uploaded 0.338.64).
+- Current source candidate: **0.338.66** (derived from user-uploaded 0.338.64).
 - Pi withdrawal consent now requires the wallet address returned by Pi Platform `/v2/me`; browser SDK wallet data is comparison-only.
 - Legacy UID-only authorizations remain inactive until fresh wallet-address consent is verified.
-- Run #302 checks: 27/27 source assertions; Phase 28 consent runtime: 14/14; Phase 28 source: 46/46; Run #260: 25/25; Phase 2 authorization: 27/27; Phase 7 identity: 10/10; Run #246: 18/18; Run #256: 13/13; Phase 4 boundary: 12/12; Phase 6 fee: 8/8; Wallet Phase 4: 11/11; Wallet Phase 5: 19/19; Run #291: 15/15; Run #297: PASS.
+- Run #303 checks: 27/27 source assertions; Phase 28 consent runtime: 14/14; Phase 28 source: 46/46; Run #260: 25/25; Phase 2 authorization: 27/27; Phase 7 identity: 10/10; Run #246: 18/18; Run #256: 13/13; Phase 4 boundary: 12/12; Phase 6 fee: 8/8; Wallet Phase 4: 11/11; Wallet Phase 5: 19/19; Run #291: 15/15; Run #297: PASS.
 - Connected Testnet read-only snapshot: one active legacy authorization has no wallet address; 13 earnings payout requests are released; one open review case remains for an uncertain earnings payout without a provider ID. No rows or balances were changed.
 - The historical Vercel 409 trace was not retrievable; next attempts will carry safe stage and request correlation diagnostics.
 - Local workspace runtime is Node 22.16.0, below required Node 24.15.0; dependency-backed typecheck/lint/build and live Pi Testnet acceptance remain outstanding. Production remains NOT APPROVED.
 
 # CURRENT BUILD CONTEXT — GREENHAVEN / GH CONNECT
 
-## Previous source context — Run #299 (2026-11-13)
+## Retained prior implementation context — Run #299 (2026-11-13)
 
-Current working candidate: **0.338.65**. Run #299 fixes the reported Profile screen TypeScript mismatch by consuming the canonical typed `useGHCProfile()` context (whose `updateProfile` returns `Promise<boolean>`) instead of a contradictory local assertion. It also removes an obsolete ESLint suppression and registers 20 source-level build/release regression guards. No dependencies were changed without evidence of a package defect. The 691 MB Vercel footprint requires a fresh build report; the captured largest files are Next SWC binaries, while `.vercelignore` already excludes local dependency/cache/archive/environment trees.
+The Run #299 tranche fixed the reported Profile screen TypeScript mismatch by consuming the canonical typed `useGHCProfile()` context (whose `updateProfile` returns `Promise<boolean>`) instead of a contradictory local assertion. It also removed an obsolete ESLint suppression and registered 20 source-level build/release regression guards. No dependencies were changed without evidence of a package defect. The latest Vercel report showed 691 MB input source code but no memory/disk pressure; the five files above 100 MB were build-cache/SWC artifacts, and `.vercelignore` excludes local dependency/cache/archive/environment trees.
 
 Node 22.16.0 in the current work environment is below the required Node 24.15.0 engine. Dependency-backed typecheck, lint, production build and fresh Vercel Preview remain outstanding. No database migration, financial/provider operation, GitHub push or Vercel deployment was performed. Mainnet remains untouched; production remains **NOT APPROVED**.
 
