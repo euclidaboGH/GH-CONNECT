@@ -24,7 +24,7 @@ function deps(overrides = {}) {
   return {
     calls,
     deps: {
-      verifyPiAccessToken: async () => { calls.verify++; return { uid: "pi-uid-1", username: "alice" } },
+      verifyPiAccessToken: async () => { calls.verify++; return { uid: "pi-uid-1", username: "alice", walletAddress: PI_WALLET_ADDRESS } },
       getByGhUserId: async () => { calls.byGh++; return { ghUserId: "gh-1", piAppUid: "pi-uid-1", piUsername: "alice" } },
       getByPiAppUid: async () => { calls.byPi++; return { ghUserId: "gh-1", piAppUid: "pi-uid-1" } },
       ...overrides,
@@ -54,19 +54,25 @@ await t("Pi platform rejects token → PI_TOKEN_INVALID and no mapping read", as
   assert.deepEqual(r, { ok: false, error: "PI_TOKEN_INVALID" })
   assert.equal(calls.byGh, 0)
 })
-await t("missing SDK address still checks Pi Platform and fails closed when both sources omit it", async () => {
+await t("missing SDK address is accepted only when Pi Platform independently returns the address", async () => {
   const { deps: d, calls } = deps()
-  const { walletAddress, ...withoutAddress } = good
-  assert.deepEqual(await verifyWalletConsentProof(withoutAddress, d), { ok: false, error: "PI_WALLET_ADDRESS_REQUIRED" })
-  assert.equal(calls.verify, 1)
-})
-await t("Pi Platform address is accepted when SDK auth response omits it", async () => {
-  const { deps: d, calls } = deps({ verifyPiAccessToken: async () => { calls.verify++; return { uid: "pi-uid-1", username: "alice", walletAddress: PI_WALLET_ADDRESS } } })
   const { walletAddress, ...withoutAddress } = good
   const result = await verifyWalletConsentProof(withoutAddress, d)
   assert.equal(result.ok, true)
   assert.equal(result.piWalletAddress, PI_WALLET_ADDRESS)
   assert.equal(result.walletAddressSource, "platform_api")
+  assert.equal(calls.verify, 1)
+})
+await t("browser-only SDK address is never trusted when Pi Platform omits the address", async () => {
+  const { deps: d, calls } = deps({ verifyPiAccessToken: async () => { calls.verify++; return { uid: "pi-uid-1", username: "alice" } } })
+  assert.deepEqual(await verifyWalletConsentProof(good, d), { ok: false, error: "PI_WALLET_ADDRESS_UNVERIFIED" })
+  assert.equal(calls.byGh, 1)
+  assert.equal(calls.byPi, 1)
+})
+await t("missing SDK and Platform addresses return a distinct missing-address failure", async () => {
+  const { deps: d, calls } = deps({ verifyPiAccessToken: async () => { calls.verify++; return { uid: "pi-uid-1", username: "alice" } } })
+  const { walletAddress, ...withoutAddress } = good
+  assert.deepEqual(await verifyWalletConsentProof(withoutAddress, d), { ok: false, error: "PI_WALLET_ADDRESS_REQUIRED" })
   assert.equal(calls.verify, 1)
 })
 await t("server-returned wallet address must match Pi SDK address", async () => {
@@ -98,7 +104,7 @@ await t("valid proof returns the DURABLE mapped UID, ignoring any browser-suppli
   assert.equal(r.piAppUid, "pi-uid-1")
   assert.equal(r.piUsername, "alice")
   assert.equal(r.piWalletAddress, PI_WALLET_ADDRESS)
-  assert.equal(r.walletAddressSource, "pi_sdk_scope")
+  assert.equal(r.walletAddressSource, "platform_api")
 })
 await t("Platform API wallet address match is marked as API verified", async () => {
   const { deps: d } = deps({ verifyPiAccessToken: async () => ({ uid: "pi-uid-1", walletAddress: PI_WALLET_ADDRESS }) })
@@ -115,4 +121,4 @@ await t("every failure has a safe message and an HTTP status; none leak internal
   }
 })
 
-console.log(`\nPhase 28 wallet consent tests: ${passed}/13 passed`)
+console.log(`\nPhase 28 wallet consent tests: ${passed}/14 passed`)

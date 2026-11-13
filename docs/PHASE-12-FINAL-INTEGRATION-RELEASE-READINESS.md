@@ -1,7 +1,7 @@
-Release: `0.338.64`
+Release: `0.338.65`
 **Production status: NOT APPROVED for production**
 
-**Current source baseline:** `0.338.64`
+**Current source baseline:** `0.338.65`
 
 > **LEGACY VERIFICATION FIXTURE — NOT CURRENT PRODUCT AUTHORITY.**
 > Current source baseline reference: `0.338.56` (2026-11-12). The historical release details below remain archived and are not a statement of current release readiness.

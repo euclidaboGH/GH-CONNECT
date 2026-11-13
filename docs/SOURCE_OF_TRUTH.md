@@ -1,14 +1,14 @@
 # GreenHaven / GH-CONNECT — Source of Truth
 
-**Current source baseline archive:** `GREENHAVEN-0_338_62-FLAT-ROOT-BUILD-GATE-FIX.zip` (user-uploaded authoritative baseline; SHA-256 `e334b863455a36712c32d4f2b785278e5ec81c1bc1f50c5f84a07b5c80b047a3`)
-**Current working candidate:** `0.338.64` (Run #300; derived from Run #299 / authoritative 0.338.62 archive)
-**Current source version:** `0.338.64`
-**Package identity:** `gh-connect@0.338.64`
+**Current source baseline archive:** `GREENHAVEN-0.338.64-RUN301-RELEASE-GATE-CI-FIXES.zip` (user-uploaded authoritative baseline; SHA-256 `a82eb2810bbb35705b8aade5cc390417b1b8944637a9070226db36f48868ac39`)
+**Current working candidate:** `0.338.65` (Run #302; derived from the user-uploaded 0.338.64 archive)
+**Current source version:** `0.338.65`
+**Package identity:** `gh-connect@0.338.65`
 **Active development branch:** no remote branch or commit was created by this run.
 
-## Current release note — 0.338.64 (Run #300 release-gate and CI safety remediation)
+## Current release note — 0.338.65 (Run #302 Pi withdrawal authorization hardening)
 
-Run #300 fixes the Phase 1–10 regression pack's P10-B assertion to match the case-insensitive production no-go policy, synchronizes the Phase 1 audit package pointer with the executable package version, and adds 20 focused release-integrity checks. The new checks verify version/source-truth agreement, migration non-execution across GitHub workflows, no production auto-deploy, least-privilege CI permissions, Node 24.15.0 pinning, lockfile-before-install ordering, prebuild registration, and Vercel upload exclusions. No database migration, financial/provider operation, dependency change, GitHub push or Vercel deployment was performed. Production remains NOT APPROVED.
+Run #302 hardens Pi withdrawal authorization: only the Pi Platform-verified wallet address can be bound to consent; browser SDK values are comparison-only; a later exact provider `to_address` confirmation remains a trusted server verification; legacy UID-only consent remains inactive; grant failures preserve safe diagnostics; and client authorization is single-flight with bounded requests. Twenty focused upgrades and 27 source assertions were added. No migration, financial mutation, GitHub push or Vercel deployment was performed. Node 24.15.0 dependency-backed typecheck/lint/build and live Pi Testnet acceptance remain required. Production remains NOT APPROVED.
 
 ## Previous release note — 0.338.63 (Run #299 build remediation)
 

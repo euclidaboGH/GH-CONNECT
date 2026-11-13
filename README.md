@@ -1,14 +1,14 @@
 # GreenHaven
 
-**Current source version:** `0.338.64`
+**Current source version:** `0.338.65`
 
 Production status: **NOT APPROVED** — supported Node 24.15.0 dependency-backed typecheck/lint/build, browser/device, live database/provider and operator acceptance remain outstanding.
 
 This repository is the canonical GreenHaven source tree. See `docs/SOURCE_OF_TRUTH.md` and `docs/CURRENT_BUILD_CONTEXT.md` before implementation or release work.
 
-## Latest implementation — Run #299 / 0.338.64
+## Latest implementation — Run #302 / 0.338.65
 
-Run #299 corrects the Profile screen to consume the canonical `useGHCProfile()` return type rather than maintaining an incompatible local cast (`updateProfile` is `Promise<boolean>`), removes the stale `no-console` ESLint suppression, and adds 20 focused build/release regression guards. No dependency versions were changed because the supplied failure is a source type-contract error, not evidence of an incompatible package. Node 24.15.0 dependency-backed typecheck/lint/build and a fresh Vercel Preview remain required. No database migration, financial/provider operation, GitHub push or deployment was performed. Production remains NOT APPROVED.
+Run #302 hardens Pi withdrawal authorization: only the Pi Platform-verified wallet address can be bound to consent; browser SDK values are comparison-only; legacy UID-only consent remains inactive; grant failures preserve safe diagnostics; and client authorization is single-flight with bounded requests. Twenty focused upgrades and 27 source assertions were added. No migration, financial mutation, GitHub push or deployment was performed. Node 24.15.0 dependency-backed typecheck/lint/build and live Pi Testnet acceptance remain required. Production remains NOT APPROVED.
 
 ## Candidate addition — Run #297 (stale-hold release)
 

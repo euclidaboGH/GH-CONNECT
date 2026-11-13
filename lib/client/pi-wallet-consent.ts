@@ -22,6 +22,7 @@ export type WalletConsentErrorCode =
   | "PI_TOKEN_REQUIRED"
   | "PI_TOKEN_INVALID"
   | "PI_WALLET_ADDRESS_REQUIRED"
+  | "PI_WALLET_ADDRESS_UNVERIFIED"
   | "PI_WALLET_ADDRESS_INVALID"
   | "PI_WALLET_ADDRESS_MISMATCH"
   | "IDENTITY_MISMATCH"
@@ -44,6 +45,7 @@ export type WalletAuthorizationStatus = {
   piWalletAddress?: string | null
   walletAddressSource?: "platform_api" | "pi_sdk_scope" | "provider_payment" | null
   walletAddressVerifiedAt?: string | null
+  authorizationReason?: string | null
 }
 
 export type WalletConsentResult =
@@ -55,7 +57,8 @@ const MESSAGES: Record<WalletConsentErrorCode, string> = {
   PI_AUTH_UNAVAILABLE: "Pi authentication bridge is not ready. Stay in Pi Browser and retry. If this persists, reopen the app from Pi → Develop.",
   PI_TOKEN_REQUIRED: "Pi authentication is required. Please retry Pi authentication.",
   PI_TOKEN_INVALID: "Pi authentication could not be verified. Please retry Pi authentication.",
-  PI_WALLET_ADDRESS_REQUIRED: "Pi signed you in but did not grant GreenHaven the wallet-address permission. No authorization or withdrawal was created. In Pi Browser, open GreenHaven using the registered app link, approve the wallet-address permission when Pi asks, and retry. If Pi does not ask again, review GreenHaven's permissions in Pi Browser and re-enable wallet access. Never enter or substitute a wallet address manually.",
+  PI_WALLET_ADDRESS_REQUIRED: "Pi did not return a wallet address for this account. No authorization or withdrawal was created. Reopen the registered GreenHaven app in Pi Browser and approve wallet-address access. If Pi does not prompt, confirm wallet_address is enabled for GreenHaven in the Pi Developer Portal.",
+  PI_WALLET_ADDRESS_UNVERIFIED: "Pi returned an address in the browser, but its Platform API did not independently verify it. Check that wallet_address permission is enabled for GreenHaven in the Pi Developer Portal, then retry in Pi Browser. No withdrawal was started.",
   PI_WALLET_ADDRESS_INVALID: "Pi returned an invalid wallet address. No payout authorization was changed.",
   PI_WALLET_ADDRESS_MISMATCH: "Pi returned conflicting wallet details. No payout authorization was changed.",
   IDENTITY_MISMATCH: "Your authenticated Pi account does not match the Pi account linked to this GreenHaven account.",
@@ -74,6 +77,7 @@ const NON_RETRYABLE: ReadonlySet<WalletConsentErrorCode> = new Set([
   "IDENTITY_MISMATCH",
   "IDENTITY_MAPPING_REQUIRED",
   "PI_AUTH_UNAVAILABLE",
+  "PI_WALLET_ADDRESS_UNVERIFIED",
 ])
 
 function fail(code: WalletConsentErrorCode): WalletConsentResult {
@@ -82,7 +86,7 @@ function fail(code: WalletConsentErrorCode): WalletConsentResult {
 
 function normalizeCode(raw: unknown): WalletConsentErrorCode {
   const c = typeof raw === "string" ? raw : ""
-  return (c in MESSAGES ? c : "AUTHORIZATION_SAVE_FAILED") as WalletConsentErrorCode
+  return (Object.hasOwn(MESSAGES, c) ? c : "AUTHORIZATION_SAVE_FAILED") as WalletConsentErrorCode
 }
 
 /** Database-backed status read. Never cached; never trusts a browser flag. */
@@ -94,7 +98,7 @@ export async function fetchWalletAuthorizationStatus(signal?: AbortSignal): Prom
       credentials: "include",
       cache: "no-store",
       headers: { Accept: "application/json" },
-      signal,
+      signal: signal || AbortSignal.timeout(12_000),
     })
     const body = (await res.json().catch(() => null)) as {
       ok?: boolean
@@ -107,6 +111,7 @@ export async function fetchWalletAuthorizationStatus(signal?: AbortSignal): Prom
       piWalletAddress?: string | null
       walletAddressSource?: "platform_api" | "pi_sdk_scope" | "provider_payment" | null
       walletAddressVerifiedAt?: string | null
+      authorizationReason?: string | null
     } | null
     if (!res.ok || body?.ok !== true) {
       return { ok: false, code: res.status === 401 ? "AUTH_REQUIRED" : normalizeCode(body?.error ?? "WALLET_AUTHORIZATION_UNAVAILABLE") }
@@ -115,7 +120,7 @@ export async function fetchWalletAuthorizationStatus(signal?: AbortSignal): Prom
     return {
       ok: true,
       status: {
-        authorizationActive: body.authorizationActive === true && uidMatches && Boolean(body.piWalletAddress && body.walletAddressSource),
+        authorizationActive: body.authorizationActive === true && uidMatches && (body.walletAddressSource === "platform_api" || body.walletAddressSource === "provider_payment") && Boolean(body.piWalletAddress && body.walletAddressVerifiedAt),
         uidMatchesAuthorization: uidMatches,
         hasMapping: body.hasMapping === true,
         mappedUsername: body.mappedUsername ?? null,
@@ -123,6 +128,7 @@ export async function fetchWalletAuthorizationStatus(signal?: AbortSignal): Prom
         piWalletAddress: body.piWalletAddress ?? null,
         walletAddressSource: body.walletAddressSource ?? null,
         walletAddressVerifiedAt: body.walletAddressVerifiedAt ?? null,
+        authorizationReason: body.authorizationReason ?? null,
       },
     }
   } catch {
@@ -141,6 +147,7 @@ async function postConsent(accessToken: string, walletAddress: string | null): P
       cache: "no-store",
       headers: { Accept: "application/json", "Content-Type": "application/json" },
       body: JSON.stringify({ accessToken, consent: true, walletAddress }),
+      signal: AbortSignal.timeout(15_000),
     })
     const body = (await res.json().catch(() => null)) as ConsentPostResponse["body"]
     return { status: res.status, body }
@@ -153,7 +160,15 @@ async function postConsent(accessToken: string, walletAddress: string | null): P
  * Run the full consent flow. Call ONLY from an explicit user gesture after the
  * consent checkbox is ticked.
  */
-export async function requestPiWalletConsent(): Promise<WalletConsentResult> {
+let consentInFlight: Promise<WalletConsentResult> | null = null
+
+export function requestPiWalletConsent(): Promise<WalletConsentResult> {
+  if (consentInFlight) return consentInFlight
+  consentInFlight = performPiWalletConsent().finally(() => { consentInFlight = null })
+  return consentInFlight
+}
+
+async function performPiWalletConsent(): Promise<WalletConsentResult> {
   let accessToken: string | null
   try {
     // Request only the additional permission this action needs. Pi's app-local
