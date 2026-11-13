@@ -1,12 +1,16 @@
 # GreenHaven / GH-CONNECT — Source of Truth
 
-**Current source baseline archive:** `GREENHAVEN-0.338.55-RUN295-HELD-MIGRATIONS-HARDENED.zip` (user-uploaded authoritative baseline)
-**Current working candidate:** `0.338.62` (builds on Run #296/#297; see `docs/UPGRADE-WORKLOG-0.338.62.md`)
-**Current source version:** `0.338.62`
-**Package identity:** `gh-connect@0.338.62`
+**Current source baseline archive:** `GREENHAVEN-0_338_62-FLAT-ROOT-BUILD-GATE-FIX.zip` (user-uploaded authoritative baseline; SHA-256 `e334b863455a36712c32d4f2b785278e5ec81c1bc1f50c5f84a07b5c80b047a3`)
+**Current working candidate:** `0.338.63` (Run #299; derived from the authoritative 0.338.62 archive)
+**Current source version:** `0.338.63`
+**Package identity:** `gh-connect@0.338.63`
 **Active development branch:** no remote branch or commit was created by this run.
 
-## Current release note — 0.338.62 (Vercel build command)
+## Current release note — 0.338.63 (Run #299 build remediation)
+
+The Profile screen now consumes the canonical `useGHCProfile()` type, correcting the `Promise<boolean>` versus `Promise<void>` mismatch without unsafe casts. An obsolete ESLint suppression was removed. Twenty source-level regression assertions are registered in prebuild. No dependency versions, database migrations, financial/provider state or deployment targets were changed. Node 24.15.0 dependency-backed typecheck/lint/build and a fresh Vercel Preview remain outstanding; production is NOT APPROVED.
+
+## Previous release note — 0.338.62 (Vercel build command)
 
 The Vercel `buildCommand` in `vercel.json` is fail-soft for cache preparation: `(node scripts/prepare-vercel-build.mjs || rm -rf .next/cache/webpack) 2>/dev/null || true; unset npm_config_cache_dir NPM_CONFIG_CACHE_DIR; npm run build`. Any Build Command override in the Vercel dashboard supersedes this file and must be cleared. The repository root must contain `package.json`, `vercel.json` and `scripts/prepare-vercel-build.mjs`. Production remains NOT APPROVED.
 

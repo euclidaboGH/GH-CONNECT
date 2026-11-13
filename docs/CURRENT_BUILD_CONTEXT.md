@@ -1,5 +1,11 @@
 # CURRENT BUILD CONTEXT — GREENHAVEN / GH CONNECT
 
+## Run #299 — Current source authority (2026-11-13)
+
+Current working candidate: **0.338.63**. Run #299 fixes the reported Profile screen TypeScript mismatch by consuming the canonical typed `useGHCProfile()` context (whose `updateProfile` returns `Promise<boolean>`) instead of a contradictory local assertion. It also removes an obsolete ESLint suppression and registers 20 source-level build/release regression guards. No dependencies were changed without evidence of a package defect. The 691 MB Vercel footprint requires a fresh build report; the captured largest files are Next SWC binaries, while `.vercelignore` already excludes local dependency/cache/archive/environment trees.
+
+Node 22.16.0 in the current work environment is below the required Node 24.15.0 engine. Dependency-backed typecheck, lint, production build and fresh Vercel Preview remain outstanding. No database migration, financial/provider operation, GitHub push or Vercel deployment was performed. Mainnet remains untouched; production remains **NOT APPROVED**.
+
 **Canonical implementation context. Read this before every new build prompt or engineering task. This document supersedes historical prompts, worklogs and archives for current implementation decisions.**
 
 ## Run #289 — Current source authority (2026-11-11)

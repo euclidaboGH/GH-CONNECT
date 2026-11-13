@@ -95,13 +95,7 @@ export function ProfileScreen({
 }) {
   const regional = useRegionalContext()
   const msg = useCallback((key: Parameters<typeof getProductMessage>[0]) => getProductMessage(key, regional.locale), [regional.locale])
-  const ghc = useGHCProfile() as {
-    profile?: Profile
-    friends?: unknown[]
-    following?: unknown[]
-    updateProfile?: (updates: Partial<Profile>) => Promise<void>
-    addToast?: (m: string, t?: "success" | "error" | "info") => void
-  }
+  const ghc = useGHCProfile()
   const messaging = useGHCMessaging() as { conversations?: unknown[] }
   const feed = useGHCFeed()
   const p = useMemo(() => ghc.profile || ({} as Profile), [ghc.profile])

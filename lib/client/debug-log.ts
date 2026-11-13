@@ -9,7 +9,6 @@ const ENABLED =
 export function debugLog(scope: string, ...args: unknown[]): void {
   if (!ENABLED) return
   try {
-    // eslint-disable-next-line no-console
     console.log(`[${scope}]`, ...args)
   } catch { /* */ }
 }
