@@ -1,10 +1,14 @@
 # GreenHaven / GH-CONNECT — Source of Truth
 
 **Current source baseline archive:** `GREENHAVEN-0.338.64-RUN301-RELEASE-GATE-CI-FIXES.zip` (user-uploaded authoritative baseline; SHA-256 `a82eb2810bbb35705b8aade5cc390417b1b8944637a9070226db36f48868ac39`)
-**Current working candidate:** `0.338.66` (Run #303; derived from the user-uploaded 0.338.64 archive)
-**Current source version:** `0.338.66`
-**Package identity:** `gh-connect@0.338.66`
+**Current working candidate:** `0.338.67` (Run #304; derived from Run #303 / 0.338.66, retaining the user-uploaded 0.338.64 baseline)
+**Current source version:** `0.338.67`
+**Package identity:** `gh-connect@0.338.67`
 **Active development branch:** no remote branch or commit was created by this run.
+
+## Current release note — 0.338.67 (Run #304 responsive filter/search and release hygiene)
+
+Run #304 follows the user's CI failure report. It restores the missing safe `.env.example` file and strengthens the release-hygiene gate so private credential values cannot be populated in the template. It also performs a deeper source-level UI density pass: compact mobile filter shells, bounded independently scrolling filter trays, persistent connection-request search, a Discovery suggestion overlay that no longer expands page layout, and responsive e2e assertions for filter state/height/search persistence at six viewport widths. Twenty upgrades are registered. No dependencies, migrations, financial state, authorization rules, GitHub remote or Vercel deployment were changed. Full Node 24.15.0 build and authenticated device acceptance remain required; production remains NOT APPROVED.
 
 ## Current release note — 0.338.66 (Run #303 compact filters/search and Vercel type fix)
 

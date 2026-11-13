@@ -52,7 +52,7 @@ export function SearchBar({
   }
 
   return (
-    <div className="space-y-2 px-4 py-3">
+    <div className="relative z-20 space-y-1.5 px-3 py-2 sm:space-y-2 sm:px-4 sm:py-2.5">
       <div className="flex items-center gap-2">
         <div
           className={`relative min-w-0 flex-1 rounded-[1.25rem] border bg-muted/40 transition-colors ${
@@ -76,6 +76,10 @@ export function SearchBar({
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
             onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                setIsFocused(false)
+                return
+              }
               if (
                 event.key === "Enter" &&
                 !event.nativeEvent.isComposing &&
@@ -84,7 +88,7 @@ export function SearchBar({
                 submitSearch(searchQuery)
               }
             }}
-            className="h-11 w-full bg-transparent pl-10 pr-9 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            className="h-10 w-full bg-transparent pl-10 pr-9 text-sm text-foreground outline-none placeholder:text-muted-foreground sm:h-11"
             aria-label="Search people, interests, or cities"
             autoComplete="off"
           />
@@ -92,7 +96,7 @@ export function SearchBar({
             <button
               type="button"
               onClick={() => submitSearch("")}
-              className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground/90"
+              className="absolute right-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               aria-label="Clear search"
             >
               <X size={15} />
@@ -102,7 +106,7 @@ export function SearchBar({
         <button
           type="button"
           onClick={onFiltersClick}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--gh-green)] text-white shadow-sm transition hover:brightness-105 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl sm:h-11 sm:w-11 sm:rounded-2xl bg-[var(--gh-green)] text-white shadow-sm transition hover:brightness-105 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           aria-label="Open filters"
         >
           <Sliders className="h-4 w-4" aria-hidden="true" />
@@ -126,7 +130,7 @@ export function SearchBar({
       )}
       {isFocused && visibleSearches.length > 0 && (
         <div
-          className="rounded-2xl border border-border/50 bg-popover p-2 text-popover-foreground shadow-lg"
+          className="absolute left-3 right-3 top-full z-50 mt-1 rounded-2xl border border-border/60 bg-popover p-2 text-popover-foreground shadow-xl sm:left-4 sm:right-4"
           role="listbox"
           aria-label="Search suggestions"
         >
@@ -135,11 +139,12 @@ export function SearchBar({
               ? "Recent searches & suggestions"
               : "Suggested searches"}
           </p>
-          <div className="flex max-h-24 flex-wrap gap-1.5 overflow-y-auto overscroll-contain">
+          <div className="flex max-h-36 flex-wrap gap-1.5 overflow-y-auto overscroll-contain">
             {visibleSearches.map((search) => (
               <button
                 key={search}
                 type="button"
+                onPointerDown={(event) => event.preventDefault()}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => submitSearch(search)}
                 role="option"

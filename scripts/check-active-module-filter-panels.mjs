@@ -14,11 +14,11 @@ const membership = read("components/ghc/premium-membership-screen.tsx")
 const registry = read("lib/navigation/service-registry.ts")
 
 const checks = [
-  ["shared filter panel is compact and explicitly collapsible on every viewport", panel.includes("defaultExpanded = false") && panel.includes("hidden={!expanded}") && panel.includes("aria-expanded={expanded}") && panel.includes("aria-controls={contentId}")],
+  ["shared filter panel is compact and explicitly collapsible on every viewport", panel.includes("defaultExpanded = false") && panel.includes("hidden={!expanded}") && panel.includes("aria-expanded={expanded}") && panel.includes("aria-controls={contentId}") && panel.includes("max-h-[min(52dvh,22rem)]") && panel.includes("max-h-[min(58dvh,26rem)]")],
   ["shared filter panel exposes live result counts and active-filter count", panel.includes('aria-live="polite"') && panel.includes("activeCount > 0")],
   ["community directory uses shared responsive filter workspace", community.includes('title="Explore communities"') && community.includes("resultCount={visibleGroups.length}")],
   ["GH Chat inbox uses shared responsive filter workspace", messages.includes('title="Refine your inbox"') && messages.includes("resultCount={list.length}")],
-  ["Connections inbox supports tokenized search and removable filters", connections.includes("matchesFilterQuery(query") && connections.includes('ariaLabel="Active connection request filters"') && connections.includes('title="Filter connection requests"')],
+  ["Connections inbox supports tokenized search and removable filters", connections.includes("matchesFilterQuery(query") && connections.includes('ariaLabel="Active connection request filters"') && connections.includes('title="Filter connection requests"') && connections.includes("persistentContent={<label") ],
   ["Matches uses shared intention filter workspace", matches.includes('title="Refine your matches"') && matches.includes('ariaLabel="Active match filters"')],
   ["Marketplace listing facets use shared filter workspace", marketplace.includes('title="Refine the marketplace"') && marketplace.includes('ariaLabel="Active marketplace filters"')],
   ["Orders buyer/seller role facets use shared filter workspace", marketplace.includes('title="Filter your orders"') && marketplace.includes('ariaLabel="Active order filters"')],

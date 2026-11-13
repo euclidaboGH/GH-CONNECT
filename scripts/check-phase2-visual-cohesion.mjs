@@ -15,7 +15,7 @@ assert.match(destinations, /BOTTOM_NAV_IDS = \["home", "discover", "messages", "
 assert.match(post, /className="gh-post-action-dock[^"]*"[^>]*role="toolbar"/)
 assert.match(post, /className="gh-post-action-primary flex min-w-0 flex-wrap items-center gap-x-2 gap-y-2"/)
 assert.match(post, /aria-label=\{`Comment[\s\S]*?aria-label="Share"/)
-assert.match(community, /h-8 w-full rounded-lg/)
+assert.match(community, /min-h-10 w-full rounded-xl/)
 assert.match(marketplace, /flex shrink-0 flex-col gap-1\.5 border-b/)
 assert.doesNotMatch(marketplace, /title="Browse, sell, and track orders"/)
 assert.match(withdrawal, /Initialise once per open transition/)

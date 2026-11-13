@@ -1,14 +1,14 @@
 # GreenHaven
 
-**Current source version:** `0.338.66`
+**Current source version:** `0.338.67`
 
 Production status: **NOT APPROVED** — supported Node 24.15.0 dependency-backed typecheck/lint/build, browser/device, live database/provider and operator acceptance remain outstanding.
 
 This repository is the canonical GreenHaven source tree. See `docs/SOURCE_OF_TRUTH.md` and `docs/CURRENT_BUILD_CONTEXT.md` before implementation or release work.
 
-## Latest implementation — Run #303 / 0.338.66
+## Latest implementation — Run #304 / 0.338.67
 
-Run #303 standardizes compact filter/search behaviour across Discovery, Messages, Communities, Marketplace, Wallet/GHC, Pi Payments, Rewards and Membership. Filter trays are collapsed by default on all screen sizes, while primary search inputs remain visible. Discovery suggestions and global search are viewport-bounded. It also fixes the Vercel TypeScript failure by safely rejecting a null Pi `/v2/me` response before wallet-address access. Twenty focused upgrades are documented in `docs/UPGRADE-WORKLOG-0.338.66.md`. No migration, financial mutation, GitHub push or deployment was performed. Node 24.15.0 typecheck/lint/build and device acceptance remain required. Production remains NOT APPROVED.
+Run #304 responds to the CI failure caused by the missing safe `.env.example` template: the template is restored with blank private credentials and the release-hygiene gate now rejects populated secrets. It also deepens the responsive UI work: filter trays are compact and internally height-bounded, connection-request search remains visible while facets are closed, and Discovery suggestions overlay rather than push the result list down. Authenticated responsive e2e review now toggles and measures filter trays across six viewport widths. Twenty upgrades are documented in `docs/UPGRADE-WORKLOG-0.338.67.md`. No migration, financial mutation, dependency bump, GitHub push or deployment was performed. Node 24.15.0 typecheck/lint/build and device acceptance remain required. Production remains NOT APPROVED.
 
 ## Candidate addition — Run #297 (stale-hold release)
 

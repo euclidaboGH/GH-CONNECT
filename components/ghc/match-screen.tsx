@@ -21,7 +21,7 @@ import { onCloseTransientUI } from "@/lib/transient-ui"
 import { asArray } from "@/lib/safe-data"
 import { resolveUserIntents } from "@/lib/connection-intents"
 import { filterValidMatches } from "@/lib/regression-guards"
-import { Heart, Target, MessageCircle, UserPlus, Compass } from "lucide-react"
+import { Heart, Target, MessageCircle, UserPlus, Compass, Search, X } from "lucide-react"
 import type { MatchEntry, Like, Candidate, MatchIntention } from "@/lib/ghc-types"
 import {
   EmptyMatchesState,
@@ -73,6 +73,7 @@ export function MatchScreen() {
   } = useGHC() as any
   const [activeTab, setActiveTab] = useState<"new" | "all" | "likes_you">("new")
   const [intentionFilter, setIntentionFilter] = useState<MatchIntention | "all">("all")
+  const [matchSearchQuery, setMatchSearchQuery] = useState("")
   const [removedMatches, setRemovedMatches] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showRequestInbox, setShowRequestInbox] = useState(false)
@@ -217,6 +218,7 @@ export function MatchScreen() {
       if (next && next !== "matches") {
         setActiveTab("new")
         setIntentionFilter("all")
+        setMatchSearchQuery("")
       }
     })
   }, [])
@@ -237,9 +239,32 @@ export function MatchScreen() {
     })
   }
 
+  const matchesSearchQuery = (userId: string, fallbackName = "") => {
+    const candidate = safeCandidates.find((item) => String(item.id) === String(userId)) as
+      | (Candidate & { displayName?: string; username?: string; city?: string; profession?: string; bio?: string })
+      | undefined
+    const searchable = [
+      fallbackName,
+      candidate?.name,
+      candidate?.displayName,
+      candidate?.username,
+      candidate?.location,
+      candidate?.city,
+      candidate?.profession,
+      candidate?.bio,
+      ...(Array.isArray(candidate?.interests) ? candidate.interests : []),
+    ].filter((value): value is string => typeof value === "string").join(" ").toLocaleLowerCase()
+    return searchable.includes(matchSearchQuery.trim().toLocaleLowerCase())
+  }
+
   const newMatches = filterByIntention(baseNew)
   const allMatches = filterByIntention(baseAll)
-  const displayMatches = activeTab === "likes_you" ? [] : activeTab === "new" ? newMatches : allMatches
+  const queryActive = Boolean(matchSearchQuery.trim())
+  const displayMatches = (activeTab === "likes_you" ? [] : activeTab === "new" ? newMatches : allMatches)
+    .filter((match) => !queryActive || matchesSearchQuery(match.userId, match.userName))
+  const filteredLikesYouRows = queryActive
+    ? likesYouRows.filter((row) => matchesSearchQuery(row.userId, row.userName))
+    : likesYouRows
 
   const intentionCounts = useMemo(() => {
     const counts: Partial<Record<MatchIntention | "all", number>> = { all: baseAll.length }
@@ -359,8 +384,20 @@ export function MatchScreen() {
           <FilterPanel
             title="Refine your matches"
             description="Explore recent matches, mutual interest and the intentions you share."
-            resultCount={activeTab === "likes_you" ? likesYouRows.length : displayMatches.length}
-            activeCount={Number(intentionFilter !== "all")}
+            resultCount={activeTab === "likes_you" ? filteredLikesYouRows.length : displayMatches.length}
+            activeCount={Number(intentionFilter !== "all") + Number(queryActive)}
+            persistentContent={<label className="relative block">
+              <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden />
+              <input
+                type="search"
+                value={matchSearchQuery}
+                onChange={(event) => setMatchSearchQuery(event.target.value)}
+                placeholder="Search matches by name, location or interests…"
+                aria-label="Search matches by name, location or interests"
+                className="min-h-10 w-full rounded-xl border border-border bg-background py-2 pl-9 pr-10 text-sm text-foreground outline-none transition focus:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary/20"
+              />
+              {matchSearchQuery ? <button type="button" onClick={() => setMatchSearchQuery("")} className="absolute right-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label="Clear match search"><X size={14} aria-hidden /></button> : null}
+            </label>}
           >
             <MatchTabs
               activeTab={activeTab}
@@ -375,8 +412,11 @@ export function MatchScreen() {
               counts={intentionCounts}
             />
             <FilterSummary
-              items={intentionFilter !== "all" ? [{ id: "intention", label: `Intent: ${intentionFilter}`, onRemove: () => setIntentionFilter("all") }] : []}
-              onClearAll={() => setIntentionFilter("all")}
+              items={[
+                ...(intentionFilter !== "all" ? [{ id: "intention", label: `Intent: ${intentionFilter}`, onRemove: () => setIntentionFilter("all") }] : []),
+                ...(matchSearchQuery.trim() ? [{ id: "query", label: `Search: ${matchSearchQuery.trim()}`, onRemove: () => setMatchSearchQuery("") }] : []),
+              ]}
+              onClearAll={() => { setIntentionFilter("all"); setMatchSearchQuery("") }}
               ariaLabel="Active match filters"
             />
             <p className="text-[12px] leading-relaxed text-stone-600">
@@ -451,20 +491,20 @@ export function MatchScreen() {
             <MatchCardSkeleton />
           </div>
         ) : activeTab === "likes_you" ? (
-          likesYouRows.length === 0 ? (
+          filteredLikesYouRows.length === 0 ? (
             <EmptyState
               variant="matches"
-              title="No likes yet"
-              description="Likes from Discover show here. Like someone back to match — Connect is a separate request."
+              title={queryActive ? "No matching people" : "No likes yet"}
+              description={queryActive ? "Try another name, location or interest, or clear your search." : "Likes from Discover show here. Like someone back to match — Connect is a separate request."}
               action={{ label: "Open Discover", onClick: handleStartSwiping }}
               secondaryAction={{ label: "Refresh", onClick: () => { try { window.dispatchEvent(new CustomEvent("ghc:section-refresh", { detail: { section: "matches" } })) } catch { /* */ } } }}
             />
           ) : (
             <div className="flex flex-col gap-3 px-4 pb-6 pt-4" role="list" aria-label="People who liked you">
               <p className="text-[11px] font-medium text-muted-foreground">
-                {likesYouRows.length} people liked you · like back to Match
+                {filteredLikesYouRows.length} people liked you · like back to Match
               </p>
-              {likesYouRows.map((row) => (
+              {filteredLikesYouRows.map((row) => (
                 <div
                   key={row.userId}
                   role="listitem"

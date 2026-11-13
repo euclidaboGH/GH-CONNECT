@@ -1322,13 +1322,13 @@ export function CommunitiesScreen() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={msg("searchCommunity")}
                 aria-label={msg("searchCommunity")}
-                className="h-8 w-full rounded-lg border border-border bg-card pl-9 pr-9 text-sm text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+                className="min-h-10 w-full rounded-xl border border-border bg-card py-2 pl-9 pr-10 text-sm text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
               />
               {searchQuery ? (
                 <button
                   type="button"
                   onClick={() => setSearchQuery("")}
-                  className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
+                  className="absolute right-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   aria-label="Clear search"
                 >
                   <X size={15} />

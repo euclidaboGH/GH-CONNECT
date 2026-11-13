@@ -113,7 +113,7 @@ export function ConversationSearchBar({ searchQuery, onSearchChange }: { searchQ
           className="min-h-10 w-full rounded-xl border border-border bg-background py-2 pl-9 pr-9 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
         />
         {searchQuery && (
-          <button type="button" onClick={() => onSearchChange("")} className="absolute right-3 text-muted-foreground hover:text-foreground active:scale-90 transition" aria-label="Clear search">
+          <button type="button" onClick={() => onSearchChange("")} className="absolute right-1 flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label="Clear search">
             <X size={16} aria-hidden />
           </button>
         )}

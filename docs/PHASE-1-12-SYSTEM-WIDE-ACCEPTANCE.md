@@ -5,8 +5,8 @@
 
 ## Release snapshot
 
-- Current source baseline for this consolidated report: `0.338.66`
-- Current audit status (v0.338.66): source verification only; production NOT APPROVED (2026-11-11). This file remains a legacy verification fixture; detailed historical implementation notes and counts below retain their original snapshot context and are not a substitute for the current Phase 1–12 audit register. See `docs/PHASE-1-CONSOLIDATED-AUDIT-AND-IMPLEMENTATION-REGISTER-2026-11-09.md` for the current source audit.
+- Current source baseline for this consolidated report: `0.338.67`
+- Current audit status (v0.338.67): source verification only; production NOT APPROVED (2026-11-11). This file remains a legacy verification fixture; detailed historical implementation notes and counts below retain their original snapshot context and are not a substitute for the current Phase 1–12 audit register. See `docs/PHASE-1-CONSOLIDATED-AUDIT-AND-IMPLEMENTATION-REGISTER-2026-11-09.md` for the current source audit.
 - Scope: consolidation and source-level acceptance across Phases 1–12, plus the later source checks already present in this repository.
 - The canonical project root is the repository root. The stale nested `greenhaven-upgrade-next/` copy was removed because it was pinned to `0.150.1` and duplicated the project tree; its only nested-only path was an empty directory.
 

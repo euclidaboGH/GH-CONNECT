@@ -1,14 +1,18 @@
-## Run #303 — Current source authority (2026-11-13)
+## Run #304 — Current source authority (2026-11-13)
 
-- Current source candidate: **0.338.66** (derived from user-uploaded 0.338.64).
+- Current source candidate: **0.338.67** (derived from user-uploaded 0.338.64).
 - Pi withdrawal consent now requires the wallet address returned by Pi Platform `/v2/me`; browser SDK wallet data is comparison-only.
 - Legacy UID-only authorizations remain inactive until fresh wallet-address consent is verified.
-- Run #303 checks: 27/27 source assertions; Phase 28 consent runtime: 14/14; Phase 28 source: 46/46; Run #260: 25/25; Phase 2 authorization: 27/27; Phase 7 identity: 10/10; Run #246: 18/18; Run #256: 13/13; Phase 4 boundary: 12/12; Phase 6 fee: 8/8; Wallet Phase 4: 11/11; Wallet Phase 5: 19/19; Run #291: 15/15; Run #297: PASS.
+- Run #304 checks: 27/27 source assertions; Phase 28 consent runtime: 14/14; Phase 28 source: 46/46; Run #260: 25/25; Phase 2 authorization: 27/27; Phase 7 identity: 10/10; Run #246: 18/18; Run #256: 13/13; Phase 4 boundary: 12/12; Phase 6 fee: 8/8; Wallet Phase 4: 11/11; Wallet Phase 5: 19/19; Run #291: 15/15; Run #297: PASS.
 - Connected Testnet read-only snapshot: one active legacy authorization has no wallet address; 13 earnings payout requests are released; one open review case remains for an uncertain earnings payout without a provider ID. No rows or balances were changed.
 - The historical Vercel 409 trace was not retrievable; next attempts will carry safe stage and request correlation diagnostics.
 - Local workspace runtime is Node 22.16.0, below required Node 24.15.0; dependency-backed typecheck/lint/build and live Pi Testnet acceptance remain outstanding. Production remains NOT APPROVED.
 
 # CURRENT BUILD CONTEXT — GREENHAVEN / GH CONNECT
+
+## Run #304 — current implementation authority (2026-11-13)
+
+Current working candidate: **0.338.67**, derived from Run #303 / 0.338.66 while retaining the user-uploaded 0.338.64 authoritative baseline. This tranche restores `.env.example`, hardens release hygiene, improves shared filter tray geometry and scrolling, keeps connection-request search visible while facets are collapsed, and changes Discovery suggestions to a non-layout-expanding overlay. Twenty upgrades and 30 source assertions are registered. Responsive authenticated e2e now checks filter tray state and height across six viewport widths. No migration, database record, financial state, GitHub remote or Vercel deployment was changed. Full Node 24.15.0 typecheck/lint/production build and Android/Pi Browser acceptance remain required; production remains NOT APPROVED.
 
 ## Retained prior implementation context — Run #299 (2026-11-13)
 

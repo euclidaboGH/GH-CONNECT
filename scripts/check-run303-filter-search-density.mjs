@@ -36,7 +36,7 @@ test('Pi payment search remains immediately accessible', wallet.includes('Search
 test('message inbox search remains outside the filter tray', messages.indexOf('<ConversationSearchBar') < messages.indexOf('<FilterPanel'))
 test('match discovery facets use the shared compact filter workspace', matches.includes('title="Refine your matches"') && matches.includes('<FilterPanel'))
 test('discovery suggestion chips use a single compact horizontal strip', search.includes('overflow-x-auto whitespace-nowrap') && search.includes('!isFocused'))
-test('search suggestions are height-bounded and independently scrollable', search.includes('max-h-24') && search.includes('overflow-y-auto overscroll-contain'))
+test('search suggestions are height-bounded and independently scrollable', search.includes('max-h-36') && search.includes('overflow-y-auto overscroll-contain'))
 test('search suggestion blur does not rely on a delayed timer race', !search.includes('window.setTimeout(() => setIsFocused(false)'))
 test('global search modal is viewport-bounded and scroll-contained', globalSearch.includes('max-h-[82dvh]') && globalSearch.includes('overscroll-contain'))
 test('wallet consent safely rejects a null Pi /v2/me response before dereference', /if \(!piUser \|\| typeof piUser !== "object"\) return \{ ok: false, error: "PI_TOKEN_INVALID" \}/.test(consent))

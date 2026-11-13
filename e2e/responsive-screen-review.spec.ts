@@ -53,6 +53,42 @@ async function clickIfVisible(locator: Locator) {
   return true
 }
 
+async function assertFilterPanelsStayCompact(page: Page, label: string) {
+  const panels = page.locator('[data-filter-panel-shell="true"]')
+  const count = await panels.count()
+  for (let index = 0; index < count; index += 1) {
+    const panel = panels.nth(index)
+    if (!(await panel.isVisible().catch(() => false))) continue
+    const toggle = panel.locator('button[aria-controls]').first()
+    if (!(await toggle.isVisible().catch(() => false))) continue
+    const content = panel.locator('[data-filter-panel-content="true"]')
+    await expect(toggle, `${label}: filter tray starts closed`).toHaveAttribute('aria-expanded', 'false')
+    await expect(content, `${label}: closed tray is removed from layout`).toBeHidden()
+
+    const persistentSearch = panel.locator('input[type="search"]').first()
+    const hasPersistentSearch = await persistentSearch.count() > 0 && await persistentSearch.isVisible().catch(() => false)
+    if (hasPersistentSearch) await expect(persistentSearch, `${label}: primary search remains visible while facets are closed`).toBeVisible()
+
+    await toggle.click()
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    await expect(content).toBeVisible()
+    const trayHeight = await content.evaluate((element) => element.getBoundingClientRect().height)
+    const viewportHeight = await page.evaluate(() => window.innerHeight)
+    expect(trayHeight, `${label}: expanded filter tray remains viewport-bounded`).toBeLessThanOrEqual(viewportHeight * 0.6 + 2)
+
+    const facetAction = content.locator('button[aria-pressed], [role="tab"]').first()
+    if (await facetAction.count() && await facetAction.isVisible().catch(() => false)) {
+      await facetAction.click()
+      await expect(toggle, `${label}: changing a facet must not auto-collapse the tray`).toHaveAttribute('aria-expanded', 'true')
+      await expect(content).toBeVisible()
+    }
+
+    await toggle.click()
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await expect(content).toBeHidden()
+  }
+}
+
 async function seedPreviewQaSession(context: BrowserContext) {
   // Inject only an explicitly supplied QA session, never a made-up identity.
   // Production runs intentionally do not reuse a Preview/Testnet cookie.
@@ -117,6 +153,7 @@ test.describe("Phase 24 rendered responsive screen review", () => {
         await button.click()
         await tab.landmark.waitFor({ state: "visible", timeout: 2_500 }).catch(() => {})
         await assertNoDocumentOverflow(page, `${tab.file} ${width}px`)
+        await assertFilterPanelsStayCompact(page, `${tab.file} ${width}px`)
         await screenshotIfVisible(page, tab.landmark, `${tab.file}-${width}.png`, testInfo)
       }
 
@@ -151,6 +188,7 @@ test.describe("Phase 24 rendered responsive screen review", () => {
         await marketplace.waitFor({ state: "visible", timeout: 2_500 }).catch(() => {})
         if (await marketplace.isVisible().catch(() => false)) {
           await assertNoDocumentOverflow(page, `marketplace ${width}px`)
+          await assertFilterPanelsStayCompact(page, `marketplace ${width}px`)
           await screenshotIfVisible(page, marketplace, `marketplace-${width}.png`, testInfo)
         }
         await clickIfVisible(page.getByRole("button", { name: /Back to listings|Back/ }).first())
@@ -167,6 +205,7 @@ test.describe("Phase 24 rendered responsive screen review", () => {
           await communities.waitFor({ state: "visible", timeout: 2_500 }).catch(() => {})
           if (await communities.isVisible().catch(() => false)) {
             await assertNoDocumentOverflow(page, `communities ${width}px`)
+            await assertFilterPanelsStayCompact(page, `communities ${width}px`)
             await screenshotIfVisible(page, communities, `communities-${width}.png`, testInfo)
           }
           await clickIfVisible(page.getByRole("button", { name: "Back", exact: true }).first())

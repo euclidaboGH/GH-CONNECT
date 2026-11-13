@@ -328,11 +328,11 @@ export function ConnectionRequestInbox({ onClose, initialTab = "incoming" }: Pro
         description="Search by member name, shared intent or note, then switch between incoming and outgoing."
         resultCount={list.length}
         activeCount={Number(Boolean(query.trim())) + Number(tab !== initialTab)}
+        persistentContent={<label className="relative block">
+          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden />
+          <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search people or intent…" aria-label="Search connection requests" className="min-h-11 w-full rounded-xl border border-border bg-background pl-9 pr-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-primary/40" />
+        </label>}
       >
-      <label className="relative block">
-        <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden />
-        <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search people or intent…" aria-label="Search connection requests" className="min-h-11 w-full rounded-xl border border-border bg-background pl-9 pr-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-primary/40" />
-      </label>
       <div className="flex gap-1 rounded-xl border border-border/50 bg-muted/50 p-1" role="tablist" aria-label="Request direction">
         <button
           type="button"

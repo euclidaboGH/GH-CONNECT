@@ -33,6 +33,10 @@ check('safe .env.example exists', existsSync(join(root, '.env.example')))
 if (existsSync(join(root, '.env.example'))) {
   const envExample = readFileSync(join(root, '.env.example'), 'utf8')
   check('private credentials are not NEXT_PUBLIC in env template', !/^NEXT_PUBLIC_(?:PI_API_KEY|PI_SERVER_API_KEY|SUPABASE_SERVICE_ROLE_KEY|PI_WALLET_PRIVATE_SEED)=/m.test(envExample))
+  const privateKeys = ['SUPABASE_SERVICE_ROLE_KEY', 'PI_SERVER_API_KEY', 'PI_WALLET_PRIVATE_SEED', 'PAYSTACK_SECRET_KEY', 'CRON_SECRET']
+  const assignedPrivateValues = privateKeys.filter((key) => new RegExp(`^${key}[ \t]*=[ \t]*\\S+`, 'm').test(envExample))
+  check('environment template contains no populated private credentials', assignedPrivateValues.length === 0, assignedPrivateValues.join(', '))
+  check('environment template documents public and server-only configuration separately', envExample.includes('Public application URLs') && envExample.includes('Server-only Supabase configuration'))
 }
 
 for (const c of checks) console.log(`${c.ok ? 'PASS' : 'FAIL'} ${c.name}${c.detail ? ` — ${c.detail}` : ''}`)
