@@ -1,12 +1,16 @@
 # GreenHaven / GH-CONNECT — Source of Truth
 
 **Current source baseline archive:** `GREENHAVEN-0_338_62-FLAT-ROOT-BUILD-GATE-FIX.zip` (user-uploaded authoritative baseline; SHA-256 `e334b863455a36712c32d4f2b785278e5ec81c1bc1f50c5f84a07b5c80b047a3`)
-**Current working candidate:** `0.338.63` (Run #299; derived from the authoritative 0.338.62 archive)
-**Current source version:** `0.338.63`
-**Package identity:** `gh-connect@0.338.63`
+**Current working candidate:** `0.338.64` (Run #300; derived from Run #299 / authoritative 0.338.62 archive)
+**Current source version:** `0.338.64`
+**Package identity:** `gh-connect@0.338.64`
 **Active development branch:** no remote branch or commit was created by this run.
 
-## Current release note — 0.338.63 (Run #299 build remediation)
+## Current release note — 0.338.64 (Run #300 release-gate and CI safety remediation)
+
+Run #300 fixes the Phase 1–10 regression pack's P10-B assertion to match the case-insensitive production no-go policy, synchronizes the Phase 1 audit package pointer with the executable package version, and adds 20 focused release-integrity checks. The new checks verify version/source-truth agreement, migration non-execution across GitHub workflows, no production auto-deploy, least-privilege CI permissions, Node 24.15.0 pinning, lockfile-before-install ordering, prebuild registration, and Vercel upload exclusions. No database migration, financial/provider operation, dependency change, GitHub push or Vercel deployment was performed. Production remains NOT APPROVED.
+
+## Previous release note — 0.338.63 (Run #299 build remediation)
 
 The Profile screen now consumes the canonical `useGHCProfile()` type, correcting the `Promise<boolean>` versus `Promise<void>` mismatch without unsafe casts. An obsolete ESLint suppression was removed. Twenty source-level regression assertions are registered in prebuild. No dependency versions, database migrations, financial/provider state or deployment targets were changed. Node 24.15.0 dependency-backed typecheck/lint/build and a fresh Vercel Preview remain outstanding; production is NOT APPROVED.
 

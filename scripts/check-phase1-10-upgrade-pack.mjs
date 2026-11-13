@@ -56,7 +56,7 @@ add(9, 'P9-A', 'Settings export schema rejects secret-bearing keys', /forbidden|
 add(9, 'P9-B', 'Shared filtering module is present and exported for cross-surface parity', exists('lib/filtering/index.ts') && /export/.test(filterContract))
 // Phase 10 — release engineering and acceptance.
 add(10, 'P10-A', 'Node 24.15 runtime and explicit typecheck/lint/build gates remain enforced', /24\.15\.0/.test(read('.nvmrc')) && /typecheck/.test(releaseClosure) && /lint/.test(releaseClosure) && /build/.test(releaseClosure) && /24\.15\.0/.test(ci))
-add(10, 'P10-B', 'Production stays NOT APPROVED and CI cannot apply database migrations', /NOT APPROVED/.test(releaseClosure) && !/supabase db push/.test(ci))
+add(10, 'P10-B', 'Production stays NOT APPROVED and CI cannot apply database migrations', /NOT APPROVED/i.test(releaseClosure) && /NOT APPROVED/i.test(read('docs/PROJECT_TRUTH.md')) && !/supabase\s+db\s+push/i.test(ci))
 
 let failed = 0
 for (const c of checks) {
