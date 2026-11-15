@@ -5,12 +5,12 @@
 
 ## Release snapshot
 
-- Current source baseline for this consolidated report: `0.338.74`
-- Current audit status (v0.338.74): Phase 6 targeted source verification only; production NOT APPROVED (2026-11-15). This file remains a legacy verification fixture; detailed historical implementation notes and counts below retain their original snapshot context and are not a substitute for the current Phase 1–12 audit register. See `docs/PHASE-1-CONSOLIDATED-AUDIT-AND-IMPLEMENTATION-REGISTER-2026-11-09.md` for the current source audit.
+- Current source baseline for this consolidated report: `0.338.75`
+- Current audit status (v0.338.75): Phase 6 targeted source verification only; production NOT APPROVED (2026-11-15). This file remains a legacy verification fixture; detailed historical implementation notes and counts below retain their original snapshot context and are not a substitute for the current Phase 1–12 audit register. See `docs/PHASE-1-CONSOLIDATED-AUDIT-AND-IMPLEMENTATION-REGISTER-2026-11-09.md` for the current source audit.
 - Scope: consolidation and source-level acceptance across Phases 1–12, plus the later source checks already present in this repository.
 - The canonical project root is the repository root. The stale nested `greenhaven-upgrade-next/` copy was removed because it was pinned to `0.150.1` and duplicated the project tree; its only nested-only path was an empty directory.
 
-## Current audit status (v0.338.74) — legacy verification snapshot; see the current consolidated audit register for controlling findings
+## Current audit status (v0.338.55) — legacy verification snapshot; see the current consolidated audit register for controlling findings
 
 - Current product roadmap: Priorities 1–9 have reached their current source transformation milestones; Marketplace (Priority 9) source work is at 0.330.38, and Filters (Priority 10) has its first coordinated source increment in 0.330.39. The current Marketplace increments harden server-authoritative checkout currency, inventory honesty and seller stock editing, durable delivery metadata and per-attempt checkout idempotency, plus durable SKU variants with independent pricing/stock, variant-bound buyer cart/order identity and database reservation/release/commit paths. Browser/device, Node 24.15.x build, disposable PostgreSQL concurrency, database and Testnet/operator acceptance remain open.
 
@@ -306,6 +306,6 @@ The current source baseline includes a shared accessible active-filter summary a
 
 
 
-## Current 0.338.74 experience and navigation follow-up (2026-11-09)
+## Current 0.338.9 experience and navigation follow-up (2026-11-09)
 
 The shared application header is slimmer; hidden duplicate header controls are inert; Marketplace and Community content use improved responsive spacing; active-tab scroll reset resolves the actual scroll owner; and global keyboard shortcuts avoid editable controls, modal workflows and IME composition. The dedicated UI/navigation audit passes 31/31. The independent Marketplace/Community security contract passes 42/42. These source checks do not replace Node 24.15.0 typecheck/build or browser/device, database and provider acceptance. No financial authority or production state changed.
