@@ -1195,33 +1195,44 @@ export function SettingsScreen({
               const inAppOn = categoryPrefs.length ? categoryPrefs.every((prefs) => Boolean(prefs.inApp)) : (typeof raw === "boolean" ? raw : t.defaultOn)
               const browserOn = categoryPrefs.length ? categoryPrefs.every((prefs) => Boolean(prefs.push)) : false
               const updateChannel = (channel: "inApp" | "push", enabled: boolean) => {
+                // Capture the owner at interaction time. Permission prompts and network
+                // requests can outlive an account switch; never apply their result to
+                // the newly active account's Settings state.
+                const owner = notificationIdentityId
+                if (!owner || owner !== IdentityService.getCurrentUserId()) return
                 if (channel === "push" && enabled && browserPermission !== "granted") {
                   void ensureBrowserNotificationPermission().then((ok) => {
                     setBrowserPermission(typeof window !== "undefined" && "Notification" in window ? Notification.permission : "unsupported")
-                    if (!ok) return
-                    const next = { ...notificationPrefs }
+                    if (!ok || IdentityService.getCurrentUserId() !== owner) return
+                    const next = { ...loadNotificationPreferences(owner) }
                     for (const category of t.categories) next[category] = { ...next[category], push: true }
                     setNotificationPrefs(next)
-                    saveNotificationPreferences(next, notificationIdentityId)
+                    saveNotificationPreferences(next, owner)
                   })
                   return
                 }
                 const next = { ...notificationPrefs }
                 for (const category of t.categories) next[category] = { ...next[category], [channel]: enabled }
+                if (IdentityService.getCurrentUserId() !== owner) return
                 setNotificationPrefs(next)
-                saveNotificationPreferences(next, notificationIdentityId)
+                saveNotificationPreferences(next, owner)
                 if (channel === "inApp") {
                   void handleSelect(t.key as never, enabled as never)
+                  const authHeaders = IdentityService.getAuthHeaders()
                   void fetch("/api/notifications/preferences", {
                     method: "PATCH",
-                    headers: { "Content-Type": "application/json", ...IdentityService.getAuthHeaders() },
+                    headers: { "Content-Type": "application/json", ...authHeaders },
                     body: JSON.stringify({ preferences: serializeAccountNotificationPreferences(next) }),
                   }).then(async (response) => {
                     const body = await response.json().catch(() => null)
+                    if (IdentityService.getCurrentUserId() !== owner) return
                     if (!response.ok || body?.ok !== true || body?.durable !== true) {
                       window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "In-app preference saved on this device; account sync is unavailable", type: "info" } }))
                     }
-                  }).catch(() => window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "In-app preference saved locally; account sync will retry when online", type: "info" } })))
+                  }).catch(() => {
+                    if (IdentityService.getCurrentUserId() !== owner) return
+                    window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "In-app preference saved locally; account sync will retry when online", type: "info" } }))
+                  })
                 }
               }
               return (

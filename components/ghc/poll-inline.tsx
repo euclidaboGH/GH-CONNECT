@@ -55,9 +55,11 @@ export function resolvePostPoll(post: {
 export function PollInline({
   poll: initial,
   postId,
+  readOnly = false,
 }: {
   poll: PollView
   postId: string
+  readOnly?: boolean
 }) {
   const [poll, setPoll] = useState(initial)
   const [busy, setBusy] = useState(false)
@@ -141,12 +143,12 @@ export function PollInline({
           const votes = Number(o.votes || 0)
           const pct = total > 0 ? Math.round((votes / total) * 100) : 0
           const selected = poll.viewerOptionId === o.id
-          const showBars = Boolean(poll.viewerOptionId) || closed
+          const showBars = readOnly || Boolean(poll.viewerOptionId) || closed
           return (
             <li key={o.id}>
               <button
                 type="button"
-                disabled={busy || closed || Boolean(poll.viewerOptionId)}
+                disabled={readOnly || busy || closed || Boolean(poll.viewerOptionId)}
                 onClick={() => void vote(o.id)}
                 className={`relative w-full overflow-hidden rounded-xl border px-3 py-2.5 text-left text-sm transition disabled:cursor-default ${
                   selected
@@ -175,7 +177,9 @@ export function PollInline({
         })}
       </ul>
       {error ? <p className="mt-2 text-[11px] text-rose-600">{error}</p> : null}
-      {!poll.viewerOptionId && !closed ? (
+      {readOnly ? (
+        <p className="mt-2 text-[10px] text-muted-foreground">Preview only · voting is unavailable for archived or sample content.</p>
+      ) : !poll.viewerOptionId && !closed ? (
         <p className="mt-2 text-[10px] text-muted-foreground">One vote per account · results after you vote</p>
       ) : null}
     </div>

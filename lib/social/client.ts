@@ -3,6 +3,7 @@
  * Optimistic UI remains in domain/context; these calls make server authoritative.
  */
 import { IdentityService } from "@/lib/identity/identity-service"
+import { buildSocialRequestIdentityKey } from "@/lib/social/request-identity"
 import type { Post, PostComment, StoryItem } from "@/lib/ghc-types"
 import { broadcastPostSync } from "@/lib/social/post-sync"
 import { broadcastPostEngagement } from "@/lib/engagement/post-engagement"
@@ -17,11 +18,21 @@ function headers(): HeadersInit {
 
 const inFlightGets = new Map<string, Promise<unknown>>()
 
+/**
+ * Requests are bound to the active identity snapshot. Never coalesce a read
+ * across account boundaries, and never apply a response after the identity
+ * changed while the request was pending.
+ */
+function requestIdentityKey(): string {
+  return buildSocialRequestIdentityKey(IdentityService.getIdentity())
+}
+
 async function json<T>(
   path: string,
   init?: RequestInit
 ): Promise<T & { ok?: boolean; error?: string; durable?: boolean }> {
   const method = String(init?.method || "GET").toUpperCase()
+  const identityAtStart = requestIdentityKey()
   const run = async () => {
     const controller = !init?.signal ? new AbortController() : null
     // Phase 3: marketplace order create/pay needs a longer bound than social reads.
@@ -53,7 +64,7 @@ async function json<T>(
   // No response cache is retained: the server remains authoritative on every later read.
   let pair: { res: Response; data: T & { ok?: boolean; error?: string; durable?: boolean } }
   if (method === "GET" && !init?.signal) {
-    const key = path
+    const key = `${identityAtStart}\u0000${path}`
     let pending = inFlightGets.get(key) as Promise<typeof pair> | undefined
     if (!pending) {
       pending = run().finally(() => inFlightGets.delete(key))
@@ -64,6 +75,13 @@ async function json<T>(
     pair = await run()
   }
   const { res, data } = pair
+  if (requestIdentityKey() !== identityAtStart) {
+    return {
+      ok: false,
+      durable: false,
+      error: "AUTH_CONTEXT_CHANGED",
+    } as T & { ok?: boolean; error?: string; durable?: boolean }
+  }
   if (res.status === 401) {
     return { ...data, ok: false, error: data.error || "AUTH_REQUIRED", durable: false }
   }
@@ -121,13 +139,16 @@ export async function socialListCommunityPosts(
   communityId: string,
   limit = 40,
   cursor?: { before: number; beforeId: string },
-): Promise<{ ok: boolean; durable: boolean; posts: Partial<Post>[]; error?: string }> {
+): Promise<{ ok: boolean; durable: boolean; posts: Partial<Post>[]; nextCursor?: { before: number; beforeId: string } | null; error?: string }> {
   const id = String(communityId || "").trim()
-  if (!id) return { ok: false, durable: false, posts: [], error: "COMMUNITY_REQUIRED" }
-  const query = new URLSearchParams({ limit: String(Math.min(100, Math.max(1, Math.floor(limit)))) })
+  if (!id) return { ok: false, durable: false, posts: [], nextCursor: null, error: "COMMUNITY_REQUIRED" }
+  const query = new URLSearchParams({ limit: String(Math.min(99, Math.max(1, Math.floor(limit)))) })
   if (cursor) { query.set("before", String(cursor.before)); query.set("beforeId", cursor.beforeId) }
-  const data = await json<{ posts?: Partial<Post>[]; error?: string }>(`/api/communities/${encodeURIComponent(id)}/posts?${query.toString()}`)
-  return { ok: data.ok !== false, durable: Boolean(data.durable), posts: Array.isArray(data.posts) ? data.posts : [], error: data.error }
+  const data = await json<{ posts?: Partial<Post>[]; nextCursor?: { before: number; beforeId: string } | null; error?: string }>(`/api/communities/${encodeURIComponent(id)}/posts?${query.toString()}`)
+  const cursor = data.nextCursor && Number.isSafeInteger(data.nextCursor.before) && data.nextCursor.before >= 0 && /^[a-zA-Z0-9_-]{1,180}$/.test(data.nextCursor.beforeId)
+    ? data.nextCursor
+    : null
+  return { ok: data.ok !== false, durable: Boolean(data.durable), posts: Array.isArray(data.posts) ? data.posts : [], nextCursor: cursor, error: data.error }
 }
 
 export async function socialCreatePost(

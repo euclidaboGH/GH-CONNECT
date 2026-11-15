@@ -10,6 +10,8 @@ import { nonDurableReadResponse } from "@/lib/server/production-guard"
 import { filterVisibleSocialPosts } from "@/lib/server/social/post-visibility"
 import { loadCommentReactionState } from "@/lib/server/social/comment-reactions"
 import { hydratePublicProfileIdentity } from "@/lib/server/identity/public-profile-hydration"
+import { readDurableFeedPreferences } from "@/lib/server/feed/preferences-store"
+import { containsAnyWholeTerm, extractHashtags } from "@/lib/feed/phase5-feed-primitives"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -178,19 +180,27 @@ export async function GET(request: Request) {
   const rawPagePosts = payload.posts
   let posts = rawPagePosts
 
-  // Re-check canonical visibility before any post payload reaches the client.
-  // This covers community-bound posts and mutuals even while legacy RPCs remain installed.
-  const visiblePosts = await filterVisibleSocialPosts(auth.userId, posts)
+  // These three reads are independent after the canonical page is fetched.
+  // Run them concurrently to reduce serial database latency while preserving
+  // the fail-closed privacy decisions before any post reaches the client.
+  const [visiblePosts, preferenceResult, muted] = await Promise.all([
+    filterVisibleSocialPosts(auth.userId, posts),
+    readDurableFeedPreferences(auth.userId),
+    mutedAuthorIds(auth.userId),
+  ])
   if (visiblePosts === null) {
     return NextResponse.json({ ok: false, error: "POST_VISIBILITY_UNAVAILABLE" }, { status: 503, headers: { "Cache-Control": "no-store" } })
   }
-  posts = visiblePosts
-
-  // Server-side mute enforcement (canonical visibility has already checked blocks)
-  const muted = await mutedAuthorIds(auth.userId)
   if (muted === null) {
     return NextResponse.json({ ok: false, error: "FEED_PRIVACY_FILTER_UNAVAILABLE" }, { status: 503, headers: { "Cache-Control": "no-store" } })
   }
+  posts = visiblePosts
+
+  // Account-owned feed preferences are applied server-side when the durable
+  // store is available. They are personal relevance controls, not authorization
+  // boundaries, so a temporarily unavailable preference store does not take the
+  // whole feed offline; the client still applies its account-scoped local cache.
+  const durablePreferences = preferenceResult.ok ? preferenceResult.preferences : null
   // The canonical feed RPC must identify every post author. If that contract
   // regresses, do not let an author-less row bypass the mute privacy boundary.
   const authorIdOf = (value: unknown): string => {
@@ -208,6 +218,21 @@ export async function GET(request: Request) {
   if (muted.size > 0) {
     posts = posts.filter((post) => !muted.has(authorIdOf(post)))
   }
+  if (durablePreferences) {
+    const hidden = new Set(durablePreferences.hiddenPostIds)
+    const lessRelevant = new Set(durablePreferences.notInterestedPostIds)
+    const topics = durablePreferences.mutedTopics
+    posts = posts.filter((post) => {
+      if (!post || typeof post !== "object") return false
+      const row = post as Record<string, unknown>
+      const id = String(row.id || "")
+      if (hidden.has(id) || lessRelevant.has(id)) return false
+      if (!topics.length) return true
+      const content = [row.content, row.text, row.caption].filter((value): value is string => typeof value === "string").join(" ")
+      const tags = Array.isArray(row.hashtags) ? row.hashtags.filter((value): value is string => typeof value === "string") : extractHashtags(content)
+      return !containsAnyWholeTerm(content, topics) && !tags.some((tag) => containsAnyWholeTerm(tag, topics))
+    })
+  }
 
   // Engagement counts and recent comment previews are hydrated in two batched reads,
   // never one request per post. Fail-soft: feed posts remain usable if previews are unavailable.
@@ -221,24 +246,27 @@ export async function GET(request: Request) {
   // profile store. One batched profile read per layer avoids N+1 queries and keeps
   // persisted historical labels from becoming the permanent identity source.
   try {
-    posts = await hydratePublicProfileIdentity(posts.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object")))
     const withComments = posts.filter((post): post is Record<string, unknown> => Boolean(post && typeof post === "object"))
+    const profilePosts = withComments
     const allComments = withComments.flatMap((post) => Array.isArray(post.comments) ? post.comments.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object")) : [])
-    if (allComments.length) {
-      const hydratedComments = await hydratePublicProfileIdentity(allComments)
-      const byId = new Map(hydratedComments.map((comment, index) => [String(comment.id || `${index}`), comment]))
-      let fallbackIndex = 0
-      posts = withComments.map((post) => ({
-        ...post,
-        comments: Array.isArray(post.comments) ? post.comments.map((item) => {
-          if (!item || typeof item !== "object") return item
-          const comment = item as Record<string, unknown>
-          const key = String(comment.id || `${fallbackIndex}`)
-          fallbackIndex += 1
-          return byId.get(key) || comment
-        }) : post.comments,
-      }))
-    }
+    // Post authors and comment authors are independent identity batches. Running
+    // both together removes one avoidable serial profile round trip per feed page.
+    const [hydratedPosts, hydratedComments] = await Promise.all([
+      hydratePublicProfileIdentity(profilePosts),
+      allComments.length ? hydratePublicProfileIdentity(allComments) : Promise.resolve([]),
+    ])
+    const byId = new Map(hydratedComments.map((comment, index) => [String(comment.id || `${index}`), comment]))
+    let fallbackIndex = 0
+    posts = hydratedPosts.map((post) => ({
+      ...post,
+      comments: Array.isArray(post.comments) ? post.comments.map((item) => {
+        if (!item || typeof item !== "object") return item
+        const comment = item as Record<string, unknown>
+        const key = String(comment.id || `${fallbackIndex}`)
+        fallbackIndex += 1
+        return byId.get(key) || comment
+      }) : post.comments,
+    }))
   } catch {
     // Identity enrichment is best-effort; it never changes post visibility or ownership.
   }
@@ -251,7 +279,7 @@ export async function GET(request: Request) {
     : null
 
   return NextResponse.json(
-    { ok: true, durable: true, posts, mutedFiltered: muted.size, nextCursor, stableCursor: true },
+    { ok: true, durable: true, posts, mutedFiltered: muted.size, preferencesApplied: Boolean(durablePreferences), nextCursor, stableCursor: true },
     { headers: { "Cache-Control": "no-store" } }
   )
 }

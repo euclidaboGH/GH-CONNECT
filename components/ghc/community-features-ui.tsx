@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Bell, Calendar, CheckCircle2, ChevronRight, Clock, FileText, Heart, MapPin, MessageSquare, Share2, ThumbsUp, Trash2, Users, X } from "lucide-react"
+import { Bell, Calendar, CheckCircle2, ChevronRight, Clock, FileText, Heart, MapPin, MessageSquare, Pin, Share2, ThumbsUp, Trash2, Users, X } from "lucide-react"
 import type {
   Announcement,
   Poll,
@@ -15,44 +15,39 @@ import { safeCommunityResourceUrl } from "@/lib/domains/adapters/community-parti
 
 // Announcements Component
 export function AnnouncementCard({ announcement, onDismiss }: { announcement: Announcement; onDismiss?: () => void }) {
+  const type = ["info", "important", "celebration", "maintenance"].includes(announcement.type) ? announcement.type : "info"
+  const typeLabels = { info: "Update", important: "Important", celebration: "Celebration", maintenance: "Maintenance" }
+  const createdAt = Number.isFinite(Number(announcement.createdAt)) && Number(announcement.createdAt) > 0 ? new Date(Number(announcement.createdAt)) : null
   const typeStyles = {
-    info: "bg-blue-50 border-blue-200 text-blue-900",
-    important: "bg-red-50 border-red-200 text-red-900",
-    celebration: "bg-violet-50 border-violet-200 text-violet-900",
-    maintenance: "bg-yellow-50 border-yellow-200 text-yellow-900",
+    info: "border-border/70 bg-card text-foreground",
+    important: "border-amber-300/70 bg-amber-50/60 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100",
+    celebration: "border-violet-200/70 bg-violet-50/50 text-violet-950 dark:border-violet-900/50 dark:bg-violet-950/15 dark:text-violet-100",
+    maintenance: "border-slate-300/70 bg-slate-50/70 text-slate-900 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-100",
   }
-
-  const typeIcons = {
-    info: "ℹ️",
-    important: "⚠️",
-    celebration: "🎉",
-    maintenance: "🔧",
-  }
-
   return (
-    <div className={`border rounded-lg p-4 flex gap-3 ${typeStyles[announcement.type]}`}>
-      <div className="text-xl flex-shrink-0">{typeIcons[announcement.type]}</div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-sm">{announcement.title}</h3>
-            <p className="text-sm mt-1 opacity-80">{announcement.content}</p>
+    <article className={`rounded-2xl border p-3.5 shadow-[var(--gh-card-shadow)] ${typeStyles[type]}`} aria-label={`${typeLabels[type]} announcement`}>
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-background/80 text-muted-foreground ring-1 ring-border/60" aria-hidden="true">
+          {announcement.pinned ? <Pin size={16} /> : <Bell size={16} />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-muted-foreground">{typeLabels[type]}</span>
+            {announcement.pinned ? <span className="inline-flex items-center gap-1 rounded-full bg-background/80 px-2 py-0.5 text-[9px] font-semibold text-muted-foreground ring-1 ring-border/60"><Pin size={10} /> Pinned</span> : null}
+            {createdAt && Number.isFinite(createdAt.getTime()) ? (
+              <time className="ml-auto text-[10px] text-muted-foreground" dateTime={createdAt.toISOString()}>{new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(createdAt)}</time>
+            ) : null}
           </div>
-          {onDismiss && (
-            <button
-              onClick={onDismiss}
-              className="p-1 hover:bg-black hover:bg-opacity-10 rounded transition flex-shrink-0"
-              aria-label="Dismiss"
-            >
-              <X size={16} />
-            </button>
-          )}
+          <h3 className="mt-1 text-[13px] font-bold leading-5">{announcement.title}</h3>
+          <p className="mt-1 whitespace-pre-wrap break-words text-[12px] leading-[1.6] text-current/80">{announcement.content}</p>
         </div>
-        {announcement.pinned && (
-          <div className="text-xs font-semibold mt-2 opacity-70">📌 Pinned</div>
-        )}
+        {onDismiss ? (
+          <button type="button" onClick={onDismiss} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-background/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" aria-label="Dismiss announcement">
+            <X size={15} />
+          </button>
+        ) : null}
       </div>
-    </div>
+    </article>
   )
 }
 

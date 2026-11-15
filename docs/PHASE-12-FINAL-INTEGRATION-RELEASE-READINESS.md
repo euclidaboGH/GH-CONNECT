@@ -1,7 +1,9 @@
-Release: `0.338.67`
+Release: `0.338.73`
 **Production status: NOT APPROVED for production**
 
-**Current source baseline:** `0.338.67`
+**Current source baseline:** `0.338.73`
+
+This source-only release record is not production approval. Production approval remains pending supported-runtime build, database migration reconciliation, provider and authenticated browser/device acceptance.
 
 > **LEGACY VERIFICATION FIXTURE — NOT CURRENT PRODUCT AUTHORITY.**
 > Current source baseline reference: `0.338.56` (2026-11-12). The historical release details below remain archived and are not a statement of current release readiness.

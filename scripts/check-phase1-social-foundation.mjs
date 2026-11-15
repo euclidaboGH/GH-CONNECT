@@ -18,7 +18,7 @@ const checks = [
   ['community posts API validates path, bounded limit and cursor input', /INVALID_COMMUNITY_ID/.test(route) && /INVALID_LIMIT/.test(route) && /INVALID_CURSOR/.test(route)],
   ['client uses the authenticated community-post endpoint', /socialListCommunityPosts/.test(client) && /\/api\/communities\//.test(client)],
   ['community hub hydrates canonical posts and listens for community refresh', /socialListCommunityPosts\(community\.id/.test(hub) && /ghc:community-refresh/.test(hub)],
-  ['legacy local-only posts no longer expose fake curation or reaction controls', !/curateCommunityPost|socialSetCuration|disabled={!linked/.test(hub) && /Archived community post/.test(hub)],
+  ['legacy local-only posts no longer expose fake curation or reaction controls', !/curateCommunityPost|socialSetCuration|disabled={!linked/.test(hub) && /CommunityReadOnlyPostCard/.test(hub) && /readOnly/.test(readFileSync('components/ghc/community-read-only-post-card.tsx', 'utf8'))],
   ['community canonical cards reuse the same EnhancedPostCard used by Feed/Profile', /<EnhancedPostCard/.test(card) && /CommunityCanonicalPostCard/.test(hub) && /export const EnhancedPostCard/.test(postCard)],
   ['canonical community card routes curation/reactions/save through durable APIs', /socialToggleReaction/.test(card) && /socialToggleSave/.test(card) && /onShowVisibilityReason/.test(card)],
   ['phase-one regression gate is part of prebuild and static verification', (pkg.scripts['prebuild:checks'] || '').includes('check-phase1-social-foundation.mjs') && (pkg.scripts['verify:static'] || '').includes('check-phase1-social-foundation.mjs')],

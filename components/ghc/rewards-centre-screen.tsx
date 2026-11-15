@@ -224,6 +224,9 @@ export function RewardsCentreScreen({
   const [serverAchievements, setServerAchievements] = useState<UnlockedAchievementRow[]>(
     []
   )
+  // Bind hydrated achievement rows to the account that produced them. This
+  // prevents a prior account's unlocks flashing during an account switch.
+  const serverAchievementsOwnerRef = useRef<string | null>(null)
   const [serverEconomy, setServerEconomy] = useState<{
     balance: number | null
     pending: number | null
@@ -291,7 +294,7 @@ export function RewardsCentreScreen({
       // become completed only when the same account has a durable server unlock.
       // Only durable server unlocks are presented as achievements. Browser-local
       // progress can guide a journey, but it is not proof of an unlocked milestone.
-      const achievements = serverAchievements.filter((row) => Boolean(row?.id))
+      const achievements = (serverAchievementsOwnerRef.current === userId ? serverAchievements : []).filter((row) => Boolean(row?.id))
       const durableMissionIds = new Set(achievements.map((row) => row.id)) as Set<string>
       const challenges = engine.getChallengeCards(signals).map((card) => {
         const missionCode = missionCodeForChallenge(card.challenge.id)
@@ -506,6 +509,7 @@ export function RewardsCentreScreen({
   // Hydrate durable achievements (does not mint; display only)
   useEffect(() => {
     let cancelled = false
+    serverAchievementsOwnerRef.current = null
     setServerAchievements([])
     setAchievementsHydrating(true)
     void fetchServerAchievements()
@@ -522,9 +526,13 @@ export function RewardsCentreScreen({
           unlockedAt: a.unlockedAt,
         })) as UnlockedAchievementRow[] : []
         setServerAchievements(rows)
+        serverAchievementsOwnerRef.current = userId
       })
       .catch(() => {
-        if (!cancelled) setServerAchievements([])
+        if (!cancelled) {
+          serverAchievementsOwnerRef.current = null
+          setServerAchievements([])
+        }
       })
       .finally(() => {
         if (!cancelled) setAchievementsHydrating(false)

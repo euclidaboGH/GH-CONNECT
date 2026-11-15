@@ -7,6 +7,7 @@ import { useRegionalContext } from "@/contexts/regional-context"
 import { getWorkflowMessage } from "@/lib/i18n/workflows"
 import { Image as ImageIcon, Video, X, Globe, Users, Lock, FileText, BarChart3, Save } from "lucide-react"
 import { useGHC } from "@/contexts/ghc-context"
+import { IdentityService } from "@/lib/identity/identity-service"
 import { validateImageFiles, validateMediaFile } from "@/lib/media-validation"
 import { compressImage } from "@/lib/ghc-data"
 import { compressImageFile } from "@/lib/media/compress-image"
@@ -15,7 +16,7 @@ import { getPostDraft, listPostDrafts, removePostDraft, upsertPostDraft } from "
 import { mediaUserMessage, MEDIA_PROGRESS } from "@/lib/media/user-messages"
 import { isDurableMediaUrl, isBlobUrl, isSmallDataUrl } from "@/lib/media/durable-url"
 import { validatePulseVideo } from "@/lib/media/video-inspection"
-import type { StoryItem } from "@/lib/ghc-types"
+import type { PostDraft, StoryItem } from "@/lib/ghc-types"
 import { COMPOSE_LIMITS, textMaxForMode } from "@/lib/composer/compose-limits"
 import { a11y } from "@/lib/accessibility"
 import { prefersReducedMotion } from "@/lib/ui/prefers-reduced-motion"
@@ -91,11 +92,88 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
   const [selectedCommunityId, setSelectedCommunityId] = useState<string>("")
   const [promptHint, setPromptHint] = useState(pickComposePrompt)
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null)
+  const [savedDrafts, setSavedDrafts] = useState<PostDraft[]>([])
+  const [showSavedDrafts, setShowSavedDrafts] = useState(false)
   const [isOffline, setIsOffline] = useState(false)
+  const [failedAttachments, setFailedAttachments] = useState<Array<{ id: string; kind: "photo" | "video" | "file"; file: File; message: string }>>([])
 
 
   const publishingRef = useRef(false)
   const handlePublishRef = useRef<(() => void) | null>(null)
+  const composeOwnerRef = useRef(IdentityService.getCurrentUserId())
+  const composeGenerationRef = useRef(0)
+  const activeUploadControllerRef = useRef<AbortController | null>(null)
+
+  const rememberFailedAttachment = (file: File, kind: "photo" | "video" | "file", message: string) => {
+    const id = `${kind}:${file.name}:${file.size}:${file.lastModified}`
+    setFailedAttachments((previous) => {
+      const withoutDuplicate = previous.filter((item) => item.id !== id)
+      return [...withoutDuplicate, { id, kind, file, message }].slice(-8)
+    })
+  }
+
+  const clearFailedAttachment = (file: File) => {
+    const suffix = `:${file.name}:${file.size}:${file.lastModified}`
+    setFailedAttachments((previous) => previous.filter((item) => !item.id.endsWith(suffix)))
+  }
+
+  const retryFailedAttachment = (attachment: { id: string; kind: "photo" | "video" | "file"; file: File }) => {
+    setFailedAttachments((previous) => previous.filter((item) => item.id !== attachment.id))
+    if (attachment.kind === "photo") {
+      const transfer = new DataTransfer()
+      transfer.items.add(attachment.file)
+      void handleImages(transfer.files)
+    } else if (attachment.kind === "video") {
+      void handleVideo(attachment.file)
+    } else {
+      void handleDoc(attachment.file)
+    }
+  }
+
+  const beginUpload = () => {
+    activeUploadControllerRef.current?.abort()
+    const controller = new AbortController()
+    activeUploadControllerRef.current = controller
+    return controller
+  }
+
+  // Drafts are account-scoped. If the authenticated account changes while the
+  // composer is open (including during upload/publish), clear transient state
+  // rather than showing one account's private draft/media to another account.
+  useEffect(() => IdentityService.subscribe((identity) => {
+    const nextOwner = String(identity.userId || "current-user")
+    if (nextOwner === composeOwnerRef.current) return
+    composeOwnerRef.current = nextOwner
+    composeGenerationRef.current += 1
+    activeUploadControllerRef.current?.abort()
+    activeUploadControllerRef.current = null
+    publishingRef.current = false
+    postRequestRef.current = null
+    storyRequestRef.current = null
+    activeDraftIdRef.current = null
+    pendingComposeRef.current = null
+    setText("")
+    setSelectedImages([])
+    setSelectedVideo(null)
+    setSelectedDoc(null)
+    setSelectedDocName(null)
+    setStoryMedia(null)
+    setStoryPreviewOpen(false)
+    setDraftRestored(false)
+    setLastSavedAt(null)
+    setSavedDrafts([])
+    setShowSavedDrafts(false)
+    setFailedAttachments([])
+    setSelectedCommunityId("")
+    setAudience("public")
+    setShowAudience(false)
+    setUploadProgress(null)
+    setIsPublishing(false)
+    setFailedAttachments([])
+    setMode("post")
+    onOpenChange(false)
+    addToast("Composer closed because the active account changed. Reopen it to continue safely.", "info")
+  }), [addToast, onOpenChange])
   useEffect(() => {
     const sync = () => setIsOffline(typeof navigator !== "undefined" && navigator.onLine === false)
     sync()
@@ -127,6 +205,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
 
   const activeDraftIdRef = useRef<string | null>(null)
   const postRequestRef = useRef<{ id: string; signature: string } | null>(null)
+  const storyRequestRef = useRef<{ id: string; signature: string } | null>(null)
   const closeRef = useRef<() => void>(() => undefined)
   const pendingComposeRef = useRef<{ text?: string; draftId?: string } | null>(null)
 
@@ -222,7 +301,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         pendingComposeRef.current = null
         const saved = pending?.draftId
           ? getPostDraft(pending.draftId)
-          : pending?.draftId ? null : listPostDrafts()[0] || null
+          : listPostDrafts()[0] || null
         activeDraftIdRef.current = saved?.id || null
         setText(saved?.content ?? pending?.text ?? "")
         setSelectedImages(saved?.images?.filter(isDurableMediaUrl) ?? [])
@@ -233,6 +312,8 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         setSelectedCommunityId(saved?.communityId || "")
         setDraftRestored(Boolean(saved))
         setLastSavedAt(saved?.lastEditedAt || null)
+        setSavedDrafts(listPostDrafts())
+        setShowSavedDrafts(false)
         postRequestRef.current = saved?.publishRequestId && saved?.publishRequestSignature
           ? { id: saved.publishRequestId, signature: saved.publishRequestSignature }
           : null
@@ -242,6 +323,14 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
       }
     }
   }, [open, initialMode])
+
+  useEffect(() => {
+    if (!open) return
+    const refreshDrafts = () => setSavedDrafts(listPostDrafts())
+    window.addEventListener("ghc:post-drafts-changed", refreshDrafts)
+    refreshDrafts()
+    return () => window.removeEventListener("ghc:post-drafts-changed", refreshDrafts)
+  }, [open])
 
   // Complete drafts are stored under the current authenticated identity key.
   // Never use the legacy unscoped key: it can leak draft content across accounts.
@@ -265,6 +354,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
       })
       activeDraftIdRef.current = saved.id
       setLastSavedAt(saved.lastEditedAt)
+      setSavedDrafts(listPostDrafts())
     }, COMPOSE_LIMITS.autosaveMs)
     return () => window.clearTimeout(tId)
   }, [text, selectedImages, selectedVideo, selectedDoc, selectedDocName, audience, selectedCommunityId, communityOptions, open, mode])
@@ -272,6 +362,9 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
   if (!open) return null
 
   const close = (options: { saveDraft?: boolean } = {}) => {
+    activeUploadControllerRef.current?.abort()
+    activeUploadControllerRef.current = null
+    composeGenerationRef.current += 1
     const dirty = Boolean(text.trim() || selectedImages.length || selectedVideo || selectedDoc)
     if (options.saveDraft !== false && dirty) {
       const saved = upsertPostDraft({
@@ -288,6 +381,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         publishRequestSignature: postRequestRef.current?.signature || null,
       })
       activeDraftIdRef.current = saved.id
+      setSavedDrafts(listPostDrafts())
     }
     onOpenChange(false)
     setText("")
@@ -307,25 +401,13 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
   }
   closeRef.current = () => close()
 
-  const readFileAsDataUrl = (file: File, kind: "image" | "video" | "file") =>
-    new Promise<string>((resolve, reject) => {
-      try {
-        if (kind !== "file") {
-          validateMediaFile(file, kind)
-        }
-      } catch (error) {
-        reject(error)
-        return
-      }
-      const reader = new FileReader()
-      reader.onload = () =>
-        typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Unable to read media"))
-      reader.onerror = () => reject(reader.error ?? new Error("Unable to read media"))
-      reader.readAsDataURL(file)
-    })
+
 
   const handleImages = async (files: FileList | null) => {
     if (!files?.length) return
+    const generation = composeGenerationRef.current
+    const controller = beginUpload()
+    const expectedUserId = composeOwnerRef.current
     if (mode === "post" && selectedImages.length >= COMPOSE_LIMITS.maxImagesPerPost) {
       addToast(`You can attach up to ${COMPOSE_LIMITS.maxImagesPerPost} photos per post`, "info")
       return
@@ -338,20 +420,26 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         const dataUrl = await compressImageFile(file, { purpose: "story", preferWebp: true }).catch(
           () => compressImage(file)
         )
+        if (generation !== composeGenerationRef.current || controller.signal.aborted || IdentityService.getCurrentUserId() !== expectedUserId) return
         setUploadProgress(MEDIA_PROGRESS.uploading)
         try {
           const blob = await (await fetch(dataUrl)).blob()
           const up = await uploadDurableMedia(blob, {
             fileName: file.name,
-            onProgress: (label) => setUploadProgress(label),
+            onProgress: (label) => { if (generation === composeGenerationRef.current) setUploadProgress(label) },
+            signal: controller.signal,
+            expectedUserId,
           })
+          if (generation !== composeGenerationRef.current) return
           if (up.ok && up.url && isDurableMediaUrl(up.url)) {
+            clearFailedAttachment(file)
             setStoryMedia({ type: "image", url: up.url })
           } else {
             const offline = typeof navigator !== "undefined" && navigator.onLine === false
             const storageDown = !up.ok && isMediaStorageUnavailable(up.error)
             if ((offline || storageDown) && isSmallDataUrl(dataUrl, 1_800_000)) {
               setStoryMedia({ type: "image", url: dataUrl })
+              rememberFailedAttachment(file, "photo", "Local story preview only — retry upload before publishing.")
               addToast(
                 storageDown
                   ? "Server photo storage is offline — moment kept on this device for now"
@@ -359,22 +447,23 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
                 "info"
               )
             } else {
-              addToast(
-                up.ok
-                  ? mediaUserMessage("STORAGE_ERROR")
-                  : mediaUploadErrorMessage(up),
-                "error"
-              )
+              const message = up.ok ? mediaUserMessage("STORAGE_ERROR") : mediaUploadErrorMessage(up)
+              rememberFailedAttachment(file, "photo", message)
+              addToast(message, "error")
               return
             }
           }
         } catch {
+          if (generation !== composeGenerationRef.current || controller.signal.aborted || IdentityService.getCurrentUserId() !== expectedUserId) return
           const offline = typeof navigator !== "undefined" && navigator.onLine === false
           if (offline && isSmallDataUrl(dataUrl)) {
             setStoryMedia({ type: "image", url: dataUrl })
+            rememberFailedAttachment(file, "photo", "Local story preview only — retry upload before publishing.")
             addToast("You're offline — photo saved as a draft on this device until you reconnect", "info")
           } else {
-            addToast(mediaUserMessage("NETWORK") + " — try again when connected", "error")
+            const message = mediaUserMessage("NETWORK") + " — try again when connected"
+            rememberFailedAttachment(file, "photo", message)
+            addToast(message, "error")
             return
           }
         }
@@ -396,34 +485,49 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
           try {
             dataUrl = await compressImageFile(file, { purpose: "feed", preferWebp: true })
           } catch {
-            addToast(mediaUserMessage("OPTIMIZE_FAILED"), "error")
+            const message = mediaUserMessage("OPTIMIZE_FAILED")
+            rememberFailedAttachment(file, "photo", message)
+            addToast(message, "error")
             continue
           }
+          if (generation !== composeGenerationRef.current || controller.signal.aborted || IdentityService.getCurrentUserId() !== expectedUserId) return
           setUploadProgress(MEDIA_PROGRESS.uploading)
           try {
             const blob = await (await fetch(dataUrl)).blob()
             const up = await uploadDurableMedia(blob, {
               fileName: file.name,
-              onProgress: (label) => setUploadProgress(label),
+              onProgress: (label) => { if (generation === composeGenerationRef.current) setUploadProgress(label) },
+              signal: controller.signal,
+              expectedUserId,
             })
+            if (generation !== composeGenerationRef.current) return
             if (up.ok && up.url && isDurableMediaUrl(up.url)) {
+              clearFailedAttachment(file)
               images.push(up.url)
             } else if ((!up.ok && isMediaStorageUnavailable(up.error)) || (typeof navigator !== "undefined" && !navigator.onLine)) {
-              if (isSmallDataUrl(dataUrl, 1_800_000)) {
-                images.push(dataUrl)
-                addToast("Photo kept on this device — server storage not available yet", "info")
-              } else {
-                addToast(mediaUploadErrorMessage(up, mediaUserMessage("STORAGE_ERROR")), "error")
-              }
+              // Feed posts require durable server media. Do not place a data URL
+              // into the post attachment list: it cannot be shared or restored safely.
+              const message = isSmallDataUrl(dataUrl, 1_800_000)
+                ? "Photo was not attached because server storage is unavailable. Your text draft is safe; reconnect and retry this attachment."
+                : mediaUploadErrorMessage(up, mediaUserMessage("STORAGE_ERROR"))
+              rememberFailedAttachment(file, "photo", message)
+              addToast(message, "error")
             } else if (!up.ok) {
-              addToast(mediaUploadErrorMessage(up, mediaUserMessage("STORAGE_ERROR")), "error")
+              const message = mediaUploadErrorMessage(up, mediaUserMessage("STORAGE_ERROR"))
+              rememberFailedAttachment(file, "photo", message)
+              addToast(message, "error")
             } else {
-              addToast(mediaUserMessage("STORAGE_ERROR"), "error")
+              const message = mediaUserMessage("STORAGE_ERROR")
+              rememberFailedAttachment(file, "photo", message)
+              addToast(message, "error")
             }
           } catch {
-            addToast(mediaUserMessage("NETWORK") + " — photo not attached. Check connection and retry.", "error")
+            const message = mediaUserMessage("NETWORK") + " — photo not attached. Check connection and retry."
+            rememberFailedAttachment(file, "photo", message)
+            addToast(message, "error")
           }
         }
+        if (generation !== composeGenerationRef.current) return
         if (images.length) {
           setSelectedImages((prev) => [...prev, ...images].slice(0, 10))
           setSelectedVideo(null)
@@ -433,14 +537,19 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         }
       }
     } catch {
-      addToast(mediaUserMessage("OPTIMIZE_FAILED", "Unable to add photo — try a smaller file"), "error")
+      if (generation === composeGenerationRef.current && !controller.signal.aborted) addToast(mediaUserMessage("OPTIMIZE_FAILED", "Unable to add photo — try a smaller file"), "error")
     } finally {
-      setUploadProgress(null)
+      const ownsUploadSlot = activeUploadControllerRef.current === controller
+      if (ownsUploadSlot) activeUploadControllerRef.current = null
+      if (ownsUploadSlot && generation === composeGenerationRef.current) setUploadProgress(null)
     }
   }
 
   const handleDoc = async (file: File | undefined) => {
     if (!file || mode !== "post") return
+    const generation = composeGenerationRef.current
+    const controller = beginUpload()
+    const expectedUserId = composeOwnerRef.current
     setUploadProgress(MEDIA_PROGRESS.preparingFile)
     try {
       if (file.size > 50 * 1024 * 1024) {
@@ -451,33 +560,42 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
       const up = await uploadDurableMedia(file, {
         fileName: file.name,
         category: "documents",
-        onProgress: (label) => setUploadProgress(label),
+        onProgress: (label) => { if (generation === composeGenerationRef.current) setUploadProgress(label) },
+        signal: controller.signal,
+        expectedUserId,
       })
+      if (generation !== composeGenerationRef.current) return
       if (up.ok && up.url && isDurableMediaUrl(up.url)) {
+        clearFailedAttachment(file)
         setSelectedDoc(up.url)
         setSelectedDocName(file.name || "attachment")
         setUploadProgress(MEDIA_PROGRESS.ready)
         addToast("✓ File ready", "success")
         return
       }
-      // Avoid large inline PDF payloads in post JSON
-      if (file.size <= 400_000) {
-        const url = await readFileAsDataUrl(file, "file")
-        setSelectedDoc(url)
-        setSelectedDocName(file.name || "attachment")
-        addToast("File attached", "success")
-      } else if (!up.ok) {
-        addToast(mediaUploadErrorMessage(up, mediaUserMessage("STORAGE_ERROR")), "error")
-      }
+      // A local data URL cannot be delivered durably to other users. Never
+      // show an attachment as ready unless the server has finalized its asset.
+      const message = mediaUploadErrorMessage(up, "File upload could not be completed. Reconnect and retry.")
+      rememberFailedAttachment(file, "file", message)
+      addToast(message, "error")
     } catch {
-      addToast(mediaUserMessage("NETWORK", "Unable to attach file"), "error")
+      if (generation === composeGenerationRef.current && !controller.signal.aborted) {
+        const message = mediaUserMessage("NETWORK", "Unable to attach file")
+        rememberFailedAttachment(file, "file", message)
+        addToast(message, "error")
+      }
     } finally {
-      setUploadProgress(null)
+      const ownsUploadSlot = activeUploadControllerRef.current === controller
+      if (ownsUploadSlot) activeUploadControllerRef.current = null
+      if (ownsUploadSlot && generation === composeGenerationRef.current) setUploadProgress(null)
     }
   }
 
   const handleVideo = async (file: File | undefined) => {
     if (!file) return
+    const generation = composeGenerationRef.current
+    const controller = beginUpload()
+    const expectedUserId = composeOwnerRef.current
     const sizeMb = file.size / (1024 * 1024)
     try {
       validateMediaFile(file, "video")
@@ -492,6 +610,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
     let videoMeta: { durationMs: number; width: number; height: number }
     try {
       videoMeta = await validatePulseVideo(file)
+      if (generation !== composeGenerationRef.current || controller.signal.aborted || IdentityService.getCurrentUserId() !== expectedUserId) return
     } catch (error) {
       const code = error instanceof Error ? error.message : "VIDEO_METADATA_INVALID"
       const message = code === "PULSE_VIDEO_TOO_LONG"
@@ -501,6 +620,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
           : code === "VIDEO_METADATA_TIMEOUT"
             ? "Video metadata could not be read in time. Please try the clip again."
             : "This video could not be prepared for GreenHaven."
+      if (code === "VIDEO_METADATA_TIMEOUT") rememberFailedAttachment(file, "video", message)
       addToast(message, "error")
       return
     }
@@ -514,14 +634,20 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
       setUploadProgress(MEDIA_PROGRESS.uploading)
       const up = await uploadDurableMedia(file, {
         fileName: file.name,
-        onProgress: (label) => setUploadProgress(label),
+        onProgress: (label) => { if (generation === composeGenerationRef.current) setUploadProgress(label) },
+        signal: controller.signal,
+        expectedUserId,
       })
+      if (generation !== composeGenerationRef.current) return
       if (mode === "story") {
-        if (up.ok && up.url) {
+        if (up.ok && up.url && isDurableMediaUrl(up.url)) {
+          clearFailedAttachment(file)
           setStoryMedia({ type: "video", url: up.url })
         } else {
           // Blob URLs are local to this browser session and must never be published as durable media.
-          addToast(mediaUploadErrorMessage(up, mediaUserMessage("STORAGE_ERROR")), "error")
+          const message = mediaUploadErrorMessage(up, mediaUserMessage("STORAGE_ERROR"))
+          rememberFailedAttachment(file, "video", message)
+          addToast(message, "error")
           return
         }
         setSelectedImages([])
@@ -531,6 +657,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         return
       }
       if (up.ok && up.url && isDurableMediaUrl(up.url)) {
+        clearFailedAttachment(file)
         setSelectedVideo(up.url)
         setStoryMedia(null)
         setUploadProgress(MEDIA_PROGRESS.ready)
@@ -538,11 +665,19 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         return
       }
       // Never persist a blob: URL in a post; it cannot be fetched by other users or after reload.
-      addToast(mediaUploadErrorMessage(up, mediaUserMessage("STORAGE_ERROR")), "error")
+      const message = mediaUploadErrorMessage(up, mediaUserMessage("STORAGE_ERROR"))
+      rememberFailedAttachment(file, "video", message)
+      addToast(message, "error")
     } catch {
-      addToast(mediaUserMessage("OPTIMIZE_FAILED", "Unable to add video — try a shorter clip"), "error")
+      if (generation === composeGenerationRef.current && !controller.signal.aborted) {
+        const message = mediaUserMessage("NETWORK", "Upload interrupted. Retry this video without restarting your post.")
+        rememberFailedAttachment(file, "video", message)
+        addToast(message, "error")
+      }
     } finally {
-      setUploadProgress(null)
+      const ownsUploadSlot = activeUploadControllerRef.current === controller
+      if (ownsUploadSlot) activeUploadControllerRef.current = null
+      if (ownsUploadSlot && generation === composeGenerationRef.current) setUploadProgress(null)
     }
   }
 
@@ -582,6 +717,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
       addToast("Wait for the media upload to finish before publishing", "info")
       return
     }
+    const generation = composeGenerationRef.current
     publishingRef.current = true
     setIsPublishing(true)
     try { a11y.announce(mode === "post" ? "Publishing post" : "Sharing story", "polite") } catch { /* */ }
@@ -605,8 +741,11 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
       setIsPublishing(false)
       return
     }
-    if (storyMedia?.url && isBlobUrl(storyMedia.url)) {
-      addToast("Moment media still uploading — wait until Ready", "error")
+    if (storyMedia?.url && !isDurableMediaUrl(storyMedia.url)) {
+      addToast(
+        "This story photo is only a local preview and has not reached GreenHaven storage. Reconnect and re-attach it before publishing.",
+        "error",
+      )
       publishingRef.current = false
       setIsPublishing(false)
       return
@@ -644,6 +783,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
           community,
           requestId,
         )
+        if (generation !== composeGenerationRef.current) return
         if (created) {
           if (activeDraftIdRef.current) {
             removePostDraft(activeDraftIdRef.current)
@@ -654,8 +794,16 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
         }
       } else {
         const now = Date.now()
+        const storySignature = stableComposeSignature({ text: text.trim(), media: storyMedia, audience: storyAudience, storyMode })
+        if (storyRequestRef.current && storyRequestRef.current.signature !== storySignature) storyRequestRef.current = null
+        if (!storyRequestRef.current) {
+          const randomPart = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+            ? crypto.randomUUID().replace(/-/g, "")
+            : `${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`
+          storyRequestRef.current = { id: `story_${randomPart}`, signature: storySignature }
+        }
         const next: StoryItem = {
-          id: `story_${now.toString(36)}_${Math.random().toString(36).slice(2, 14)}`,
+          id: storyRequestRef.current.id,
           ownerId: "current-user",
           name: profile.displayName || "You",
           photo: profile.photos?.[0],
@@ -669,6 +817,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
           storyMode,
         }
         const storyResult = await publishStory(next)
+        if (generation !== composeGenerationRef.current) return
         if (!storyResult?.ok) {
           addToast(storyResult?.error || "Could not publish story", "error")
           return
@@ -684,13 +833,16 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
             "info"
           )
         }
+        storyRequestRef.current = null
         close()
       }
     } catch {
       addToast(mode === "post" ? "Failed to create post" : "Could not publish story", "error")
     } finally {
-      publishingRef.current = false
-      setIsPublishing(false)
+      if (generation === composeGenerationRef.current) {
+        publishingRef.current = false
+        setIsPublishing(false)
+      }
     }
   }
 
@@ -866,6 +1018,8 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
                     publishRequestSignature: postRequestRef.current?.signature || null,
                   })
                   activeDraftIdRef.current = saved.id
+                  setSavedDrafts(listPostDrafts())
+                  setLastSavedAt(saved.lastEditedAt)
                   addToast("Draft saved on this device", "success")
                 }}
                 className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-xs font-bold text-foreground transition hover:bg-muted"
@@ -1002,6 +1156,94 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
               Draft saved {Math.max(0, Math.floor((Date.now() - lastSavedAt) / 60_000)) === 0 ? "just now" : `${Math.max(1, Math.floor((Date.now() - lastSavedAt) / 60_000))} min ago`}
             </p>
           ) : null}
+          {mode === "post" && savedDrafts.length > 1 ? (
+            <div className="mb-2 rounded-xl border border-border/70 bg-card/80 p-2.5">
+              <button
+                type="button"
+                aria-expanded={showSavedDrafts}
+                onClick={() => setShowSavedDrafts((value) => !value)}
+                className="flex min-h-9 w-full items-center justify-between gap-2 text-left text-xs font-bold text-foreground"
+              >
+                <span>Saved drafts ({savedDrafts.length})</span>
+                <span className="text-muted-foreground">{showSavedDrafts ? "Hide" : "Browse drafts"}</span>
+              </button>
+              {showSavedDrafts ? (
+                <div className="mt-2 space-y-2" aria-label="Saved drafts on this device">
+                  {savedDrafts.slice(0, 20).map((draft) => {
+                    const isCurrent = draft.id === activeDraftIdRef.current
+                    const preview = draft.content.trim().replace(/\s+/g, " ") || (draft.images.length ? "Photo draft" : draft.video ? "Video draft" : draft.pdfName || "Untitled draft")
+                    return (
+                      <div key={draft.id} className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/30 p-2">
+                        <button
+                          type="button"
+                          disabled={isCurrent || isPublishing || Boolean(uploadProgress)}
+                          onClick={() => {
+                            if (isCurrent) return
+                            const dirty = Boolean(text.trim() || selectedImages.length || selectedVideo || selectedDoc)
+                            if (dirty) {
+                              const current = upsertPostDraft({
+                                id: activeDraftIdRef.current || undefined,
+                                content: text,
+                                images: selectedImages.filter(isDurableMediaUrl),
+                                video: selectedVideo && isDurableMediaUrl(selectedVideo) ? selectedVideo : null,
+                                pdf: selectedDoc && isDurableMediaUrl(selectedDoc) ? selectedDoc : null,
+                                pdfName: selectedDocName,
+                                visibility: audience,
+                                communityId: selectedCommunityId || null,
+                                communityName: communityOptions.find((item) => item.id === selectedCommunityId)?.name || null,
+                                publishRequestId: postRequestRef.current?.id || null,
+                                publishRequestSignature: postRequestRef.current?.signature || null,
+                              })
+                              activeDraftIdRef.current = current.id
+                            }
+                            const restored = getPostDraft(draft.id)
+                            if (!restored) {
+                              setSavedDrafts(listPostDrafts())
+                              addToast("That draft is no longer available. Refreshing the list.", "info")
+                              return
+                            }
+                            activeDraftIdRef.current = restored.id
+                            setText(restored.content)
+                            setSelectedImages(restored.images.filter(isDurableMediaUrl))
+                            setSelectedVideo(restored.video && isDurableMediaUrl(restored.video) ? restored.video : null)
+                            setSelectedDoc(restored.pdf && isDurableMediaUrl(restored.pdf) ? restored.pdf : null)
+                            setSelectedDocName(restored.pdfName || null)
+                            setAudience(restored.visibility || "public")
+                            setSelectedCommunityId(restored.communityId || "")
+                            setLastSavedAt(restored.lastEditedAt)
+                            setDraftRestored(true)
+                            postRequestRef.current = restored.publishRequestId && restored.publishRequestSignature
+                              ? { id: restored.publishRequestId, signature: restored.publishRequestSignature }
+                              : null
+                            setShowSavedDrafts(false)
+                            addToast("Draft restored", "success")
+                          }}
+                          className="min-w-0 flex-1 text-left disabled:opacity-60"
+                        >
+                          <span className="block truncate text-xs font-semibold text-foreground">{preview.slice(0, 100)}</span>
+                          <span className="block text-[10px] text-muted-foreground">{new Date(draft.lastEditedAt).toLocaleString()} · {draft.visibility || "public"}{isCurrent ? " · Currently editing" : ""}</span>
+                        </button>
+                        {!isCurrent ? (
+                          <button
+                            type="button"
+                            aria-label="Delete saved draft"
+                            disabled={isPublishing || Boolean(uploadProgress)}
+                            onClick={() => {
+                              removePostDraft(draft.id)
+                              setSavedDrafts(listPostDrafts())
+                              addToast("Draft deleted from this device", "info")
+                            }}
+                            className="min-h-9 shrink-0 rounded-lg px-2 text-xs font-bold text-rose-700 hover:bg-rose-500/10 disabled:opacity-50"
+                          >Delete</button>
+                        ) : null}
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
           <ComposeDraftBanner
             visible={draftRestored && mode === "post"}
             onDiscard={() => {
@@ -1021,6 +1263,25 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
               }
             }}
           />
+          {failedAttachments.length > 0 && (
+            <section className="mb-3 space-y-2 rounded-xl border border-amber-300/80 bg-amber-50/80 p-3 dark:border-amber-900 dark:bg-amber-950/30" aria-label="Attachments needing recovery">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-bold text-amber-950 dark:text-amber-100">{failedAttachments.length} attachment{failedAttachments.length === 1 ? "" : "s"} need attention</p>
+                <button type="button" className="text-xs font-semibold underline" onClick={() => setFailedAttachments([])}>Dismiss</button>
+              </div>
+              {failedAttachments.map((item) => (
+                <div key={item.id} className="flex items-center gap-2 rounded-lg bg-background/80 p-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-semibold">{item.file.name}</p>
+                    <p className="text-[11px] text-muted-foreground">{item.message}</p>
+                  </div>
+                  <button type="button" disabled={Boolean(uploadProgress) || isPublishing} className="min-h-9 shrink-0 rounded-lg bg-emerald-700 px-3 text-xs font-bold text-white disabled:opacity-50" onClick={() => retryFailedAttachment(item)}>Retry</button>
+                  <button type="button" aria-label={`Forget ${item.file.name}`} className="min-h-9 rounded-lg px-2 text-xs font-semibold text-rose-700" onClick={() => setFailedAttachments((items) => items.filter((candidate) => candidate.id !== item.id))}>Remove</button>
+                </div>
+              ))}
+              <p className="text-[11px] text-muted-foreground">Your text and other ready attachments stay in place. Retry uses the selected file from this session.</p>
+            </section>
+          )}
           <ComposeUploadProgress message={uploadProgress} />
           {mode === "post" ? (
             <ComposeMediaStrip
@@ -1054,7 +1315,7 @@ export function UnifiedCompose({ open, onOpenChange, initialMode = "post" }: Uni
                 <span>Story video preview</span>
                 <button type="button" onClick={() => setStoryMedia(null)} className="min-h-9 rounded-lg px-2 text-xs font-bold text-rose-700 hover:bg-rose-50">Remove</button>
               </div>
-              <DurableVideo src={storyMedia.url} controls playsInline muted={false} preload="metadata" className="max-h-[min(62vh,34rem)] w-full rounded-xl bg-black object-contain" />
+              <DurableVideo src={storyMedia.url} controls playsInline muted={false} preload="none" className="max-h-[min(62vh,34rem)] w-full rounded-xl bg-black object-contain" />
             </div>
           )}
           <MediaLightbox

@@ -14,7 +14,7 @@ const screenshots = read('scripts/capture-phase2-responsive-screenshots.mjs')
 const pkg = JSON.parse(read('package.json'))
 const checks = [
   ['topic normalization merges hashtags and content tags', /export function getPostTopicSet[\s\S]*?extractHashtags[\s\S]*?post\.hashtags/.test(engine)],
-  ['topic tags are length and character bounded', /\^\[\\p\{L\}\\p\{N\}_\]\{2,32\}\$/.test(engine)],
+  ['topic tags are length and character bounded', /\^\[\\p\{L\}\\p\{N\}\]\[\\p\{L\}\\p\{N\}\\p\{M\}_\]\{1,31\}\$/.test(engine)],
   ['muted topics are hard exclusions', /excluded\.has\(topic\)/.test(engine)],
   ['selected topics narrow the feed', /included\.some\(\(topic\) => topics\.has\(topic\)\)/.test(engine)],
   ['topic filters apply to For You', /rankForYouFeed[\s\S]*?matchesTopicControls\(post, context\)/.test(engine)],

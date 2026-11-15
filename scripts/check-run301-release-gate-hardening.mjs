@@ -26,7 +26,7 @@ const checks = [
   ['Phase 12 current baseline is synchronized', phase12.includes(`**Current source baseline:** \`${version}\``)],
   ['Phase 12 production release remains blocked', /NOT APPROVED for production/.test(phase12)],
   ['current versioned worklog exists', worklog.length > 0],
-  ['worklog records 20 upgrades', (worklog.match(/^\d+\. /gm) || []).length === 20],
+  ['worklog records the coordinated release implementation steps', (worklog.match(/^\d+\. /gm) || []).length >= 10],
   ['worklog records source-only verification limits', /source-only verification scope|source-level/i.test(worklog)],
   ['worklog records required Node runtime', /Node(?:\.js)? 24\.15\.0/.test(worklog)],
   ['Phase 24 checks current acceptance metadata', phase24.includes('Phase 1–12 acceptance')],

@@ -1,6 +1,7 @@
 "use client"
 
 import { broadcastPostEngagement, normalizeEngagementMetrics, POST_ENGAGEMENT_EVENT } from "@/lib/engagement/post-engagement"
+import { isStrictlyOlderFeedCursor } from "@/lib/feed/phase5-feed-primitives"
 import { broadcastPostSync } from "@/lib/social/post-sync"
 import { mapRemoteFeedPosts } from "@/lib/social/map-remote-feed-posts"
 import { reconcileFeedPosts } from "@/lib/social/reconcile-feed-posts"
@@ -69,10 +70,7 @@ import { messageLimiter, postLimiter, spamDetection } from "@/lib/rate-limiter"
 import { analytics } from "@/lib/analytics"
 import { notificationSystem } from "@/lib/notifications"
 import { emitCommunityNotification } from "@/lib/domains/adapters/community-notification"
-import {
-  appendModerationLog,
-  createCommunityReport,
-} from "@/lib/domains/adapters/community-governance"
+import { appendModerationLog } from "@/lib/domains/adapters/community-governance"
 import { offlineSupport } from "@/lib/offline"
 import { offlineQueue, connectionMonitor, withRetry } from "@/lib/network-resilience"
 import { ensureConversation } from "@/lib/messaging/ensure-conversation"
@@ -239,13 +237,13 @@ export interface GHCContextType {
     community?: { id: string; name: string } | null,
     requestId?: string,
   ) => Promise<boolean>
-  likePost: (postId: string) => Promise<void>
-  reactToPost: (postId: string, reaction?: string) => Promise<void>
+  likePost: (postId: string) => Promise<boolean>
+  reactToPost: (postId: string, reaction?: string) => Promise<boolean>
   deletePost: (postId: string) => Promise<void>
   editPost: (postId: string, newContent: string, media?: { images?: string[]; video?: string | null }) => Promise<void>
   archivePost: (postId: string) => Promise<void>
   unarchivePost: (postId: string) => Promise<void>
-  addComment: (postId: string, text: string, replyToCommentId?: string, mediaAttachments?: Array<{ id?: string; type: "image" | "video" | "file"; url: string; fileName?: string }>) => Promise<void>
+  addComment: (postId: string, text: string, replyToCommentId?: string, mediaAttachments?: Array<{ id?: string; type: "image" | "video" | "file"; url: string; fileName?: string }>) => Promise<boolean>
   loadPostComments: (postId: string, options?: { before?: number; beforeId?: string; append?: boolean }) => Promise<{ ok: boolean; count: number; durable?: boolean; nextCursor?: { before: number; beforeId: string } | null; error?: string }>
   editComment: (postId: string, commentId: string, newText: string) => Promise<void>
   deleteComment: (postId: string, commentId: string) => Promise<void>
@@ -256,8 +254,8 @@ export interface GHCContextType {
   createQuoteRepost: (originalPostId: string, quoteText: string) => Promise<void>
   sharePost: (postId: string, platform: "twitter" | "facebook" | "linkedin" | "copy" | "timeline" | "story" | "private" | "group") => Promise<string>
   applyShareResult: (result: any) => void
-  savePost: (postId: string, collection?: string) => Promise<void>
-  unsavePost: (postId: string) => Promise<void>
+  savePost: (postId: string, collection?: string) => Promise<boolean>
+  unsavePost: (postId: string) => Promise<boolean>
   hidePost: (postId: string) => Promise<void>
   markNotInterested: (postId: string) => Promise<void>
   reportPost: (postId: string, reason: string) => Promise<void>
@@ -2787,7 +2785,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           postId,
           error: remote.error || "NOT_DURABLE",
         })
-        return
+        return false
       }
 
       const active =
@@ -2882,6 +2880,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         viewerReactions: remote.viewerReactions,
         likedByMe: isLike ? active : undefined,
       })
+      return true
     } catch (err) {
       try {
         errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
@@ -2889,6 +2888,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         /* */
       }
       addToast("Could not update reaction", "error")
+      return false
     }
   }, [addToast])
 
@@ -3173,14 +3173,14 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     text: string,
     replyToCommentId?: string,
     mediaAttachments?: Array<{ id?: string; type: "image" | "video" | "file"; url: string; fileName?: string }>
-  ) => {
+  ): Promise<boolean> => {
     const normalizedText = sanitizeText(text, 500).trim()
     const safeMedia = (mediaAttachments || [])
       .filter((a) => a && a.url && !String(a.url).startsWith("blob:") && !String(a.url).startsWith("data:"))
       .slice(0, 4)
     if (!normalizedText && !safeMedia.length) {
       addToast("Comment cannot be empty", "error")
-      return
+      return false
     }
     try {
       if (replyToCommentId) {
@@ -3196,7 +3196,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
             )
             if (!parentExists && remoteThread.durable) {
               addToast("Original comment was removed", "error")
-              return
+              return false
             }
           } catch {
             /* allow server to validate on write */
@@ -3233,7 +3233,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
             (replyToCommentId ? "Could not post reply" : "Could not post comment"),
           "error"
         )
-        return
+        return false
       }
       if (remote.durable === false) {
         addToast(
@@ -3242,7 +3242,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
             : "Comment not visible to others yet — server not durable",
           "error"
         )
-        return
+        return false
       }
 
       pendingCommentRequestIdsRef.current.delete(requestKey)
@@ -3407,6 +3407,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           }
         } catch { /* optional */ }
       }
+      return true
     } catch (err) {
       try {
         errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
@@ -3414,6 +3415,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         /* logger must never block UX */
       }
       addToast("Could not post comment", "error")
+      return false
     }
   }, [addToast, state.profile, state.posts])
 
@@ -3432,6 +3434,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         reactionCounts?: Record<string, number>
         viewerReactions?: string[]
         shareCount?: number
+        savedByMe?: boolean
       }>).detail
       if (!detail?.postId) return
       const postId = String(detail.postId)
@@ -3472,6 +3475,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
               next.shares = Math.max(0, detail.shareCount)
               next.engagement = normalizeEngagementMetrics(next.engagement || post.engagement, { shares: Math.max(0, detail.shareCount) })
             }
+            if (typeof detail.savedByMe === "boolean") next.savedByMe = detail.savedByMe
             if (typeof detail.commentCount === "number" && Number.isFinite(detail.commentCount)) {
               next.engagement = normalizeEngagementMetrics(next.engagement || post.engagement, {
                 comments: Math.max(0, detail.commentCount),
@@ -3787,17 +3791,23 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         addToast(result.error || "Comment delete was not saved", "error")
         return
       }
+      const previousPost = state.posts.find((post) => post.id === postId)
+      const reconciledCommentCount = Number.isFinite(result.commentCount)
+        ? Math.max(0, Number(result.commentCount))
+        : Math.max(0, (Number(previousPost?.engagement?.comments ?? previousPost?.comments.length) || 0) - 1)
       setState((s) => ({
         ...s,
         posts: s.posts.map((p) => p.id !== postId ? p : {
           ...p,
           // Keep replies from other authors; the deleted parent becomes an orphan root.
           comments: p.comments.filter((c) => c.id !== commentId),
-          engagement: normalizeEngagementMetrics(p.engagement, {
-            comments: Number.isFinite(result.commentCount) ? Math.max(0, Number(result.commentCount)) : Math.max(0, (Number(p.engagement?.comments ?? p.comments.length) || 0) - 1),
-          }),
+          engagement: normalizeEngagementMetrics(p.engagement, { comments: reconciledCommentCount }),
         }),
       }))
+      broadcastPostEngagement({ postId, kind: "comment", commentCount: reconciledCommentCount })
+      try {
+        window.dispatchEvent(new CustomEvent("ghc:social-mutation", { detail: { type: "comment-delete", postId, commentId, commentCount: reconciledCommentCount } }))
+      } catch { /* non-fatal cross-surface signal */ }
       addToast("Comment deleted", "success")
     } catch (err) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
@@ -3999,7 +4009,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
   }, [addToast, state.settings, state.blockedUsers, state.posts, state.conversations])
 
 
-  const savePost = useCallback(async (postId: string, collection?: string) => {
+  const savePost = useCallback(async (postId: string, collection?: string): Promise<boolean> => {
     setState((s) => ({
       ...s,
       posts: s.posts.map((post) =>
@@ -4026,7 +4036,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           ),
         }))
         addToast(remote.error || "Could not save post", "error")
-        return
+        return false
       }
       if (remote.durable === false) {
         setState((s) => ({
@@ -4043,9 +4053,11 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           ),
         }))
         addToast("Could not save post on the server", "error")
-        return
+        return false
       }
+      if (typeof remote.saved === "boolean") broadcastPostEngagement({ postId, kind: "save", savedByMe: remote.saved })
       addToast("Post saved", "success")
+      return true
     } catch {
       setState((s) => ({
         ...s,
@@ -4061,10 +4073,11 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         ),
       }))
       addToast("Could not reach the server to save this post", "error")
+      return false
     }
   }, [addToast])
 
-  const unsavePost = useCallback(async (postId: string) => {
+  const unsavePost = useCallback(async (postId: string): Promise<boolean> => {
     const prevBookmarks = state.posts.find((p) => p.id === postId)?.bookmarkedBy
     setState((s) => ({
       ...s,
@@ -4090,7 +4103,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           ),
         }))
         addToast(remote.error || "Could not remove saved post", "error")
-        return
+        return false
       }
       if (remote.durable === false) {
         setState((s) => ({
@@ -4102,9 +4115,11 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           ),
         }))
         addToast("Could not update saved posts on the server", "error")
-        return
+        return false
       }
+      if (typeof remote.saved === "boolean") broadcastPostEngagement({ postId, kind: "save", savedByMe: remote.saved })
       addToast("Post removed from saved", "success")
+      return true
     } catch {
       setState((s) => ({
         ...s,
@@ -4115,34 +4130,21 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         ),
       }))
       addToast("Could not reach the server to update saved posts", "error")
+      return false
     }
   }, [addToast, state.posts])
 
   const hidePost = useCallback(async (postId: string) => {
     const id = String(postId || "").trim()
     if (!id) return
-    // Remove from active feed immediately; hideCount retained on archive paths if present.
+    // The Feed surface owns its account-scoped, device-local hide preference.
+    // Do not also write a global localStorage key here: it would leak the
+    // preference across signed-in accounts on a shared device.
     setState((s) => ({
       ...s,
-      posts: s.posts
-        .filter((post) => post.id !== id)
-        .map((post) =>
-          post.id === id ? { ...post, hideCount: (post.hideCount || 0) + 1 } : post
-        ),
+      posts: s.posts.filter((post) => post.id !== id),
     }))
-    try {
-      if (typeof window !== "undefined") {
-        const key = "ghc.hidden-post-ids"
-        const prev = JSON.parse(window.localStorage.getItem(key) || "[]")
-        const next = Array.isArray(prev) ? prev : []
-        if (!next.includes(id)) {
-          next.push(id)
-          window.localStorage.setItem(key, JSON.stringify(next.slice(-200)))
-        }
-      }
-    } catch { /* */ }
-    addToast("Post hidden", "success")
-  }, [addToast])
+  }, [])
 
   const markNotInterested = useCallback(async (postId: string) => {
     setState((s) => ({
@@ -7339,16 +7341,6 @@ const dismissMatchCelebration = useCallback(() => {
           addToast(durablePayload?.error || "Report could not be saved on the server", "error")
           return false
         }
-        try {
-          createCommunityReport({
-            communityId,
-            targetType: input.targetType,
-            targetId: input.targetId,
-            reporterId: IdentityService.getCurrentUserId() || "unknown",
-            reason: input.reason,
-            note: input.note,
-          })
-        } catch { /* */ }
         addToast("Report submitted — thank you", "success")
         return true
       } catch {
@@ -7854,10 +7846,10 @@ const dismissMatchCelebration = useCallback(() => {
         && feed.nextCursor.beforeId.trim().length > 0
         ? { before: feed.nextCursor.before, beforeId: feed.nextCursor.beforeId }
         : null
-      if (opts?.append && requestedCursor && candidateCursor
-        && candidateCursor.before === requestedCursor.before
-        && candidateCursor.beforeId === requestedCursor.beforeId) {
-        return { ok: false, durable: false, error: "FEED_CURSOR_DID_NOT_ADVANCE" }
+      if (opts?.append && requestedCursor && candidateCursor) {
+        if (!isStrictlyOlderFeedCursor(candidateCursor, requestedCursor)) {
+          return { ok: false, durable: false, error: "FEED_CURSOR_DID_NOT_ADVANCE" }
+        }
       }
       const nextCursor = candidateCursor
       feedCursorRef.current = nextCursor

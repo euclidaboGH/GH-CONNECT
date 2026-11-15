@@ -23,7 +23,7 @@ const checks = [
   ['History provides text, status and inclusive date filters', centre.includes('historyQuery') && centre.includes('historyStatus') && centre.includes('historyFrom') && centre.includes('historyTo') && centre.includes('aria-pressed={historyStatus === value}')],
   ['Server ledger and local supplemental history are distinguished', centre.includes('Server ledger entries are authoritative') && centre.includes('supplemental activity')],
   ['Prior account achievement data is cleared on identity change', centre.includes('setServerAchievements([])')],
-  ['Only durable server achievements are presented as unlocked', centre.includes('r.durable === true') && centre.includes('const achievements = serverAchievements.filter') && !centre.includes('services?.achievements?.getUnlockedForProfile?.()')],
+  ['Only durable server achievements are presented as unlocked', centre.includes('r.durable === true') && centre.includes('serverAchievementsOwnerRef.current === userId ? serverAchievements : []') && !centre.includes('services?.achievements?.getUnlockedForProfile?.()')],
   ['Mission progress uses authenticated server verification and fails closed when the verifier is unavailable', readFileSync(join(root, 'app/api/economy/missions/progress/route.ts'), 'utf8').includes('socialRpc("gh_rewards_mission_complete"') && readFileSync(join(root, 'app/api/economy/missions/progress/route.ts'), 'utf8').includes('MISSION_VERIFICATION_UNAVAILABLE')],
   ['No client-side mint/credit/settlement authority added', !/ledger\.insert|mintGhc|transferGhc|settleReward\s*\(/i.test(centre)],
   ['GHC and Pi cashback surfaces remain distinct', centre.includes('PiCashbackSummary') && centre.includes('Two different rewards')],

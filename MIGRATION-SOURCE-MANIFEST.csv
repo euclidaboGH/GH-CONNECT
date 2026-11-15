@@ -221,3 +221,4 @@ filename,classification,bytes
 20261111120001_pi_earnings_release_stale_incomplete.sql,REVIEW_REQUIRED,6627
 20261111131500_run285_durable_message_reactions.sql,REVIEW_REQUIRED,3832
 20261112100001_financial_stale_hold_reaper.sql,REVIEW_REQUIRED,7793
+20261114100001_gh_feed_preferences_durable.sql,REVIEW_REQUIRED,6600

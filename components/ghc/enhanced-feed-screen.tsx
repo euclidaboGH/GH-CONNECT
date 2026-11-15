@@ -9,7 +9,6 @@ import type { Post, FeedFilter, PostDraft, SavedPost } from "@/lib/ghc-types"
 import { listPostDrafts, removePostDraft } from "@/lib/creator/post-drafts"
 import { bootstrapPosts } from "@/lib/domains/adapters/session-bootstrap"
 import { isDemoDataAllowed } from "@/lib/demo-data-policy"
-import { emitSectionRefresh } from "@/lib/client/section-refresh"
 import { useSectionRefresh } from "@/hooks/use-section-refresh"
 import { useGHCFeed, useGHCShell, useGHCMessaging } from "@/contexts/ghc-context"
 import { IdentityService } from "@/lib/identity/identity-service"
@@ -129,6 +128,9 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   const feedPreferencesStorageKey = `ghc.feed-preferences.v2:${feedPreferenceOwnerId}`
   const hiddenPostStorageKey = `ghc.hidden-post-ids.v2:${feedPreferenceOwnerId}`
   const [feedPreferencesLoadedFor, setFeedPreferencesLoadedFor] = useState("anonymous")
+  const [serverPreferencesLoadedFor, setServerPreferencesLoadedFor] = useState("anonymous")
+  const [preferenceSyncStatus, setPreferenceSyncStatus] = useState<"loading" | "synced" | "device-only">("loading")
+  const preferenceSaveGenerationRef = useRef(0)
   const [hiddenPostIds, setHiddenPostIds] = useState<string[]>([])
 
   // State management
@@ -195,6 +197,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   // A ref closes the same-render gap before React commits isLoadingMore=true;
   // IntersectionObserver and the manual button cannot start duplicate pages.
   const loadMoreLockRef = useRef(false)
+  const loadMoreGenerationRef = useRef(0)
   const [hasMorePosts, setHasMorePosts] = useState(true)
   const [displayedPostsCount, setDisplayedPostsCount] = useState<number>(MOBILE_PAGE_SIZES.feed)
   // Preserve identical server/client first paint; adapt the batch immediately after hydration.
@@ -225,7 +228,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     try {
       const raw = window.localStorage.getItem(topicPreferenceStorageKey)
       const value: unknown = raw ? JSON.parse(raw) : []
-      setMutedTopics(Array.isArray(value) ? [...new Set(value.filter((v): v is string => typeof v === "string").map((v) => v.trim().toLowerCase()).filter((v) => /^[\p{L}\p{N}_]{2,32}$/u.test(v)))].slice(0, 100) : [])
+      setMutedTopics(Array.isArray(value) ? [...new Set(value.filter((v): v is string => typeof v === "string").map((v) => v.trim().toLowerCase()).filter((v) => /^[\p{L}\p{N}][\p{L}\p{N}\p{M}_]{1,31}$/u.test(v)))].slice(0, 100) : [])
       setSelectedTopic(null)
     } catch { setMutedTopics([]); setSelectedTopic(null) }
     setTopicPreferencesLoadedFor(feedPreferenceOwnerId)
@@ -236,7 +239,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   }, [topicPreferenceStorageKey, mutedTopics, hasFeedPreferenceOwner, topicPreferencesLoadedFor, feedPreferenceOwnerId])
   const toggleMutedTopic = useCallback((topic: string) => {
     const normalized = topic.trim().toLowerCase()
-    if (!/^[\p{L}\p{N}_]{2,32}$/u.test(normalized)) return
+    if (!/^[\p{L}\p{N}][\p{L}\p{N}\p{M}_]{1,31}$/u.test(normalized)) return
     setMutedTopics((current) => current.includes(normalized) ? current.filter((value) => value !== normalized) : [...current, normalized].slice(-100))
     if (selectedTopic === normalized) setSelectedTopic(null)
   }, [selectedTopic])
@@ -265,10 +268,101 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     try { window.localStorage.setItem(feedPreferenceStorageKey, JSON.stringify(notInterestedIds.slice(-200))) } catch { /* device storage may be unavailable */ }
   }, [feedPreferenceOwnerId, feedPreferenceStorageKey, notInterestedIds, notInterestedLoadedFor, hasFeedPreferenceOwner])
 
+  // The server snapshot is authoritative across devices. Existing device-local
+  // values are imported once for accounts without a server row, then all future
+  // changes are synchronized through the authenticated, owner-derived API.
+  useEffect(() => {
+    if (!hasFeedPreferenceOwner) {
+      setServerPreferencesLoadedFor(feedPreferenceOwnerId)
+      setPreferenceSyncStatus("device-only")
+      return
+    }
+    let cancelled = false
+    const ownerAtStart = feedPreferenceOwnerId
+    setServerPreferencesLoadedFor("anonymous")
+    setPreferenceSyncStatus("loading")
+    const apply = (value: Record<string, unknown>) => {
+      const filter = value.filter
+      setActiveFilter(filter === "following" || filter === "friends" || filter === "communities" || filter === "trending" || filter === "saved" ? filter : "for-you")
+      setLocationLane(value.locationLane === "city" || value.locationLane === "country" ? value.locationLane : "worldwide")
+      setIntentionBias(value.intentionBias === "friendship" || value.intentionBias === "professional" || value.intentionBias === "dating" ? value.intentionBias : "balanced")
+      setFocusMode(value.focusMode === true)
+      const cleanIds = (input: unknown) => Array.isArray(input) ? [...new Set(input.filter((id): id is string => typeof id === "string").map((id) => id.trim()).filter((id) => Boolean(id) && id.length <= 180))].slice(-200) : []
+      setHiddenPostIds(cleanIds(value.hiddenPostIds))
+      setNotInterestedIds(cleanIds(value.notInterestedPostIds))
+      setMutedTopics(Array.isArray(value.mutedTopics) ? [...new Set(value.mutedTopics.filter((topic): topic is string => typeof topic === "string").map((topic) => topic.trim().normalize("NFKC").toLocaleLowerCase()).filter((topic) => /^[\p{L}\p{N}][\p{L}\p{N}\p{M}_]{1,31}$/u.test(topic)))].slice(0, 100) : [])
+      setSelectedTopic(null)
+    }
+    const load = async () => {
+      try {
+        const response = await fetch("/api/social/feed/preferences", { method: "GET", cache: "no-store", credentials: "same-origin" })
+        const data = await response.json().catch(() => null) as { ok?: boolean; durable?: boolean; exists?: boolean; preferences?: Record<string, unknown> } | null
+        if (cancelled || IdentityService.getCurrentUserId() !== ownerAtStart) return
+        if (!response.ok || data?.ok !== true || data.durable !== true || !data.preferences) {
+          setServerPreferencesLoadedFor(ownerAtStart)
+          setPreferenceSyncStatus("device-only")
+          return
+        }
+        if (data.exists === true) {
+          apply(data.preferences)
+        } else {
+          // Preserve a user's existing local controls during the one-time migration.
+          let local: Record<string, unknown> = {}
+          try { local = JSON.parse(window.localStorage.getItem(feedPreferencesStorageKey) || "{}") as Record<string, unknown> } catch { local = {} }
+          let hidden: unknown = []; let lessRelevant: unknown = []; let topics: unknown = []
+          try { hidden = JSON.parse(window.localStorage.getItem(hiddenPostStorageKey) || "[]") } catch { hidden = [] }
+          try { lessRelevant = JSON.parse(window.localStorage.getItem(feedPreferenceStorageKey) || "[]") } catch { lessRelevant = [] }
+          try { topics = JSON.parse(window.localStorage.getItem(topicPreferenceStorageKey) || "[]") } catch { topics = [] }
+          apply({ ...data.preferences, ...local, hiddenPostIds: hidden, notInterestedPostIds: lessRelevant, mutedTopics: topics })
+        }
+        setServerPreferencesLoadedFor(ownerAtStart)
+        setPreferenceSyncStatus("synced")
+      } catch {
+        if (!cancelled && IdentityService.getCurrentUserId() === ownerAtStart) {
+          setServerPreferencesLoadedFor(ownerAtStart)
+          setPreferenceSyncStatus("device-only")
+        }
+      }
+    }
+    void load()
+    return () => { cancelled = true }
+  }, [feedPreferenceOwnerId, hasFeedPreferenceOwner, feedPreferencesStorageKey, hiddenPostStorageKey, feedPreferenceStorageKey, topicPreferenceStorageKey])
+
+  useEffect(() => {
+    if (!hasFeedPreferenceOwner || serverPreferencesLoadedFor !== feedPreferenceOwnerId) return
+    const ownerAtStart = feedPreferenceOwnerId
+    const generation = ++preferenceSaveGenerationRef.current
+    const preferences = {
+      hiddenPostIds: hiddenPostIds.slice(-200),
+      notInterestedPostIds: notInterestedIds.slice(-200),
+      mutedTopics: mutedTopics.slice(0, 100),
+      filter: activeFilter,
+      locationLane,
+      intentionBias,
+      focusMode,
+    }
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await fetch("/api/social/feed/preferences", {
+          method: "PUT",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ preferences }),
+        })
+        const data = await response.json().catch(() => null) as { ok?: boolean; durable?: boolean } | null
+        if (generation !== preferenceSaveGenerationRef.current || IdentityService.getCurrentUserId() !== ownerAtStart) return
+        setPreferenceSyncStatus(response.ok && data?.ok === true && data.durable === true ? "synced" : "device-only")
+      } catch {
+        if (generation === preferenceSaveGenerationRef.current && IdentityService.getCurrentUserId() === ownerAtStart) setPreferenceSyncStatus("device-only")
+      }
+    }, 500)
+    return () => window.clearTimeout(timer)
+  }, [activeFilter, locationLane, intentionBias, focusMode, hiddenPostIds, notInterestedIds, mutedTopics, feedPreferenceOwnerId, hasFeedPreferenceOwner, serverPreferencesLoadedFor])
+
   // Do not render or rank any previous account's cached feed while one of the
   // account-scoped preference stores is still hydrating.
   const feedPreferencesReady = hasFeedPreferenceOwner
-    ? feedPreferencesLoadedFor === feedPreferenceOwnerId && notInterestedLoadedFor === feedPreferenceOwnerId && topicPreferencesLoadedFor === feedPreferenceOwnerId
+    ? feedPreferencesLoadedFor === feedPreferenceOwnerId && notInterestedLoadedFor === feedPreferenceOwnerId && topicPreferencesLoadedFor === feedPreferenceOwnerId && serverPreferencesLoadedFor === feedPreferenceOwnerId
     : isDemoDataAllowed()
   const rankedPosts = useMemo(
     () => feedPreferencesReady && rankedOwnerId === feedPreferenceOwnerId ? rankedPostsState : [],
@@ -319,6 +413,20 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   const pendingLikesRef = useRef(new Set<string>())
   const pendingSavesRef = useRef(new Set<string>())
   const pendingCommentsRef = useRef(new Set<string>())
+
+  // A new account gets a fresh pagination window. Invalidate any old in-flight
+  // UI request before its finally block can unlock a newer account's request.
+  useEffect(() => {
+    loadMoreGenerationRef.current += 1
+    loadMoreLockRef.current = false
+    setIsLoadingMore(false)
+    setIsRefreshing(false)
+    setFeedError(null)
+    setFeedStatusMsg(null)
+    setInitialFeedLoadSettled(false)
+    setHasMorePosts(true)
+    setDisplayedPostsCount(getAdaptiveFeedPageSize())
+  }, [feedPreferenceOwnerId])
 
   // Infinite scroll detection
   const observerTargetRef = useRef<HTMLDivElement>(null)
@@ -399,29 +507,33 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     }
 
     loadMoreLockRef.current = true
+    const ownerAtStart = feedPreferenceOwnerId
+    const requestGeneration = ++loadMoreGenerationRef.current
     try {
       setIsLoadingMore(true)
       // The provider supplies the last cursor issued by the canonical API.
       // Do not derive a cursor from merged UI state: that state may contain
       // optimistic, offline-only or locally reconciled posts.
       const page = await refreshFeed({ append: true, limit: 20 })
+      const activeOwner = String(IdentityService.getCurrentUserId() || profile?.id || "").trim() || "anonymous"
+      if (ownerAtStart !== feedPreferenceOwnerId || activeOwner !== ownerAtStart || requestGeneration !== loadMoreGenerationRef.current) return
       if (!page.ok) throw new Error(page.error || "Could not load older posts")
       const fetchedCount = Math.max(0, Number(page.appended) || 0)
-      if (fetchedCount === 0 || !page.nextCursor) {
-        setHasMorePosts(false)
-        return
-      }
-      // One state transition per server page. This prevents a page from being revealed twice.
-      setDisplayedPostsCount((prev) => prev + Math.min(20, fetchedCount))
+      // A short final page can still contain useful posts. Reveal them even when
+      // the server correctly returns no next cursor.
+      if (fetchedCount > 0) setDisplayedPostsCount((prev) => prev + fetchedCount)
+      setHasMorePosts(Boolean(page.nextCursor))
     } catch (error) {
       const err = error instanceof Error ? error : new Error("Failed to load more posts")
       console.error("[Load More Error]", err)
       addToast("Failed to load more posts. Please try again.", "error")
     } finally {
-      loadMoreLockRef.current = false
-      setIsLoadingMore(false)
+      if (requestGeneration === loadMoreGenerationRef.current) {
+        loadMoreLockRef.current = false
+        setIsLoadingMore(false)
+      }
     }
-  }, [addToast, displayedPostsCount, hasMorePosts, isLoadingMore, rankedPosts.length, refreshFeed])
+  }, [addToast, displayedPostsCount, feedPreferenceOwnerId, hasMorePosts, isLoadingMore, profile?.id, rankedPosts.length, refreshFeed])
 
 
   useEffect(() => {
@@ -550,6 +662,18 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     }
   }, [])
 
+  // Keep the UI's Load more state aligned with the server-issued cursor for
+  // every replacement refresh (mount, focus, manual refresh and recovery poll).
+  const refreshFeedAndSync = useCallback(async () => {
+    const ownerAtStart = feedPreferenceOwnerId
+    const result = await refreshFeed()
+    const activeOwner = String(IdentityService.getCurrentUserId() || profile?.id || "").trim() || "anonymous"
+    if (ownerAtStart === feedPreferenceOwnerId && activeOwner === ownerAtStart) {
+      setHasMorePosts(Boolean(result.ok && result.nextCursor))
+    }
+    return result
+  }, [feedPreferenceOwnerId, profile?.id, refreshFeed])
+
   // Always hydrate the canonical server feed on first mount. A focus event is not
   // guaranteed to fire after this component subscribes (especially in Pi Browser),
   // which previously left an empty local array looking like a genuine empty feed.
@@ -557,11 +681,11 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     let cancelled = false
     void (async () => {
       try {
-        let result = await refreshFeed()
+        let result = await refreshFeedAndSync()
         if (!cancelled && !result.ok && result.error === "FEED_REQUEST_SUPERSEDED") {
           // Focus/visibility revalidation can race the mount request; retry once
           // instead of declaring initial hydration complete on a cancelled request.
-          result = await refreshFeed()
+          result = await refreshFeedAndSync()
         }
         if (cancelled) return
         if (!result.ok && result.error !== "FEED_REQUEST_SUPERSEDED") {
@@ -576,11 +700,11 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
       }
     })()
     return () => { cancelled = true }
-  }, [refreshFeed, feedPreferenceOwnerId])
+  }, [refreshFeedAndSync, feedPreferenceOwnerId])
 
   useSectionRefresh("feed", async () => {
     if (typeof document !== "undefined" && document.visibilityState === "hidden") return
-    await refreshFeed?.()
+    await refreshFeedAndSync()
   }, {
     minIntervalMs: 12_000,
     events: ["ghc:post-published", "ghc:post-engagement", "ghc:feed-invalidate", "ghc:feed-soft-revalidate"],
@@ -615,19 +739,20 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   // Low-frequency recovery poll when the tab is visible.
   useEffect(() => {
     const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible" && (typeof navigator === "undefined" || navigator.onLine !== false)) void refreshFeed?.()
+      if (document.visibilityState === "visible" && (typeof navigator === "undefined" || navigator.onLine !== false)) void refreshFeedAndSync()
     }, 45_000)
     return () => window.clearInterval(timer)
-  }, [refreshFeed])
+  }, [refreshFeedAndSync])
 
   const handleRefresh = async () => {
+    const ownerAtStart = feedPreferenceOwnerId
     try {
-      emitSectionRefresh("feed", { reason: "manual" }, { minIntervalMs: 0 })
       setIsRefreshing(true)
       setFeedStatusMsg("Refreshing feed…")
       setFeedError(null)
-      const result = await refreshFeed()
-      if (result.ok) setHasMorePosts(true)
+      const result = await refreshFeedAndSync()
+      const activeOwner = String(IdentityService.getCurrentUserId() || profile?.id || "").trim() || "anonymous"
+      if (ownerAtStart !== feedPreferenceOwnerId || activeOwner !== ownerAtStart) return
       if (!result.ok) {
         const err = new Error(result.error || "Failed to refresh feed")
         setFeedError(err)
@@ -676,14 +801,10 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
 
   const handleReact = useCallback(
     async (postId: string, reaction: string) => {
-      try {
-        await reactToPost(postId, reaction)
-      } catch (error) {
-        console.error("[Reaction Error]", error)
-        addToast("Could not update reaction. Try again.", "error")
-      }
+      const succeeded = await reactToPost(postId, reaction)
+      return succeeded
     },
-    [reactToPost, addToast]
+    [reactToPost]
   )
 
 
@@ -695,19 +816,22 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     try {
       if (isBookmarked) {
         setBookmarkedPostIds((prev) => prev.filter((id) => id !== postId))
-        if (unsavePost) await unsavePost(postId)
+        const removed = unsavePost ? await unsavePost(postId) : false
+        if (!removed) setBookmarkedPostIds(previous)
       } else {
         setBookmarkedPostIds((prev) => [...prev, postId])
-        setSaveCollectionPostId(postId)
-        if (savePost) {
-          await savePost(postId)
-          if (shouldSendAttention(postId, "save")) void socialRecordAttention(postId, "save")
-          try {
-            window.dispatchEvent(
-              new CustomEvent("ghc:post-engagement", { detail: { postId, kind: "save" } }),
-            )
-          } catch { /* */ }
+        const saved = savePost ? await savePost(postId) : false
+        if (!saved) {
+          setBookmarkedPostIds(previous)
+          return
         }
+        setSaveCollectionPostId(postId)
+        if (shouldSendAttention(postId, "save")) void socialRecordAttention(postId, "save")
+        try {
+          window.dispatchEvent(
+            new CustomEvent("ghc:post-engagement", { detail: { postId, kind: "save" } }),
+          )
+        } catch { /* */ }
       }
     } catch (error) {
       setBookmarkedPostIds(previous)
@@ -723,7 +847,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
     const id = String(postId || "").trim()
     if (!id) return
     setNotInterestedIds((prev) => prev.includes(id) ? prev : [...prev, id].slice(-200))
-    addToast("This post was removed from your feed. Your preference is saved on this device.", "info")
+    addToast("We'll show you fewer posts like this. Your feed preferences are syncing to your account.", "info")
   }, [addToast])
 
   const openComments = useCallback((postId: string) => {
@@ -842,8 +966,8 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
       const contentTags = extractHashtags(String(post.content || ""))
       const suppliedTags = Array.isArray(post.hashtags) ? post.hashtags : []
       for (const raw of [...contentTags, ...suppliedTags]) {
-        const tag = String(raw || "").replace(/^#/, "").trim().toLowerCase()
-        if (!/^[\p{L}\p{N}_]{2,32}$/u.test(tag)) continue
+        const tag = String(raw || "").replace(/^#/, "").normalize("NFKC").trim().toLocaleLowerCase()
+        if (!/^[\p{L}\p{N}][\p{L}\p{N}\p{M}_]{1,31}$/u.test(tag)) continue
         counts.set(tag, (counts.get(tag) || 0) + 1)
       }
     }
@@ -944,8 +1068,8 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
           {showFeedControls ? (
             <section className="mt-2 rounded-2xl border border-border/70 bg-card p-3 shadow-sm" aria-label={t("feedPersonalization")}>
               <div className="flex items-start justify-between gap-3">
-                <div><p className="text-xs font-bold text-foreground">{t("yourFeedPriorities")}</p><p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">Tune relevance without changing who you follow. These preferences stay on this device.</p></div>
-                <button type="button" onClick={() => { setLocationLane("worldwide"); setIntentionBias("balanced"); setFocusMode(false) }} className="text-[10px] font-bold text-emerald-700">{t("reset")}</button>
+                <div className="min-w-0"><p className="text-xs font-bold text-foreground">{t("yourFeedPriorities")}</p><p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">Tune relevance without changing who you follow. Hidden posts, topic mutes and ranking preferences are saved to your account when sync is available.</p><p className="mt-1 text-[10px] tabular-nums text-muted-foreground">{hiddenPostIds.length} hidden · {notInterestedIds.length} less relevant · {mutedTopics.length} muted topics · {preferenceSyncStatus === "synced" ? "Synced across devices" : preferenceSyncStatus === "loading" ? "Syncing preferences…" : "Saved on this device only"}</p></div>
+                <button type="button" onClick={() => { setActiveFilter("for-you"); setLocationLane("worldwide"); setIntentionBias("balanced"); setFocusMode(false); setHiddenPostIds([]); setNotInterestedIds([]); setMutedTopics([]); setSelectedTopic(null); setDisplayedPostsCount(getAdaptiveFeedPageSize()); containerRef.current?.scrollTo({ top: 0, behavior: "smooth" }) }} className="min-h-9 shrink-0 rounded-full border border-border/70 px-3 text-[10px] font-bold text-emerald-700 transition hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">Reset all</button>
               </div>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <div><p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{t("locationRelevance")}</p><div className="flex flex-wrap gap-1">{([ ["city",t("nearby")], ["country",t("country")], ["worldwide",t("worldwide")] ] as const).map(([id,label]) => <button key={id} type="button" onClick={() => setLocationLane(id)} className={`rounded-full px-2.5 py-1.5 text-[11px] font-bold ${locationLane === id ? "bg-emerald-700 text-white" : "bg-muted text-muted-foreground"}`}>{label}</button>)}</div></div>
@@ -1317,12 +1441,9 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
       <SaveToCollectionSheet
         open={Boolean(saveCollectionPostId)}
         postId={saveCollectionPostId}
+        scopeId={feedPreferenceOwnerId}
         onClose={() => setSaveCollectionPostId(null)}
-        onSaved={() => {
-          if (saveCollectionPostId) {
-            setBookmarkedPostIds((current) => current.includes(saveCollectionPostId) ? current : [...current, saveCollectionPostId])
-          }
-        }}
+        onSaved={(collectionName) => addToast(`Added to ${collectionName}`, "success")}
       />
       <PostInsightsSheet post={insightsPost} open={Boolean(insightsPost)} onClose={() => setInsightsPost(null)} />
       {sharePostId && (posts.find((post) => post.id === sharePostId) || rankedPosts.find((item) => item.post.id === sharePostId)?.post) ? (

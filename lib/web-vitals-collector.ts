@@ -6,8 +6,8 @@
  * query string, cookie, or free text is collected. Never use for financial or authorization decisions.
  */
 import {
-  classifyConnection, classifyDevice, computeCls, computeInp, parseSampleRate, shouldSample, surfaceFromPath,
-  type RumSample,
+  classifyConnection, classifyDevice, computeInp, createClsAccumulator, parseSampleRate, readClsAccumulator,
+  recordLayoutShift, retainSlowInteraction, shouldSample, surfaceFromPath, type RumSample,
 } from "./performance-budgets"
 
 let started = false
@@ -21,7 +21,7 @@ export function startWebVitalsCollector(): void {
   const supported = (PerformanceObserver.supportedEntryTypes ?? []) as readonly string[]
   type SurfaceMetrics = {
     lcp: number | null
-    shifts: { startTime: number; value: number; hadRecentInput?: boolean }[]
+    cls: ReturnType<typeof createClsAccumulator>
     interactions: Map<number, number>
   }
   const metrics = new Map<ReturnType<typeof surfaceFromPath>, SurfaceMetrics>()
@@ -40,7 +40,7 @@ export function startWebVitalsCollector(): void {
   const bucket = (surface: ReturnType<typeof surfaceFromPath>): SurfaceMetrics => {
     const existing = metrics.get(surface)
     if (existing) return existing
-    const created: SurfaceMetrics = { lcp: null, shifts: [], interactions: new Map() }
+    const created: SurfaceMetrics = { lcp: null, cls: createClsAccumulator(), interactions: new Map() }
     metrics.set(surface, created)
     return created
   }
@@ -60,7 +60,8 @@ export function startWebVitalsCollector(): void {
     if (last) bucket(surfaceForTarget(last.element)).lcp = last.startTime
   })
   observe("layout-shift", (entries) => {
-    for (const entry of entries as (PerformanceEntry & {
+    const orderedEntries = [...entries].sort((a, b) => a.startTime - b.startTime)
+    for (const entry of orderedEntries as (PerformanceEntry & {
       value: number
       hadRecentInput?: boolean
       sources?: { node?: Node | null }[]
@@ -69,19 +70,14 @@ export function startWebVitalsCollector(): void {
       const target = sourceNode instanceof Element ? sourceNode : sourceNode?.parentElement
       const surface = surfaceForTarget(target)
       const targetBucket = bucket(surface)
-      if (targetBucket.shifts.length < 500) {
-        targetBucket.shifts.push({ startTime: entry.startTime, value: entry.value, hadRecentInput: entry.hadRecentInput })
-      }
+      recordLayoutShift(targetBucket.cls, { startTime: entry.startTime, value: entry.value, hadRecentInput: entry.hadRecentInput })
     }
   })
   observe("event", (entries) => {
     for (const entry of entries as (PerformanceEntry & { interactionId?: number; duration: number; target?: EventTarget | null })[]) {
       if (!entry.interactionId) continue
       const targetBucket = bucket(surfaceForTarget(entry.target))
-      const previous = targetBucket.interactions.get(entry.interactionId) ?? 0
-      if (entry.duration > previous && (targetBucket.interactions.size < 200 || targetBucket.interactions.has(entry.interactionId))) {
-        targetBucket.interactions.set(entry.interactionId, entry.duration)
-      }
+      retainSlowInteraction(targetBucket.interactions, entry.interactionId, entry.duration, 200)
     }
   }, { durationThreshold: 40 })
 
@@ -105,7 +101,9 @@ export function startWebVitalsCollector(): void {
       if (inp !== null) samples.push({ name: "INP", value: inp, ...base })
       // A zero CLS is meaningful only for a surface with an observed layout-shift
       // stream; do not fabricate a zero for tabs the visitor never opened.
-      if (values.shifts.length > 0) samples.push({ name: "CLS", value: computeCls(values.shifts), ...base })
+      if (values.cls.maxValue > 0 || values.cls.currentValue > 0) {
+        samples.push({ name: "CLS", value: readClsAccumulator(values.cls), ...base })
+      }
     }
     try {
       navigator.sendBeacon?.("/api/analytics/vitals", new Blob([JSON.stringify({ samples })], { type: "application/json" }))

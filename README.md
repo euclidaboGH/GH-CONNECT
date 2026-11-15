@@ -1,14 +1,18 @@
 # GreenHaven
 
-**Current source version:** `0.338.67`
+**Current source version:** `0.338.73`
 
 Production status: **NOT APPROVED** — supported Node 24.15.0 dependency-backed typecheck/lint/build, browser/device, live database/provider and operator acceptance remain outstanding.
 
 This repository is the canonical GreenHaven source tree. See `docs/SOURCE_OF_TRUTH.md` and `docs/CURRENT_BUILD_CONTEXT.md` before implementation or release work.
 
-## Latest implementation — Run #304 / 0.338.67
+## Latest implementation — Run #310 / 0.338.73
 
-Run #304 responds to the CI failure caused by the missing safe `.env.example` template: the template is restored with blank private credentials and the release-hygiene gate now rejects populated secrets. It also deepens the responsive UI work: filter trays are compact and internally height-bounded, connection-request search remains visible while facets are closed, and Discovery suggestions overlay rather than push the result list down. Authenticated responsive e2e review now toggles and measures filter trays across six viewport widths. Twenty upgrades are documented in `docs/UPGRADE-WORKLOG-0.338.67.md`. No migration, financial mutation, dependency bump, GitHub push or deployment was performed. Node 24.15.0 typecheck/lint/build and device acceptance remain required. Production remains NOT APPROVED.
+Phase 6 performance/accessibility hardening overlaps independent canonical feed visibility, preference and mute reads, and overlaps bounded public-profile hydration for post and comment authors. Privacy checks remain fail-closed, the public profile field allowlist and hydration bounds are unchanged, and feed cursors still advance from raw canonical pages. Added a 23/23 Phase 6 source gate and Playwright acceptance coverage for reduced motion, responsive viewport overflow, keyboard focus traversal and offline/reconnect announcements. Existing Phase 5 durable account-owned feed preferences and Phase 4 community completion remain included. RUM CLS now uses a constant-memory session-window accumulator; bounded INP retention keeps later slow interactions instead of only the first 200 interactions. Phase 6 is not accepted until supported Node 24.15.0 install/typecheck/lint/build, Playwright and authenticated cross-account/device/network/database/Preview evidence pass. No new migration, Supabase change, financial state change, GitHub push or deployment was performed. Production remains NOT APPROVED.
+
+## Previous implementation — Run #306 / 0.338.69
+
+Phase 4 community source implementation: archived/sample/legacy posts use the shared read-only post renderer; pinned/New/Hot/Top ordering is deterministic; announcements use a restrained shared design; moderator report resolution is server-first and fail-closed; governance reads/writes use canonical `gh_community_*` tables and role-rechecking RPCs. Phase 4 completion gate 21/21; community pagination 12/12; full static verification 4,009 assertions with zero failures at that release. See `docs/UPGRADE-WORKLOG-0.338.69.md`.
 
 ## Candidate addition — Run #297 (stale-hold release)
 

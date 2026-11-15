@@ -20,7 +20,7 @@ const checks = [
   ['legacy smart push path checks category preference', smart.includes('loadNotificationPreferences()[categoryByType[notification.type]]?.push')],
   ['legacy in-memory notification and browser-alert queues reset on account switch', smart.includes('ensureSmartNotificationOwner') && smart.includes('smartNotifications.browserAlertQueue = []') && smart.includes('ownerUserId')],
   ['notification preferences merge nested channel defaults safely', domain.includes('typeof accountSaved?.inApp === "boolean"') && domain.includes('typeof deviceSaved?.push === "boolean"')],
-  ['settings toggles update domain notification preferences', settings.includes('saveNotificationPreferences(next, notificationIdentityId)') && settings.includes('IdentityService.subscribe') && settings.includes('for (const category of t.categories)')],
+  ['settings toggles update domain notification preferences', settings.includes('saveNotificationPreferences(next, owner)') && settings.includes('const owner = notificationIdentityId') && settings.includes('IdentityService.subscribe') && settings.includes('for (const category of t.categories)')],
   ['optional profile and product updates default off', domain.includes('prefs.profile_views = { inApp: false, push: false }') && domain.includes('prefs.product_updates = { inApp: false, push: false }')],
   ['mark-all success toast follows server responses', bell.indexOf('const failed = results.some') < bell.indexOf('All notifications marked read')],
   ['notification deletion copy is honest about device scope', bell.includes('Notification hidden on this device') && notificationActions.includes('label: "Dismiss"') && notificationActions.includes('Hide this notification on this device')],

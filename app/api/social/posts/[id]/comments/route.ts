@@ -258,7 +258,7 @@ export async function POST(
         const handle = String(row.username || "").toLowerCase()
         if (!uid || uid === auth.userId || !handles.includes(handle)) return
         await emitSocialNotification({ recipientUserId: uid, actorUserId: auth.userId, type: "mention", entityType: "comment", entityId: comment.id,
-          title: "You were mentioned", body: "Someone mentioned you in a comment", dedupeKey: `mention:${comment.id}:${uid}`, metadata: { postId, commentId: comment.id, handle } })
+          title: "You were mentioned", body: "Someone mentioned you in a comment", dedupeKey: `mention:${comment.id}:${uid}`, metadata: { postId, commentId: comment.id, parentId: comment.parentId, threadRootId: participants.threadRootId, deepLink, handle } })
       }))
     } catch { /* mentions are non-critical */ }
   })()

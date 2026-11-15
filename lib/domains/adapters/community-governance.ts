@@ -28,7 +28,6 @@ import {
 import {
   sessionAppendLog,
   sessionListLogs,
-  sessionAppendReport,
   sessionListReports,
   sessionUpdateReport,
   getGovernanceDurability,
@@ -153,38 +152,6 @@ export function listModerationLog(communityId: string): CommunityModerationLogEn
   return sessionListLogs(communityId)
 }
 
-export function createCommunityReport(input: {
-  communityId: string
-  targetType: CommunityReportTarget
-  targetId: string
-  reporterId: string
-  reason: CommunityReportReason
-  note?: string
-}): CommunityReportRecord {
-  const rec: CommunityReportRecord = {
-    id: uid("crep"),
-    communityId: input.communityId,
-    targetType: input.targetType,
-    targetId: input.targetId,
-    reporterId: input.reporterId,
-    reason: input.reason,
-    note: input.note,
-    status: "open",
-    createdAt: Date.now(),
-  }
-  sessionAppendReport(rec)
-  void tryServerMirror("/api/governance/reports", { report: rec })
-  appendModerationLog({
-    communityId: input.communityId,
-    action: "report",
-    actorId: input.reporterId,
-    targetType: "report",
-    targetId: rec.id,
-    metadata: { targetType: input.targetType, targetId: input.targetId, reason: input.reason },
-  })
-  return rec
-}
-
 export function listCommunityReports(communityId: string): CommunityReportRecord[] {
   return sessionListReports(communityId)
 }
@@ -240,27 +207,32 @@ export function buildHealthSnapshot(input: {
 }
 
 
-export function resolveCommunityReport(
+export async function resolveCommunityReport(
   communityId: string,
   reportId: string,
   status: "resolved" | "dismissed" | "reviewing",
-  actorId: string
-): CommunityReportRecord | null {
-  const updated = sessionUpdateReport(communityId, reportId, { status })
-  if (!updated) return null
-  void tryServerMirror("/api/governance/reports", {
-    report: updated,
-    action: "resolve",
-  })
-  appendModerationLog({
-    communityId,
-    action: "report",
-    actorId,
-    targetType: "report",
-    targetId: reportId,
-    metadata: { status, durability: getGovernanceDurability() },
-  })
-  return updated
+  _actorId?: string,
+): Promise<boolean> {
+  // Moderation is a durable, server-authorized action. Never optimistically
+  // mark a report resolved in session storage before the server confirms it.
+  let response: Response
+  try {
+    response = await fetch("/api/governance/reports", {
+      method: "POST",
+      credentials: "include",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ action: "resolve", report: { communityId, id: reportId, status, resolutionNote: "" } }),
+    })
+  } catch {
+    throw new Error("MODERATION_PERSISTENCE_UNAVAILABLE")
+  }
+  const payload = await response.json().catch(() => null) as { ok?: boolean; durable?: boolean; error?: string } | null
+  if (!response.ok || !payload?.ok || payload.durable !== true) {
+    throw new Error(payload?.error || "MODERATION_PERSISTENCE_UNAVAILABLE")
+  }
+  sessionUpdateReport(communityId, reportId, { status })
+  return true
 }
 
 export function buildAdminHealthAnalytics(input: {

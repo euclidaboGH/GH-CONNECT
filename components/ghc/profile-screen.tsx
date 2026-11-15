@@ -36,6 +36,7 @@ import { LazyImage } from "./lazy-image"
 import type { Post, Profile } from "@/lib/ghc-types"
 import { isOwnProfilePost } from "@/lib/ownership"
 import { IdentityService } from "@/lib/identity/identity-service"
+import { normalizeEngagementMetrics } from "@/lib/engagement/post-engagement"
 import {
   formatGreenHavenIdDisplay,
   getOrCreateGreenHavenId,
@@ -131,6 +132,43 @@ export function ProfileScreen({
   const posts = meId ? (timelineOwnerId === meId ? timelinePosts ?? fallbackPosts : fallbackPosts) : []
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [authoritativeFollowCounts, setAuthoritativeFollowCounts] = useState<{ followers: number; following: number } | null>(null)
+
+  // The profile timeline is fetched independently from Home. Reconcile only
+  // authoritative engagement events so Feed/Profile counters do not drift.
+  useEffect(() => {
+    const onEngagement = (event: Event) => {
+      const detail = (event as CustomEvent<{
+        postId?: string; likeCount?: number; reactionCounts?: Record<string, number>;
+        viewerReactions?: string[]; shareCount?: number; commentCount?: number; savedByMe?: boolean;
+      }>).detail
+      const postId = String(detail?.postId || "").trim()
+      if (!postId) return
+      setTimelinePosts((current) => {
+        if (!current) return current
+        return current.map((post) => {
+          if (post.id !== postId) return post
+          const next: Post = { ...post }
+          if (typeof detail.likeCount === "number" && Number.isFinite(detail.likeCount)) {
+            next.likes = Math.max(0, detail.likeCount)
+          }
+          if (detail.reactionCounts && typeof detail.reactionCounts === "object") next.reactionCounts = detail.reactionCounts
+          if (Array.isArray(detail.viewerReactions)) next.viewerReactions = detail.viewerReactions
+          if (typeof detail.shareCount === "number" && Number.isFinite(detail.shareCount)) next.shares = Math.max(0, detail.shareCount)
+          if (typeof detail.savedByMe === "boolean") next.savedByMe = detail.savedByMe
+          if (typeof detail.likeCount === "number" || typeof detail.shareCount === "number" || typeof detail.commentCount === "number") {
+            next.engagement = normalizeEngagementMetrics(post.engagement, {
+              ...(typeof detail.likeCount === "number" && Number.isFinite(detail.likeCount) ? { likes: Math.max(0, detail.likeCount) } : {}),
+              ...(typeof detail.shareCount === "number" && Number.isFinite(detail.shareCount) ? { shares: Math.max(0, detail.shareCount) } : {}),
+              ...(typeof detail.commentCount === "number" && Number.isFinite(detail.commentCount) ? { comments: Math.max(0, detail.commentCount) } : {}),
+            })
+          }
+          return next
+        })
+      })
+    }
+    window.addEventListener("ghc:post-engagement", onEngagement as EventListener)
+    return () => window.removeEventListener("ghc:post-engagement", onEngagement as EventListener)
+  }, [])
 
   const [profileSoftTick, setProfileSoftTick] = useState(0)
   useSectionRefresh("profile", () => {

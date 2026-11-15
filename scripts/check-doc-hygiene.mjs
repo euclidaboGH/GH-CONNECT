@@ -10,6 +10,14 @@ const required = new Set([
   'docs/RUN300-20-POINT-RELEASE-CI-HARDENING.md',
   'docs/RUN301-20-POINT-RELEASE-GATE-HARDENING.md',
   'docs/RUN302-20-POINT-PI-WITHDRAWAL-HARDENING.md',
+  'docs/PHASE2-CLOSEOUT-PHASE3-CREATOR-MEDIA-START-2026-11-14.md',
+  'docs/PHASE2-SOCIAL-ENGAGEMENT-CONTINUATION-2026-11-14.md',
+  'docs/PHASE3-CREATOR-MEDIA-URL-AND-OFFLINE-PUBLISH-HARDENING-2026-11-14.md',
+  'docs/PHASE3-PHASE4-SOCIAL-CREATOR-CLOSEOUT-2026-11-14.md',
+  'docs/UPGRADE-WORKLOG-0.338.69.md',
+  'docs/UPGRADE-WORKLOG-0.338.70.md',
+  'docs/UPGRADE-WORKLOG-0.338.71.md',
+  'docs/UPGRADE-WORKLOG-0.338.68.md',
   'docs/UPGRADE-WORKLOG-0.338.67.md',
   'docs/UPGRADE-WORKLOG-0.338.66.md',
   'docs/UPGRADE-WORKLOG-0.338.64.md',
@@ -319,7 +327,7 @@ const walk=(dir)=>{
         // Non-required docs must be explicitly current; this prevents silent historical-document growth.
         // Allow: Pass48 baseline date, intermediate worklogs, and active Nov-2026 engineering notes.
         const currentWorklog = rel === `docs/UPGRADE-WORKLOG-${pkg.version}.md`
-        const datedCurrent = /2026-10-31|2026-11-0[1-5]|2026-11-08|2026-11-09|2026-11-10|2026-11-11|0\.222\.0|0\.26[5-9]|0\.27[0-5]|0\.312\.0|0\.313\.\d+/.test(s) || /0\.27[0-5]\.\d/.test(s)
+        const datedCurrent = /2026-10-31|2026-11-0[1-5]|2026-11-08|2026-11-09|2026-11-10|2026-11-11|2026-11-14|0\.222\.0|0\.26[5-9]|0\.27[0-5]|0\.312\.0|0\.313\.\d+/.test(s) || /0\.27[0-5]\.\d/.test(s)
         if(!currentWorklog && !datedCurrent) failures.push(`unclassified documentation: ${rel}`)
       }
     }

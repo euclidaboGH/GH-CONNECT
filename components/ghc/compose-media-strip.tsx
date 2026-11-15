@@ -103,7 +103,7 @@ export function ComposeMediaStrip({
               Remove
             </button>
           </div>
-          <DurableVideo src={video} controls playsInline muted={false} preload="metadata" className="max-h-56 w-full rounded-xl bg-black object-contain" />
+          <DurableVideo src={video} controls playsInline muted={false} preload="none" className="max-h-56 w-full rounded-xl bg-black object-contain" />
         </div>
       ) : null}
       <MediaLightbox
@@ -125,8 +125,13 @@ export function ComposeUploadProgress({ message }: { message: string | null }) {
         <p className="text-[12px] font-semibold text-emerald-900 dark:text-emerald-100">{message}</p>
         <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-700/80">Uploading</span>
       </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-emerald-200/70 dark:bg-emerald-900">
-        <div className="h-full w-2/3 animate-pulse rounded-full bg-emerald-600" />
+      <div
+        className="h-1.5 overflow-hidden rounded-full bg-emerald-200/70 dark:bg-emerald-900"
+        role="progressbar"
+        aria-label="Media upload progress"
+        aria-valuetext={message}
+      >
+        <div className="gh-compose-upload-indeterminate h-full w-1/3 rounded-full bg-emerald-600" />
       </div>
     </div>
   )

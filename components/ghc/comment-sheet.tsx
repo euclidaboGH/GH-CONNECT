@@ -323,7 +323,8 @@ useEffect(() => {
     submittingRef.current = true
     setBusy(true)
     try {
-      await addComment(post.id, value, replyToId || undefined, media.length ? media : undefined)
+      const saved = await addComment(post.id, value, replyToId || undefined, media.length ? media : undefined)
+      if (saved === false) return
       setPendingMedia([])
       try {
         await loadPostComments?.(post.id)

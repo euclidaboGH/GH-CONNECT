@@ -2,13 +2,13 @@ GH-CONNECT VERIFIED SOURCE MANIFEST
 ==================================
 inventory_status=OK
 duplicate_version_prefixes=
-project_version=0.338.67
+project_version=0.338.73
 manifest_format_version=1
-canonical_migrations=222
+canonical_migrations=223
 classification_required=119
 classification_requires_approval=1
 classification_proposal=2
-classification_review_required=100
+classification_review_required=101
 source=supabase/migrations/*.sql
 
 IMPORTANT: This manifest inventories repository files only. It does NOT prove migrations are applied to any Supabase project.
@@ -244,3 +244,4 @@ ALL_MIGRATIONS_ORDERED_FOR_REVIEW:
 [REVIEW_REQUIRED] size=6627 path=supabase/migrations/20261111120001_pi_earnings_release_stale_incomplete.sql
 [REVIEW_REQUIRED] size=3832 path=supabase/migrations/20261111131500_run285_durable_message_reactions.sql
 [REVIEW_REQUIRED] size=7793 path=supabase/migrations/20261112100001_financial_stale_hold_reaper.sql
+[REVIEW_REQUIRED] size=6600 path=supabase/migrations/20261114100001_gh_feed_preferences_durable.sql

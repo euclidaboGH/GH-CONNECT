@@ -3780,3 +3780,66 @@ header img[alt="GreenHaven"],
 .gh-world-community > :not(header),
 .gh-world-discovery > :not(header),
 .gh-world-inbox > :not(header) { min-height: 0; }
+
+/* PHASE 1 — canonical post-card finish. This final, scoped layer intentionally
+   supersedes legacy post-card declarations while keeping their unrelated rules
+   intact. Remove older duplicates only after visual regression review. */
+:root {
+  --gh-post-radius: 1rem;
+  --gh-post-border: color-mix(in srgb, var(--border) 78%, transparent);
+  --gh-post-shadow: 0 1px 2px rgba(15, 23, 42, 0.035), 0 6px 20px rgba(15, 23, 42, 0.035);
+  --gh-post-content-line-height: 1.62;
+}
+.gh-post-card[data-post-surface] {
+  border: 1px solid var(--gh-post-border) !important;
+  border-radius: var(--gh-post-radius) !important;
+  background: var(--card) !important;
+  box-shadow: var(--gh-post-shadow) !important;
+  color: var(--card-foreground);
+  isolation: isolate;
+  overflow: clip;
+}
+.gh-post-card[data-post-surface] :where(p) {
+  line-height: var(--gh-post-content-line-height);
+}
+.gh-post-card[data-post-surface] :where(img, video) {
+  border-radius: inherit;
+}
+.gh-quoted-post {
+  margin: 0.25rem 0.875rem 0.875rem;
+  overflow: hidden;
+  border: 1px solid var(--gh-post-border);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--card) 94%, var(--muted));
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+.gh-quoted-post:has(button:hover) {
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--gh-post-border));
+}
+.gh-quoted-post button { border-radius: inherit; }
+.dark .gh-post-card[data-post-surface] {
+  --gh-post-border: color-mix(in srgb, var(--border) 88%, transparent);
+  --gh-post-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+@media (max-width: 639px) {
+  .gh-post-card[data-post-surface] {
+    border-radius: 0.875rem !important;
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--border) 55%, transparent) !important;
+  }
+  .gh-quoted-post { margin-inline: 0.75rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gh-quoted-post { transition: none; }
+}
+
+
+/* Phase 3 creator media: indeterminate upload feedback never implies a fake percentage. */
+@keyframes gh-upload-indeterminate {
+  0% { transform: translateX(-110%); }
+  50% { transform: translateX(110%); }
+  100% { transform: translateX(310%); }
+}
+.gh-compose-upload-indeterminate { animation: gh-upload-indeterminate 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .gh-compose-upload-indeterminate { animation: none; transform: translateX(0); width: 100%; }
+}

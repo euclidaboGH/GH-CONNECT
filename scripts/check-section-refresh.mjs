@@ -24,7 +24,7 @@ test('ListingCard does not attach visibility listeners', (() => {
 })())
 test('MarketplaceScreen uses useSectionRefresh', /useSectionRefresh\(\s*"marketplace"/.test(market))
 test('Communities reloads on soft refresh tick', /directoryTick/.test(communities) && /useSectionRefresh\(\s*"communities"/.test(communities))
-test('Feed manual refresh emits section event', /emitSectionRefresh\("feed"/.test(feed))
+test('Feed manual refresh uses one cursor-synchronized request without dispatching a duplicate section event', /const result = await refreshFeedAndSync\(\)/.test(feed) && !/emitSectionRefresh\("feed", \{ reason: "manual"/.test(feed))
 test('Soft refresh min interval defaults are bounded', /12_000/.test(core) || /minIntervalMs/.test(core))
 test('Async refresh handlers remain in-flight until their promise settles', /Promise\.resolve\(result\)\.finally/.test(core))
 test('Feed foreground refresh uses the shared coordinator', /useSectionRefresh\(\"feed\"/.test(feed) && /window\.addEventListener\(\"focus\", onFocus\)/.test(feed) && /ghc:section-refresh/.test(feed) && !/window\.addEventListener\(\"focus\"[^\n]*refreshFeed/.test(feed))

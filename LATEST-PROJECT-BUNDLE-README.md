@@ -1,41 +1,25 @@
-# GreenHaven / GH-CONNECT — Full Project Bundle
+# GreenHaven — Current Project Bundle
 
-Baseline: **0.338.55 / RUN295**  
-Delivery: **0.338.56 / RUN296 — Onboarding Registration Integrity**  
-Bundle date: **2026-11-12**
+**Current candidate:** `gh-connect@0.338.73` — Run #310, 2026-11-15  
+**Authoritative uploaded baseline:** `GREENHAVEN-0.338.72-PHASE6-PERFORMANCE-ACCESSIBILITY-2026-11-14.zip`  
+**Baseline SHA-256:** `d8271fb74d1440e6397346e5b8e346de538923d3938470eac5f46feb2ec71f3c`
 
-## Run #296 onboarding and profile registration fixes
+## Latest delivery
 
-- Removed the fake age-18 registration default and require a valid date of birth for adult-age calculation.
-- Removed the implicit connection-intent default; users must actively choose their primary mode and at least one connection goal.
-- Required server-confirmed profile persistence before moving through registration steps.
-- Added durable authenticated profile-photo uploads during onboarding.
-- Added server-side required-field validation before Pi identity onboarding completion.
-- Prevented local-development fallback from bypassing an explicit incomplete-profile rejection.
-- Prevented production onboarding decisions from falling back to stale in-memory profile records when durable reads fail.
-- Removed fabricated age/gender/primary-mode defaults from server profile projection.
+- Phase 6 performance hardening runs independent feed visibility, durable preference and mute reads concurrently, and runs bounded post/comment profile hydration batches concurrently without weakening privacy or identity constraints.
+- Phase 6 source gate: 23/23 PASS. CLS tracking now uses constant memory; bounded INP samples preserve later slow interactions.
+- Targeted Core Web Vitals regression tests: 16/16 PASS; privacy-safe RUM contract: 17/17 PASS. Full `npm run verify:static`: 4,072 PASS / 0 FAIL. Playwright coverage added for reduced motion, responsive overflow (320–1440px), keyboard focus and offline/reconnect announcements.
+- Phase 5 durable account-owned feed preferences, Phase 4 community completion and Phase 3 creator-media source closeout remain included.
+- See `docs/UPGRADE-WORKLOG-0.338.73.md` for implementation, evidence and blockers.
 
-See `RUN296-ONBOARDING-REGISTRATION-DELIVERY.md` for details and verification limits.
+## Candidate archive
 
-## Run #297 candidate — stale financial hold release
+`GREENHAVEN-0.338.73-PHASE6-PERFORMANCE-ACCESSIBILITY-2026-11-15.zip`
 
-- `20261112100001_financial_stale_hold_reaper.sql` (REVIEW_REQUIRED, unapplied), cron route, daily cron, `check:run297-stale-hold-reaper`.
-- Releases only never-started Pi reservations and unsettled GHC withdrawal locks older than 24h; provider-uncertain items are reported, not released.
-- See `RUN297-STALE-HOLD-RELEASE-DELIVERY.md`.
+## Required release gates
 
-## Preserved Run #295 baseline
+The working environment has Node 22.16.0, while the project requires Node 24.15.0, and dependencies are not installed here. TypeScript, ESLint, Next.js production build, authenticated browser/device and two-account acceptance remain outstanding.
 
-The six held migrations (#192, #194, #195, #196, #199 and #216) remain unchanged and classified for review. Their PostgreSQL rehearsal and release gates remain outstanding.
+Supabase inspection was read-only. Testnet contains the canonical community RPCs/tables and service-role-only function grants, but its 40-entry migration ledger must be reconciled with 223 repository migration sources. Mainnet migration history returned zero entries and canonical community RPCs were absent; `public.rls_auto_enable()` SECURITY DEFINER execution grants require separate review. No database changes were made.
 
-## Verification
-
-- Run #296 onboarding registration integrity contract: PASS (18 assertions).
-- Package and lockfile JSON validation: PASS; both report version 0.338.56.
-- Full dependency-backed TypeScript, lint, Next.js build and browser E2E are outstanding because this workspace has no installed dependencies and only Node 22.16.0; the project requires Node 24.15.0.
-
-## Safety and release boundary
-
-- No live Supabase/Testnet data or schema was changed.
-- No migrations were applied or pushed.
-- No GitHub push, Vercel deployment or financial transaction was performed.
-- Production remains **NOT APPROVED** pending full CI/build and Pi Browser acceptance.
+No GitHub push, pull request, Vercel deployment or production approval was performed. Production remains **NOT APPROVED**.

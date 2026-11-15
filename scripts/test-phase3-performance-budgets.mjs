@@ -31,6 +31,23 @@ check('CLS window splits on >1s gap and >5s span', () => {
   const long = [0,900,1800,2700,3600,4500,5400].map((t) => ({ startTime: t, value: 0.01 }))
   assert.ok(B.computeCls(long) < 0.07 && B.computeCls(long) >= 0.05)
 })
+check('CLS accumulator stays constant-memory and handles out-of-order input through batch helper', () => {
+  const state = B.createClsAccumulator()
+  for (let i = 0; i < 1200; i++) B.recordLayoutShift(state, { startTime: i * 10, value: 0.001 })
+  assert.ok(state.maxValue > 0)
+  assert.equal(B.readClsAccumulator(state), state.maxValue)
+  assert.equal(B.computeCls([{ startTime: 900, value: 0.1 }, { startTime: 0, value: 0.1 }]), 0.2)
+})
+check('bounded interaction retention replaces fast early samples with slower later interactions', () => {
+  const retained = new Map()
+  for (let i = 1; i <= 200; i++) B.retainSlowInteraction(retained, i, i)
+  B.retainSlowInteraction(retained, 201, 900)
+  assert.equal(retained.size, 200)
+  assert.equal(retained.has(1), false)
+  assert.equal(retained.get(201), 900)
+  B.retainSlowInteraction(retained, 201, 950)
+  assert.equal(retained.get(201), 950)
+})
 check('INP picks worst for few interactions', () => { assert.equal(B.computeInp([40, 180, 90]), 180); assert.equal(B.computeInp([]), null) })
 check('surface mapping ignores query/hash and unknown tabs', () => {
   assert.equal(B.surfaceFromPath('/'), 'home'); assert.equal(B.surfaceFromPath('/privacy?token=abc'), 'legal')

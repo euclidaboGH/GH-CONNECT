@@ -25,7 +25,7 @@ check("hidden post preferences are account scoped", /ghc\.hidden-post-ids\.v2:\$
 check("hidden post preferences are bounded to 200 ids", /hiddenPostIds\.slice\(-200\)/.test(feed))
 check("feed preferences wait for the current account hydration before persisting", /feedPreferencesLoadedFor !== feedPreferenceOwnerId/.test(feed))
 check("feed subscribes to the canonical identity signal before choosing its preference owner", /IdentityService\.subscribe\(\(identity\) => setIdentityOwnerSignal/.test(feed) && /identityOwnerSignal\.received \? identityOwnerSignal\.userId : profile\?\.id/.test(feed))
-check("feed refresh is reissued when the canonical identity owner changes", /\}, \[refreshFeed, feedPreferenceOwnerId\]\)/.test(feed))
+check("feed refresh is reissued when the canonical identity owner changes", /\}, \[refreshFeedAndSync, feedPreferenceOwnerId\]\)/.test(feed))
 check("feed ranking pauses while account preferences are changing", /setFeedBootstrapped\(false\)[\s\S]*setRankedPosts\(\[\]\)/.test(feed))
 check("not-interested preferences are account scoped", /ghc\.not-interested-post-ids:\$\{feedPreferenceOwnerId\}/.test(feed))
 check("not-interested preferences do not persist for anonymous sessions", /!hasFeedPreferenceOwner \|\| notInterestedLoadedFor/.test(feed))

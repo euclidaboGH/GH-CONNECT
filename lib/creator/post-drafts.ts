@@ -5,6 +5,7 @@
 
 import type { PostDraft } from "@/lib/ghc-types"
 import { IdentityService } from "@/lib/identity/identity-service"
+import { isDurableMediaUrl } from "@/lib/media/durable-url"
 
 const KEY_PREFIX = "ghc.post-drafts.v2:"
 const LEGACY_KEY = "ghc.post-drafts.v1"
@@ -31,9 +32,9 @@ function readRaw(): PostDraft[] {
         return {
           id: String(x.id),
           content: typeof x.content === "string" ? x.content : "",
-          images: Array.isArray(x.images) ? x.images.filter((u) => typeof u === "string" && u.length <= 4000 && !u.startsWith("blob:") && !u.startsWith("data:")).slice(0, 10) : [],
-          video: typeof x.video === "string" && x.video.length <= 4000 && !x.video.startsWith("blob:") ? x.video : null,
-          pdf: typeof x.pdf === "string" && x.pdf.length <= 4000 && !x.pdf.startsWith("blob:") ? x.pdf : null,
+          images: Array.isArray(x.images) ? x.images.filter((u) => typeof u === "string" && isDurableMediaUrl(u)).slice(0, 10) : [],
+          video: typeof x.video === "string" && isDurableMediaUrl(x.video) ? x.video : null,
+          pdf: typeof x.pdf === "string" && isDurableMediaUrl(x.pdf) ? x.pdf : null,
           pdfName: typeof x.pdfName === "string" ? x.pdfName.slice(0, 200) : null,
           visibility: ["public", "followers", "mutuals", "private"].includes(String(x.visibility)) ? x.visibility : "public",
           communityId: typeof x.communityId === "string" ? x.communityId.slice(0, 120) : null,
@@ -98,9 +99,9 @@ export function upsertPostDraft(input: {
   const next: PostDraft = {
     id,
     content: String(input.content || "").slice(0, 5000),
-    images: (input.images || existing?.images || []).filter((url) => typeof url === "string" && url.length <= 4000 && !url.startsWith("blob:") && !url.startsWith("data:")).slice(0, 10),
-    video: input.video !== undefined ? (typeof input.video === "string" && input.video.length <= 4000 && !/^(?:blob:|data:)/i.test(input.video) ? input.video : null) : existing?.video ?? null,
-    pdf: input.pdf !== undefined ? (typeof input.pdf === "string" && input.pdf.length <= 4000 && !/^(?:blob:|data:)/i.test(input.pdf) ? input.pdf : null) : existing?.pdf ?? null,
+    images: (input.images || existing?.images || []).filter((url) => typeof url === "string" && isDurableMediaUrl(url)).slice(0, 10),
+    video: input.video !== undefined ? (typeof input.video === "string" && isDurableMediaUrl(input.video) ? input.video : null) : existing?.video ?? null,
+    pdf: input.pdf !== undefined ? (typeof input.pdf === "string" && isDurableMediaUrl(input.pdf) ? input.pdf : null) : existing?.pdf ?? null,
     pdfName: input.pdfName !== undefined ? input.pdfName : existing?.pdfName ?? null,
     visibility: input.visibility || existing?.visibility || "public",
     communityId: input.communityId !== undefined ? input.communityId : existing?.communityId ?? null,

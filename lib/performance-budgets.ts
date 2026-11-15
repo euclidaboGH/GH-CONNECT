@@ -87,16 +87,62 @@ export function classifyConnection(effectiveType: unknown, saveData?: unknown): 
   }
 }
 
-/** Layout-shift entries -> CLS using the session-window definition (<=1 s gap, <=5 s window, max window). */
-export function computeCls(shifts: readonly { startTime: number; value: number; hadRecentInput?: boolean }[]): number {
-  let best = 0, current = 0, windowStart = 0, last = 0
-  for (const s of shifts) {
-    if (s.hadRecentInput || !Number.isFinite(s.value) || s.value < 0) continue
-    if (current > 0 && (s.startTime - last > 1000 || s.startTime - windowStart > 5000)) { best = Math.max(best, current); current = 0 }
-    if (current === 0) windowStart = s.startTime
-    current += s.value; last = s.startTime
+export type ClsAccumulator = { maxValue: number; currentValue: number; windowStart: number; lastTime: number }
+
+/** Constant-memory CLS accumulator for long-lived SPA sessions. */
+export function createClsAccumulator(): ClsAccumulator {
+  return { maxValue: 0, currentValue: 0, windowStart: 0, lastTime: 0 }
+}
+
+/** Add one layout shift using the CLS session-window definition (<=1 s gap, <=5 s span). */
+export function recordLayoutShift(
+  state: ClsAccumulator,
+  shift: { startTime: number; value: number; hadRecentInput?: boolean },
+): void {
+  if (shift.hadRecentInput || !Number.isFinite(shift.startTime) || !Number.isFinite(shift.value) || shift.value < 0) return
+  if (state.currentValue > 0 && (shift.startTime - state.lastTime > 1000 || shift.startTime - state.windowStart > 5000)) {
+    state.maxValue = Math.max(state.maxValue, state.currentValue)
+    state.currentValue = 0
   }
-  return Math.max(best, current)
+  if (state.currentValue === 0) state.windowStart = shift.startTime
+  state.currentValue += shift.value
+  state.lastTime = shift.startTime
+}
+
+export function readClsAccumulator(state: ClsAccumulator): number {
+  return Math.max(state.maxValue, state.currentValue)
+}
+
+/** Layout-shift entries -> CLS; sorts defensively before applying the session-window definition. */
+export function computeCls(shifts: readonly { startTime: number; value: number; hadRecentInput?: boolean }[]): number {
+  const state = createClsAccumulator()
+  for (const shift of [...shifts].sort((a, b) => a.startTime - b.startTime)) recordLayoutShift(state, shift)
+  return readClsAccumulator(state)
+}
+
+/** Keep the slowest bounded set of unique interactions, not merely the first observed set. */
+export function retainSlowInteraction(
+  interactions: Map<number, number>, interactionId: number, duration: number, maxEntries = 200,
+): void {
+  if (!Number.isFinite(interactionId) || interactionId <= 0 || !Number.isFinite(duration) || duration < 0 || maxEntries < 1) return
+  const previous = interactions.get(interactionId)
+  if (previous !== undefined) {
+    if (duration > previous) interactions.set(interactionId, duration)
+    return
+  }
+  if (interactions.size < maxEntries) {
+    interactions.set(interactionId, duration)
+    return
+  }
+  let slowestRetainedId: number | undefined
+  let fastestRetainedDuration = Number.POSITIVE_INFINITY
+  for (const [id, value] of interactions) {
+    if (value < fastestRetainedDuration) { fastestRetainedDuration = value; slowestRetainedId = id }
+  }
+  if (slowestRetainedId !== undefined && duration > fastestRetainedDuration) {
+    interactions.delete(slowestRetainedId)
+    interactions.set(interactionId, duration)
+  }
 }
 
 /** Interaction durations -> INP (worst interaction, or ~p98 once there are 50+ interactions). */
