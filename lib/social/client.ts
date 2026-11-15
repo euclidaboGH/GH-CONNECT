@@ -146,10 +146,11 @@ export async function socialListCommunityPosts(
   if (cursor) { query.set("before", String(cursor.before)); query.set("beforeId", cursor.beforeId) }
   const data = await json<{ posts?: Partial<Post>[]; nextCursor?: { before: number; beforeId: string } | null; error?: string }>(`/api/communities/${encodeURIComponent(id)}/posts?${query.toString()}`)
   // Reassign parameter (no second const binding) so validated nextCursor is exposed without TS duplicate identifier.
+  // Use undefined (not null) so the optional parameter type stays assignable under strictNullChecks.
   cursor = data.nextCursor && Number.isSafeInteger(data.nextCursor.before) && data.nextCursor.before >= 0 && /^[a-zA-Z0-9_-]{1,180}$/.test(data.nextCursor.beforeId)
     ? data.nextCursor
-    : null
-  return { ok: data.ok !== false, durable: Boolean(data.durable), posts: Array.isArray(data.posts) ? data.posts : [], nextCursor: cursor, error: data.error }
+    : undefined
+  return { ok: data.ok !== false, durable: Boolean(data.durable), posts: Array.isArray(data.posts) ? data.posts : [], nextCursor: cursor ?? null, error: data.error }
 }
 
 export async function socialCreatePost(
