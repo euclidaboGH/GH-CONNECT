@@ -1,5 +1,5 @@
-Release: `0.338.77`
-**Current source baseline:** `0.338.77`
+Release: `0.338.78`
+**Current source baseline:** `0.338.78`
 **Production status: NOT APPROVED for production**
 
 Release: `0.338.73`
