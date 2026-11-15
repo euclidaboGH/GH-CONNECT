@@ -62,7 +62,15 @@ export function normalizeEngagementMetrics(
     clicks: number
     avgEngagementTime: number
   }>,
-) {
+): {
+  likes: number
+  comments: number
+  shares: number
+  views: number
+  saves: number
+  clicks: number
+  avgEngagementTime: number
+} {
   return {
     likes: Number(patch?.likes ?? prev?.likes ?? 0),
     comments: Number(patch?.comments ?? prev?.comments ?? 0),

@@ -1,17 +1,17 @@
-Release: `0.338.73`
+Release: `0.338.74`
 **Production status: NOT APPROVED for production**
 
-**Current source baseline:** `0.338.73`
+**Current source baseline:** `0.338.74`
 
 This source-only release record is not production approval. Production approval remains pending supported-runtime build, database migration reconciliation, provider and authenticated browser/device acceptance.
 
 > **LEGACY VERIFICATION FIXTURE — NOT CURRENT PRODUCT AUTHORITY.**
-> Current source baseline reference: `0.338.56` (2026-11-12). The historical release details below remain archived and are not a statement of current release readiness.
+> Current source baseline reference: `0.338.74` (2026-11-12). The historical release details below remain archived and are not a statement of current release readiness.
 > This document is retained only because an executable regression/operator check references it. For current implementation decisions, follow `docs/SOURCE_OF_TRUTH.md` and executable source. Do not resurrect historical behavior from this file.
 
 # Phase 12 — Final integration and release readiness
 
-Release: `0.338.56` source candidate (2026-11-12; legacy verification fixture — historical detail below is not current implementation authority)
+Release: `0.338.74` source candidate (2026-11-12; legacy verification fixture — historical detail below is not current implementation authority)
 
 Current status: **NOT APPROVED for production.** Node 24.15.0 dependency-backed typecheck/lint/build, full browser/device acceptance, Testnet migration-history reconciliation and operator/provider verification remain outstanding.
 
@@ -297,43 +297,43 @@ Account-level in-app preferences are synchronized through authenticated `/api/no
 
 Standards-based Web Push/VAPID is selected as the protocol, with no vendor-specific provider selected. Source adds authenticated/rate-limited subscription list/register/revoke APIs, strict known-browser-push-host validation, endpoint hashing and an explicit client helper that remains disabled until the sender is integrated. `supabase/proposals/20261108_notification_remote_push_proposal.sql` is a proposal outside the migration directory: it defines service-role-only per-device subscription storage, an idempotent per-notification/device outbox, attempt audit, lease/`SKIP LOCKED` claims, bounded exponential backoff with provider Retry-After support, stale-lease failure closure and endpoint expiration/revocation. It has not been applied or run against PostgreSQL. Subscription secrets are encrypted at source and VAPID keypair matching is validated, but no deployment VAPID/encryption keys, vetted `web-push` sender, dispatch worker, provider receipts or offline delivery are configured. Focused contracts pass 22/22 and runtime validation 19/19; the full `npm run verify:static` command passed (exit code 0). Node 22.16.0 is available while Node 24.15.0 is required; dependencies are absent, so dependency-backed typecheck/lint/production build are not certified. Real offline-device, multi-account, browser/mobile, screen-reader, provider and live Testnet/Mainnet acceptance remain open. Production remains NOT APPROVED.
 
-## Current source baseline — 0.338.1 (2026-11-08)
+## Current source baseline — 0.338.74 (2026-11-08)
 
-- Package / lock / APP_RELEASE synchronized at `0.338.1`.
+- Package / lock / APP_RELEASE synchronized at `0.338.74`.
 - Programme Phases 4–10 source gates retained; maintenance gap-fill 20 applied.
 - Production status: **NOT APPROVED** pending operator Testnet evidence and migration application.
 
-## Current source baseline — 0.338.23 (2026-11-10)
+## Current source baseline — 0.338.74 (2026-11-10)
 
-- Package / lock / APP_RELEASE synchronized at `0.338.23`.
+- Package / lock / APP_RELEASE synchronized at `0.338.74`.
 - Production status: **NOT APPROVED**.
 
-## Current source baseline — 0.338.3 (2026-11-08)
+## Current source baseline — 0.338.74 (2026-11-08)
 
-- Package / lock / APP_RELEASE synchronized at `0.338.3`.
+- Package / lock / APP_RELEASE synchronized at `0.338.74`.
 - Production status: **NOT APPROVED**.
 
-## Current source baseline — 0.338.4 (2026-11-08)
+## Current source baseline — 0.338.74 (2026-11-08)
 
-- Package / lock / APP_RELEASE synchronized at `0.338.4`.
+- Package / lock / APP_RELEASE synchronized at `0.338.74`.
 - Production status: **NOT APPROVED**.
 
-## Current source baseline — 0.338.5 (2026-11-08)
+## Current source baseline — 0.338.74 (2026-11-08)
 
-- Package / lock / APP_RELEASE synchronized at `0.338.5`.
+- Package / lock / APP_RELEASE synchronized at `0.338.74`.
 - Production status: **NOT APPROVED**.
 
-## Current source baseline — 0.338.6 (2026-11-08)
+## Current source baseline — 0.338.74 (2026-11-08)
 
-- Package / lock / APP_RELEASE synchronized at `0.338.6`.
+- Package / lock / APP_RELEASE synchronized at `0.338.74`.
 - Production status: **NOT APPROVED**.
 
 
-## Current source baseline — 0.338.9 (2026-11-09)
+## Current source baseline — 0.338.74 (2026-11-09)
 
 The current source adds a slimmer shared header, inert hidden header controls, more spacious responsive Marketplace and Community content, stable active-tab scroll reset, and safer global keyboard shortcuts. The independent UI/navigation contract passes 31/31, and the Marketplace/Community API control audit passes 42/42. No migration, Pi/GHC ledger, payment, payout, inventory or provider authority changed. Node 24.15.0 dependency-backed typecheck/lint/build and browser/device, PostgreSQL/Supabase and Pi/GHC Testnet acceptance remain required. Production remains NOT APPROVED.
 
 
-## Run #241 source maintenance update — 0.338.19 (2026-11-10)
+## Run #241 source maintenance update — 0.338.74 (2026-11-10)
 
-The in-place 0.338.19 derivative repairs the Run #241 logo JSX duplicate prop, feed context `mutedUsers` contract and duplicate design-system layout key. It adds a 20-point regression guardrail for logo loading/accessibility, feed privacy state, layout tokens and feed loading/preferences behavior. These are source-only checks; Node.js 24.15.0 dependency-backed typecheck/lint/build, browser/device, database/provider and operator acceptance remain required. Production remains NOT APPROVED.
+The in-place 0.338.74 derivative repairs the Run #241 logo JSX duplicate prop, feed context `mutedUsers` contract and duplicate design-system layout key. It adds a 20-point regression guardrail for logo loading/accessibility, feed privacy state, layout tokens and feed loading/preferences behavior. These are source-only checks; Node.js 24.15.0 dependency-backed typecheck/lint/build, browser/device, database/provider and operator acceptance remain required. Production remains NOT APPROVED.
