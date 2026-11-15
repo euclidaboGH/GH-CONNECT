@@ -1,6 +1,7 @@
 "use client"
 
 import { broadcastPostEngagement, normalizeEngagementMetrics, POST_ENGAGEMENT_EVENT } from "@/lib/engagement/post-engagement"
+import { isStrictlyOlderFeedCursor } from "@/lib/feed/phase5-feed-primitives"
 import { broadcastPostSync } from "@/lib/social/post-sync"
 import { mapRemoteFeedPosts } from "@/lib/social/map-remote-feed-posts"
 import { reconcileFeedPosts } from "@/lib/social/reconcile-feed-posts"
@@ -69,10 +70,7 @@ import { messageLimiter, postLimiter, spamDetection } from "@/lib/rate-limiter"
 import { analytics } from "@/lib/analytics"
 import { notificationSystem } from "@/lib/notifications"
 import { emitCommunityNotification } from "@/lib/domains/adapters/community-notification"
-import {
-  appendModerationLog,
-  createCommunityReport,
-} from "@/lib/domains/adapters/community-governance"
+import { appendModerationLog } from "@/lib/domains/adapters/community-governance"
 import { offlineSupport } from "@/lib/offline"
 import { offlineQueue, connectionMonitor, withRetry } from "@/lib/network-resilience"
 import { ensureConversation } from "@/lib/messaging/ensure-conversation"
@@ -187,7 +185,7 @@ import {
   type PostShare,
 } from "@/lib/post-comment-system-complete"
 
-interface GHCContextType {
+export interface GHCContextType {
   ready: boolean
   profile: Profile
   settings: Settings
@@ -195,7 +193,7 @@ interface GHCContextType {
   stories: StoryItem[]
   publishStory: (story: StoryItem) => Promise<{ ok: boolean; durable?: boolean; error?: string }>
   /** Canonical durable feed refresh (server when online; preserves local feed on failure) */
-  refreshFeed: (opts?: { before?: number; beforeId?: string; append?: boolean; limit?: number }) => Promise<{ ok: boolean; durable?: boolean; error?: string; appended?: number }>
+  refreshFeed: (opts?: { before?: number; beforeId?: string; append?: boolean; limit?: number }) => Promise<{ ok: boolean; durable?: boolean; error?: string; appended?: number; nextCursor?: { before: number; beforeId: string } | null }>
   /** Opens/creates private chat with story owner via Messaging domain */
   replyToStory: (storyId: string) => Promise<string | null>
   tab: Tab
@@ -222,8 +220,8 @@ interface GHCContextType {
   restoreFromBackup: () => Promise<boolean>
 
   // Profile actions
-  updateProfile: (updates: Partial<Profile>) => Promise<void>
-  completeOnboarding: () => Promise<void>
+  updateProfile: (updates: Partial<Profile>) => Promise<boolean>
+  completeOnboarding: () => Promise<boolean>
   localProfiles: Array<LocalProfileRecord>
   switchLocalProfile: (localId: string) => void
   createLocalProfile: (profile: Partial<Profile>) => void
@@ -237,14 +235,15 @@ interface GHCContextType {
     pdfName: string | null,
     audience?: "public" | "followers" | "mutuals" | "private",
     community?: { id: string; name: string } | null,
+    requestId?: string,
   ) => Promise<boolean>
-  likePost: (postId: string) => Promise<void>
-  reactToPost: (postId: string, reaction?: string) => Promise<void>
+  likePost: (postId: string) => Promise<boolean>
+  reactToPost: (postId: string, reaction?: string) => Promise<boolean>
   deletePost: (postId: string) => Promise<void>
   editPost: (postId: string, newContent: string, media?: { images?: string[]; video?: string | null }) => Promise<void>
   archivePost: (postId: string) => Promise<void>
   unarchivePost: (postId: string) => Promise<void>
-  addComment: (postId: string, text: string, replyToCommentId?: string, mediaAttachments?: Array<{ id?: string; type: "image" | "video" | "file"; url: string; fileName?: string }>) => Promise<void>
+  addComment: (postId: string, text: string, replyToCommentId?: string, mediaAttachments?: Array<{ id?: string; type: "image" | "video" | "file"; url: string; fileName?: string }>) => Promise<boolean>
   loadPostComments: (postId: string, options?: { before?: number; beforeId?: string; append?: boolean }) => Promise<{ ok: boolean; count: number; durable?: boolean; nextCursor?: { before: number; beforeId: string } | null; error?: string }>
   editComment: (postId: string, commentId: string, newText: string) => Promise<void>
   deleteComment: (postId: string, commentId: string) => Promise<void>
@@ -255,8 +254,8 @@ interface GHCContextType {
   createQuoteRepost: (originalPostId: string, quoteText: string) => Promise<void>
   sharePost: (postId: string, platform: "twitter" | "facebook" | "linkedin" | "copy" | "timeline" | "story" | "private" | "group") => Promise<string>
   applyShareResult: (result: any) => void
-  savePost: (postId: string, collection?: string) => Promise<void>
-  unsavePost: (postId: string) => Promise<void>
+  savePost: (postId: string, collection?: string) => Promise<boolean>
+  unsavePost: (postId: string) => Promise<boolean>
   hidePost: (postId: string) => Promise<void>
   markNotInterested: (postId: string) => Promise<void>
   reportPost: (postId: string, reason: string) => Promise<void>
@@ -441,8 +440,11 @@ const GHCMessagingContext = createContext<{
   loadConversationMessages: GHCContextType["loadConversationMessages"]
   markConversationRead: GHCContextType["markConversationRead"]
   pinConversation: GHCContextType["pinConversation"]
+  unpinConversation: GHCContextType["unpinConversation"]
   archiveConversation: GHCContextType["archiveConversation"]
+  unarchiveConversation: GHCContextType["unarchiveConversation"]
   muteConversation: GHCContextType["muteConversation"]
+  unmuteConversation: GHCContextType["unmuteConversation"]
   createGroup: GHCContextType["createGroup"]
   joinCommunity: GHCContextType["joinCommunity"]
   leaveCommunity: GHCContextType["leaveCommunity"]
@@ -488,7 +490,7 @@ const GHCFeedContext = createContext<{
   reportPost: GHCContextType["reportPost"]
   reportContent: GHCContextType["reportContent"]
   publishStory: GHCContextType["publishStory"]
-  refreshFeed: (opts?: { before?: number; beforeId?: string; append?: boolean; limit?: number }) => Promise<{ ok: boolean; durable?: boolean; error?: string; appended?: number }>
+  refreshFeed: (opts?: { before?: number; beforeId?: string; append?: boolean; limit?: number }) => Promise<{ ok: boolean; durable?: boolean; error?: string; appended?: number; nextCursor?: { before: number; beforeId: string } | null }>
   followUser: GHCContextType["followUser"]
   unfollowFromPost: GHCContextType["unfollowFromPost"]
   muteUser: GHCContextType["muteUser"]
@@ -498,6 +500,8 @@ const GHCFeedContext = createContext<{
   shares: GHCContextType["shares"]
   reposts: GHCContextType["reposts"]
   blockedUsers: string[]
+  /** Muted accounts are hidden from feed ranking without severing the relationship. */
+  mutedUsers: string[]
 } | null>(null)
 
 
@@ -618,6 +622,21 @@ export function GHCProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<ExtendedGHCState>(() => createDefaultExtendedState())
   const postsSnapshotRef = useRef(state.posts)
   const feedRequestRef = useRef<{ generation: number; controller: AbortController | null }>({ generation: 0, controller: null })
+  const feedCursorRef = useRef<{ before: number; beforeId: string } | null>(null)
+  const previousFeedIdentityRef = useRef(identityUserId)
+  useEffect(() => {
+    if (previousFeedIdentityRef.current === identityUserId) return
+    previousFeedIdentityRef.current = identityUserId
+    // Cancel old-owner requests and clear only account-owned feed/like snapshots.
+    // The authenticated feed hydrates the new owner; no prior user's rows survive.
+    feedRequestRef.current.controller?.abort()
+    feedRequestRef.current = { generation: feedRequestRef.current.generation + 1, controller: null }
+    feedCursorRef.current = null
+    postsSnapshotRef.current = []
+    setState((current) => ({ ...current, posts: [], likes: [], likedPostIds: [] }))
+  }, [identityUserId])
+  // The server-issued cursor is the only pagination authority. Never derive it
+  // from locally merged posts, which may include optimistic/offline records.
   useEffect(() => () => {
     feedRequestRef.current.controller?.abort()
     feedRequestRef.current = { generation: feedRequestRef.current.generation + 1, controller: null }
@@ -1904,6 +1923,10 @@ export function GHCProvider({ children }: { children: ReactNode }) {
               lastMessage: preview || existing?.lastMessage || "",
               lastMessageTime: lastAt,
               ...(typeof r.unreadCount === "number" && Number.isFinite(r.unreadCount) ? { unreadCount: Math.max(0, r.unreadCount), unread: r.unreadCount > 0 } : {}),
+              ...(typeof r.isPinned === "boolean" ? { isPinned: r.isPinned } : {}),
+              ...(typeof r.isArchived === "boolean" ? { isArchived: r.isArchived } : {}),
+              ...(typeof r.isMuted === "boolean" ? { isMuted: r.isMuted } : {}),
+              ...(typeof r.muteUntil === "number" && Number.isFinite(r.muteUntil) ? { muteUntil: r.muteUntil } : {}),
             })
           }
           return {
@@ -2031,6 +2054,10 @@ export function GHCProvider({ children }: { children: ReactNode }) {
               lastMessageTime: lastMessageAt,
               updatedAt,
               ...(typeof remote.unreadCount === "number" && Number.isFinite(remote.unreadCount) ? { unreadCount: Math.max(0, remote.unreadCount), unread: remote.unreadCount > 0 } : {}),
+              ...(typeof remote.isPinned === "boolean" ? { isPinned: remote.isPinned } : {}),
+              ...(typeof remote.isArchived === "boolean" ? { isArchived: remote.isArchived } : {}),
+              ...(typeof remote.isMuted === "boolean" ? { isMuted: remote.isMuted } : {}),
+              ...(typeof remote.muteUntil === "number" && Number.isFinite(remote.muteUntil) ? { muteUntil: remote.muteUntil } : {}),
             })
           }
           return { ...current, conversations: Array.from(byId.values()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)) }
@@ -2236,7 +2263,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         window.removeEventListener("ghc:pi-identity-ready", onPiReady as EventListener)
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrate on profile id + after Pi identity ready
+
   }, [state.profile?.id])
 
   // Domain state and services are initialized before callbacks that depend on them.
@@ -2300,20 +2327,20 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     [getDomainState, identityUserId]
   )
 
-  const updateProfile = useCallback(async (updates: Partial<Profile>) => {
+  const updateProfile = useCallback(async (updates: Partial<Profile>): Promise<boolean> => {
     try {
       // UX-layer validation (compatibility); domain re-validates on mutate path
       if (updates.displayName && !validation.isValidName(updates.displayName)) {
         addToast("Invalid name format", "error")
-        return
+        return false
       }
       if (updates.bio && !validation.isValidBio(updates.bio)) {
         addToast("Bio must be between 10 and 500 characters", "error")
-        return
+        return false
       }
       if (updates.age && !validation.isValidAge(updates.age)) {
         addToast("Age must be between 18 and 120", "error")
-        return
+        return false
       }
       if (
         updates.displayName &&
@@ -2321,7 +2348,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         spamDetection.isSpammyProfile(updates.bio, updates.displayName)
       ) {
         addToast("Your profile update was flagged as spam", "error")
-        return
+        return false
       }
 
       const sanitized: Partial<Profile> = sanitizeProfileMediaPartial({
@@ -2351,7 +2378,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       const result = await domains.identity.updateProfile(sanitized)
       if (!result.ok) {
         addToast(result.error, "error")
-        return
+        return false
       }
 
       setState((s) => {
@@ -2383,7 +2410,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
             : "Profile queued for sync",
           "info"
         )
-        return
+        return false
       }
 
       try {
@@ -2406,7 +2433,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
             const full = { ...result.data, ...sanitized }
             window.localStorage.setItem("ghc.profile", JSON.stringify(full))
           } catch { /* */ }
-          return
+          return false
         }
         // Merge durable server media back without wiping local data previews
         const persistedProfile = persisted.profile
@@ -2428,7 +2455,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           maxRetries: 3,
         })
         addToast("Profile saved on this device — server not confirmed. Will retry.", "info")
-        return
+        return false
       }
 
       try {
@@ -2457,25 +2484,21 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       }
       analytics.trackEvent("profile_update", { fields: Object.keys(updates) }, state.profile.displayName)
       addToast("Profile updated", "success")
+      return true
     } catch (error) {
       errorLogger.logError(error instanceof Error ? error : new Error(String(error)))
       addToast("Failed to update profile", "error")
+      return false
     }
   }, [addToast, domains.identity, state.isOnline, state.profile])
 
-  const completeOnboarding = useCallback(async () => {
+  const completeOnboarding = useCallback(async (): Promise<boolean> => {
     try {
-      const bound = getBoundDomainServices()
-      const result = bound?.identity
-        ? await bound.identity.completeOnboarding()
-        : { ok: false as const, error: "Services not ready" }
-      if (!result.ok) {
-        addToast(("error" in result && result.error) || "Onboarding failed", "error")
-        return
-      }
-      // Persist on server identity bridge (Pi-verified mapping).
+      // Persist on server identity bridge first. The server independently checks
+      // every required registration field before changing the identity lifecycle.
       // Client state advances only after authoritative success (or local-dev fallback).
       let serverOk = false
+      let serverRejectedIncompleteProfile = false
       try {
         const headers = {
           "Content-Type": "application/json",
@@ -2488,6 +2511,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         })
         const body = await res.json().catch(() => ({}))
         serverOk = Boolean(res.ok && body?.ok && body?.identity?.onboardingCompleted === true)
+        serverRejectedIncompleteProfile = res.status === 422 || body?.error === "ONBOARDING_PROFILE_INCOMPLETE"
         if (!serverOk) {
           console.warn("[completeOnboarding] server did not confirm", body?.error || res.status)
         }
@@ -2496,12 +2520,23 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       }
 
       const { allowLocalAuthFallback } = await import("@/lib/system-config")
-      if (!serverOk && !allowLocalAuthFallback()) {
+      if (!serverOk && (serverRejectedIncompleteProfile || !allowLocalAuthFallback())) {
         addToast(
-          "Could not save onboarding on the server. Please check your connection and try again.",
+          serverRejectedIncompleteProfile
+            ? "Some required registration details are still missing. Return to the indicated steps and complete them."
+            : "Could not save onboarding on the server. Please check your connection and try again.",
           "error"
         )
-        return
+        return false
+      }
+
+      const bound = getBoundDomainServices()
+      const domainResult = bound?.identity
+        ? await bound.identity.completeOnboarding()
+        : { ok: false as const, error: "Services not ready" }
+      if (!domainResult.ok) {
+        addToast(("error" in domainResult && domainResult.error) || "Onboarding could not be finalized", "error")
+        return false
       }
 
       IdentityService.setOnboardingCompleted()
@@ -2528,11 +2563,13 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       try {
         await persistServerProfile({ ...profile, onboarded: true })
       } catch {
-        /* offline — local cache still holds this session */
+        /* server identity is authoritative; local cache still holds this session */
       }
+      return true
     } catch (error) {
       errorLogger.logError(error instanceof Error ? error : new Error(String(error)))
       addToast("Onboarding could not be completed. Please try again.", "error")
+      return false
     }
   }, [addToast, state.profile])
 
@@ -2580,6 +2617,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     pdfName: string | null,
     audience: "public" | "followers" | "mutuals" | "private" = "public",
     community?: { id: string; name: string } | null,
+    requestId?: string,
   ): Promise<boolean> => {
     try {
       // Rate limit check
@@ -2615,6 +2653,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
 
       // Canonical domain path (validate → audience → event)
       const domainResult = await domains.posts.createPost({
+        ...(requestId && /^post_[a-z0-9_-]{6,80}$/i.test(requestId) ? { id: requestId } : {}),
         content: sanitizedContent,
         images: safeImages,
         video: safeVideo,
@@ -2746,7 +2785,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           postId,
           error: remote.error || "NOT_DURABLE",
         })
-        return
+        return false
       }
 
       const active =
@@ -2841,6 +2880,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         viewerReactions: remote.viewerReactions,
         likedByMe: isLike ? active : undefined,
       })
+      return true
     } catch (err) {
       try {
         errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
@@ -2848,6 +2888,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         /* */
       }
       addToast("Could not update reaction", "error")
+      return false
     }
   }, [addToast])
 
@@ -3132,14 +3173,14 @@ export function GHCProvider({ children }: { children: ReactNode }) {
     text: string,
     replyToCommentId?: string,
     mediaAttachments?: Array<{ id?: string; type: "image" | "video" | "file"; url: string; fileName?: string }>
-  ) => {
+  ): Promise<boolean> => {
     const normalizedText = sanitizeText(text, 500).trim()
     const safeMedia = (mediaAttachments || [])
       .filter((a) => a && a.url && !String(a.url).startsWith("blob:") && !String(a.url).startsWith("data:"))
       .slice(0, 4)
     if (!normalizedText && !safeMedia.length) {
       addToast("Comment cannot be empty", "error")
-      return
+      return false
     }
     try {
       if (replyToCommentId) {
@@ -3155,7 +3196,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
             )
             if (!parentExists && remoteThread.durable) {
               addToast("Original comment was removed", "error")
-              return
+              return false
             }
           } catch {
             /* allow server to validate on write */
@@ -3192,7 +3233,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
             (replyToCommentId ? "Could not post reply" : "Could not post comment"),
           "error"
         )
-        return
+        return false
       }
       if (remote.durable === false) {
         addToast(
@@ -3201,7 +3242,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
             : "Comment not visible to others yet — server not durable",
           "error"
         )
-        return
+        return false
       }
 
       pendingCommentRequestIdsRef.current.delete(requestKey)
@@ -3366,6 +3407,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           }
         } catch { /* optional */ }
       }
+      return true
     } catch (err) {
       try {
         errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
@@ -3373,6 +3415,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         /* logger must never block UX */
       }
       addToast("Could not post comment", "error")
+      return false
     }
   }, [addToast, state.profile, state.posts])
 
@@ -3391,6 +3434,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         reactionCounts?: Record<string, number>
         viewerReactions?: string[]
         shareCount?: number
+        savedByMe?: boolean
       }>).detail
       if (!detail?.postId) return
       const postId = String(detail.postId)
@@ -3431,6 +3475,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
               next.shares = Math.max(0, detail.shareCount)
               next.engagement = normalizeEngagementMetrics(next.engagement || post.engagement, { shares: Math.max(0, detail.shareCount) })
             }
+            if (typeof detail.savedByMe === "boolean") next.savedByMe = detail.savedByMe
             if (typeof detail.commentCount === "number" && Number.isFinite(detail.commentCount)) {
               next.engagement = normalizeEngagementMetrics(next.engagement || post.engagement, {
                 comments: Math.max(0, detail.commentCount),
@@ -3746,17 +3791,23 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         addToast(result.error || "Comment delete was not saved", "error")
         return
       }
+      const previousPost = state.posts.find((post) => post.id === postId)
+      const reconciledCommentCount = Number.isFinite(result.commentCount)
+        ? Math.max(0, Number(result.commentCount))
+        : Math.max(0, (Number(previousPost?.engagement?.comments ?? previousPost?.comments.length) || 0) - 1)
       setState((s) => ({
         ...s,
         posts: s.posts.map((p) => p.id !== postId ? p : {
           ...p,
           // Keep replies from other authors; the deleted parent becomes an orphan root.
           comments: p.comments.filter((c) => c.id !== commentId),
-          engagement: normalizeEngagementMetrics(p.engagement, {
-            comments: Number.isFinite(result.commentCount) ? Math.max(0, Number(result.commentCount)) : Math.max(0, (Number(p.engagement?.comments ?? p.comments.length) || 0) - 1),
-          }),
+          engagement: normalizeEngagementMetrics(p.engagement, { comments: reconciledCommentCount }),
         }),
       }))
+      broadcastPostEngagement({ postId, kind: "comment", commentCount: reconciledCommentCount })
+      try {
+        window.dispatchEvent(new CustomEvent("ghc:social-mutation", { detail: { type: "comment-delete", postId, commentId, commentCount: reconciledCommentCount } }))
+      } catch { /* non-fatal cross-surface signal */ }
       addToast("Comment deleted", "success")
     } catch (err) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
@@ -3958,7 +4009,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
   }, [addToast, state.settings, state.blockedUsers, state.posts, state.conversations])
 
 
-  const savePost = useCallback(async (postId: string, collection?: string) => {
+  const savePost = useCallback(async (postId: string, collection?: string): Promise<boolean> => {
     setState((s) => ({
       ...s,
       posts: s.posts.map((post) =>
@@ -3985,7 +4036,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           ),
         }))
         addToast(remote.error || "Could not save post", "error")
-        return
+        return false
       }
       if (remote.durable === false) {
         setState((s) => ({
@@ -4002,9 +4053,11 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           ),
         }))
         addToast("Could not save post on the server", "error")
-        return
+        return false
       }
+      if (typeof remote.saved === "boolean") broadcastPostEngagement({ postId, kind: "save", savedByMe: remote.saved })
       addToast("Post saved", "success")
+      return true
     } catch {
       setState((s) => ({
         ...s,
@@ -4020,10 +4073,11 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         ),
       }))
       addToast("Could not reach the server to save this post", "error")
+      return false
     }
   }, [addToast])
 
-  const unsavePost = useCallback(async (postId: string) => {
+  const unsavePost = useCallback(async (postId: string): Promise<boolean> => {
     const prevBookmarks = state.posts.find((p) => p.id === postId)?.bookmarkedBy
     setState((s) => ({
       ...s,
@@ -4049,7 +4103,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           ),
         }))
         addToast(remote.error || "Could not remove saved post", "error")
-        return
+        return false
       }
       if (remote.durable === false) {
         setState((s) => ({
@@ -4061,9 +4115,11 @@ export function GHCProvider({ children }: { children: ReactNode }) {
           ),
         }))
         addToast("Could not update saved posts on the server", "error")
-        return
+        return false
       }
+      if (typeof remote.saved === "boolean") broadcastPostEngagement({ postId, kind: "save", savedByMe: remote.saved })
       addToast("Post removed from saved", "success")
+      return true
     } catch {
       setState((s) => ({
         ...s,
@@ -4074,34 +4130,21 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         ),
       }))
       addToast("Could not reach the server to update saved posts", "error")
+      return false
     }
   }, [addToast, state.posts])
 
   const hidePost = useCallback(async (postId: string) => {
     const id = String(postId || "").trim()
     if (!id) return
-    // Remove from active feed immediately; hideCount retained on archive paths if present.
+    // The Feed surface owns its account-scoped, device-local hide preference.
+    // Do not also write a global localStorage key here: it would leak the
+    // preference across signed-in accounts on a shared device.
     setState((s) => ({
       ...s,
-      posts: s.posts
-        .filter((post) => post.id !== id)
-        .map((post) =>
-          post.id === id ? { ...post, hideCount: (post.hideCount || 0) + 1 } : post
-        ),
+      posts: s.posts.filter((post) => post.id !== id),
     }))
-    try {
-      if (typeof window !== "undefined") {
-        const key = "ghc.hidden-post-ids"
-        const prev = JSON.parse(window.localStorage.getItem(key) || "[]")
-        const next = Array.isArray(prev) ? prev : []
-        if (!next.includes(id)) {
-          next.push(id)
-          window.localStorage.setItem(key, JSON.stringify(next.slice(-200)))
-        }
-      }
-    } catch { /* */ }
-    addToast("Post hidden", "success")
-  }, [addToast])
+  }, [])
 
   const markNotInterested = useCallback(async (postId: string) => {
     setState((s) => ({
@@ -6105,57 +6148,68 @@ const dismissMatchCelebration = useCallback(() => {
   )
 
   const pinConversation = useCallback(async (conversationId: string) => {
-    // Local-only — no durable conversation pin API.
-    setState((s) => ({
-      ...s,
-      conversations: s.conversations.map((c) => (c.id === conversationId ? toggleConversationPin(c) : c)),
-    }))
-    addToast("Conversation pinned on this device only", "info")
+    try {
+      const { apiSetConversationPrefs } = await import("@/lib/messaging/server-messaging-sync")
+      const result = await apiSetConversationPrefs(conversationId, { isPinned: true })
+      if (!result.httpOk || result.ok !== true) {
+        addToast("Could not pin this conversation. Try again when the connection is available.", "error")
+        return
+      }
+      setState((s) => ({ ...s, conversations: s.conversations.map((c) => c.id === conversationId ? { ...c, isPinned: true } : c) }))
+      addToast(result.durable === true ? "Conversation pinned" : "Conversation pinned on this device only", result.durable === true ? "success" : "info")
+    } catch { addToast("Could not pin this conversation.", "error") }
   }, [addToast])
 
   const unpinConversation = useCallback(async (conversationId: string) => {
-    setState((s) => ({
-      ...s,
-      conversations: s.conversations.map((c) => (c.id === conversationId ? toggleConversationPin(c) : c)),
-    }))
-    addToast("Conversation unpinned on this device only", "info")
+    try {
+      const { apiSetConversationPrefs } = await import("@/lib/messaging/server-messaging-sync")
+      const result = await apiSetConversationPrefs(conversationId, { isPinned: false })
+      if (!result.httpOk || result.ok !== true) { addToast("Could not unpin this conversation.", "error"); return }
+      setState((s) => ({ ...s, conversations: s.conversations.map((c) => c.id === conversationId ? { ...c, isPinned: false } : c) }))
+      addToast(result.durable === true ? "Conversation unpinned" : "Conversation unpinned on this device only", result.durable === true ? "success" : "info")
+    } catch { addToast("Could not unpin this conversation.", "error") }
   }, [addToast])
 
   const archiveConversation = useCallback(async (conversationId: string) => {
-    // Local-only — no durable conversation archive API.
-    setState((s) => ({
-      ...s,
-      conversations: s.conversations.map((c) => (c.id === conversationId ? toggleConversationArchive(c) : c)),
-    }))
-    addToast("Conversation archived on this device only", "info")
+    try {
+      const { apiSetConversationPrefs } = await import("@/lib/messaging/server-messaging-sync")
+      const result = await apiSetConversationPrefs(conversationId, { isArchived: true })
+      if (!result.httpOk || result.ok !== true) { addToast("Could not archive this conversation.", "error"); return }
+      setState((s) => ({ ...s, conversations: s.conversations.map((c) => c.id === conversationId ? { ...c, isArchived: true } : c) }))
+      addToast(result.durable === true ? "Conversation archived" : "Conversation archived on this device only", result.durable === true ? "success" : "info")
+    } catch { addToast("Could not archive this conversation.", "error") }
   }, [addToast])
 
   const unarchiveConversation = useCallback(async (conversationId: string) => {
-    setState((s) => ({
-      ...s,
-      conversations: s.conversations.map((c) => (c.id === conversationId ? toggleConversationArchive(c) : c)),
-    }))
-    addToast("Conversation unarchived on this device only", "info")
+    try {
+      const { apiSetConversationPrefs } = await import("@/lib/messaging/server-messaging-sync")
+      const result = await apiSetConversationPrefs(conversationId, { isArchived: false })
+      if (!result.httpOk || result.ok !== true) { addToast("Could not restore this conversation.", "error"); return }
+      setState((s) => ({ ...s, conversations: s.conversations.map((c) => c.id === conversationId ? { ...c, isArchived: false } : c) }))
+      addToast(result.durable === true ? "Conversation restored" : "Conversation restored on this device only", result.durable === true ? "success" : "info")
+    } catch { addToast("Could not restore this conversation.", "error") }
   }, [addToast])
 
   const muteConversation = useCallback(async (conversationId: string, muteHours: number = 1) => {
-    // Local-only conversation mute (graph muteUser is separate durable path).
-    setState((s) => ({
-      ...s,
-      conversations: s.conversations.map((c) => (c.id === conversationId ? toggleConversationMute(c, muteHours) : c)),
-    }))
-    addToast(
-      `Notifications muted for ${muteHours} hour${muteHours > 1 ? "s" : ""} on this device only`,
-      "success"
-    )
+    const safeHours = Number.isFinite(muteHours) ? Math.min(24 * 30, Math.max(1, Math.floor(muteHours))) : 1
+    const mutedUntil = Date.now() + safeHours * 60 * 60 * 1000
+    try {
+      const { apiSetConversationPrefs } = await import("@/lib/messaging/server-messaging-sync")
+      const result = await apiSetConversationPrefs(conversationId, { mutedUntil })
+      if (!result.httpOk || result.ok !== true) { addToast("Could not mute this conversation.", "error"); return }
+      setState((s) => ({ ...s, conversations: s.conversations.map((c) => c.id === conversationId ? { ...c, isMuted: true, muteUntil: mutedUntil } : c) }))
+      addToast(result.durable === true ? `Notifications muted for ${safeHours} hour${safeHours > 1 ? "s" : ""}` : "Notifications muted on this device only", result.durable === true ? "success" : "info")
+    } catch { addToast("Could not mute this conversation.", "error") }
   }, [addToast])
 
   const unmuteConversation = useCallback(async (conversationId: string) => {
-    setState((s) => ({
-      ...s,
-      conversations: s.conversations.map((c) => (c.id === conversationId ? toggleConversationMute(c, 0) : c)),
-    }))
-    addToast("Notifications unmuted on this device only", "info")
+    try {
+      const { apiSetConversationPrefs } = await import("@/lib/messaging/server-messaging-sync")
+      const result = await apiSetConversationPrefs(conversationId, { mutedUntil: null })
+      if (!result.httpOk || result.ok !== true) { addToast("Could not unmute this conversation.", "error"); return }
+      setState((s) => ({ ...s, conversations: s.conversations.map((c) => c.id === conversationId ? { ...c, isMuted: false, muteUntil: undefined } : c) }))
+      addToast(result.durable === true ? "Conversation unmuted" : "Conversation unmuted on this device only", result.durable === true ? "success" : "info")
+    } catch { addToast("Could not unmute this conversation.", "error") }
   }, [addToast])
 
   const setTypingIndicator = useCallback(async (conversationId: string, isTyping: boolean) => {
@@ -7287,16 +7341,6 @@ const dismissMatchCelebration = useCallback(() => {
           addToast(durablePayload?.error || "Report could not be saved on the server", "error")
           return false
         }
-        try {
-          createCommunityReport({
-            communityId,
-            targetType: input.targetType,
-            targetId: input.targetId,
-            reporterId: IdentityService.getCurrentUserId() || "unknown",
-            reason: input.reason,
-            note: input.note,
-          })
-        } catch { /* */ }
         addToast("Report submitted — thank you", "success")
         return true
       } catch {
@@ -7717,6 +7761,10 @@ const dismissMatchCelebration = useCallback(() => {
         }
       }
       if (!online) {
+        const inlineStoryMedia = typeof prepared.media?.url === "string" && prepared.media.url.startsWith("data:")
+        if (inlineStoryMedia && prepared.media!.url.length > 512 * 1024) {
+          return { ok: false, durable: false, error: "This photo is too large to queue safely. Reconnect and upload it before sharing." }
+        }
         offlineQueue.addAction({
           type: "create_story",
           payload: prepared,
@@ -7759,7 +7807,7 @@ const dismissMatchCelebration = useCallback(() => {
     beforeId?: string
     append?: boolean
     limit?: number
-  }): Promise<{ ok: boolean; durable?: boolean; error?: string; appended?: number }> => {
+  }): Promise<{ ok: boolean; durable?: boolean; error?: string; appended?: number; nextCursor?: { before: number; beforeId: string } | null }> => {
     try {
       const { socialFetchFeed } = await import("@/lib/social/client")
       // Feed requests are latest-wins. A newer refresh/page supersedes the previous
@@ -7768,10 +7816,21 @@ const dismissMatchCelebration = useCallback(() => {
       feedRequestRef.current.controller?.abort()
       const controller = new AbortController()
       feedRequestRef.current = { generation, controller }
+      if (!opts?.append) {
+        // A replacement refresh starts a new pagination window (and may follow
+        // an account switch). Do not let a prior viewer's cursor leak forward.
+        feedCursorRef.current = null
+      }
+      const requestedCursor = opts?.before && opts?.beforeId
+        ? { before: opts.before, beforeId: opts.beforeId }
+        : opts?.append ? feedCursorRef.current : null
+      if (opts?.append && !requestedCursor) {
+        return { ok: false, durable: false, error: "FEED_CURSOR_UNAVAILABLE" }
+      }
       const feed = await socialFetchFeed({
         limit: opts?.limit ?? 40,
-        before: opts?.before,
-        beforeId: opts?.beforeId,
+        before: requestedCursor?.before,
+        beforeId: requestedCursor?.beforeId,
         signal: controller.signal,
       })
       if (generation !== feedRequestRef.current.generation) {
@@ -7780,6 +7839,20 @@ const dismissMatchCelebration = useCallback(() => {
       if (!feed.ok) {
         return { ok: false, durable: false, error: feed.error || "Could not refresh feed" }
       }
+      // Only a cursor returned by the canonical API may advance pagination.
+      // A missing cursor means the server has no further page to offer.
+      const candidateCursor = feed.nextCursor && Number.isSafeInteger(feed.nextCursor.before)
+        && feed.nextCursor.before > 0 && typeof feed.nextCursor.beforeId === "string"
+        && feed.nextCursor.beforeId.trim().length > 0
+        ? { before: feed.nextCursor.before, beforeId: feed.nextCursor.beforeId }
+        : null
+      if (opts?.append && requestedCursor && candidateCursor) {
+        if (!isStrictlyOlderFeedCursor(candidateCursor, requestedCursor)) {
+          return { ok: false, durable: false, error: "FEED_CURSOR_DID_NOT_ADVANCE" }
+        }
+      }
+      const nextCursor = candidateCursor
+      feedCursorRef.current = nextCursor
       // Phase 2: merge whenever API returns posts (durable preferred, not required)
       if (feed.ok && Array.isArray(feed.posts) && feed.posts.length > 0) {
         const remotePosts = mapRemoteFeedPosts(feed.posts)
@@ -7807,10 +7880,10 @@ const dismissMatchCelebration = useCallback(() => {
             : s.likedPostIds
           return { ...s, posts: nextPosts, likedPostIds: nextLiked }
         })
-        return { ok: true, durable: Boolean(feed.durable), appended: newlyFetchedCount }
+        return { ok: true, durable: Boolean(feed.durable), appended: newlyFetchedCount, nextCursor }
       }
       // Server reachable but empty / non-durable — preserve existing local feed
-      return { ok: true, durable: Boolean(feed.durable), appended: 0 }
+      return { ok: true, durable: Boolean(feed.durable), appended: 0, nextCursor }
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         return { ok: false, durable: false, error: "FEED_REQUEST_SUPERSEDED" }
@@ -8288,8 +8361,11 @@ const dismissMatchCelebration = useCallback(() => {
       loadConversationMessages,
       markConversationRead,
       pinConversation,
+      unpinConversation,
       archiveConversation,
+      unarchiveConversation,
       muteConversation,
+      unmuteConversation,
       createGroup,
       joinCommunity,
       acceptCommunityInvitation,
@@ -8320,8 +8396,11 @@ const dismissMatchCelebration = useCallback(() => {
       loadConversationMessages,
       markConversationRead,
       pinConversation,
+      unpinConversation,
       archiveConversation,
+      unarchiveConversation,
       muteConversation,
+      unmuteConversation,
       createGroup,
       joinCommunity,
       acceptCommunityInvitation,

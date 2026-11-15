@@ -9,6 +9,6 @@ const checks=[
  ["canonical nav",read("lib/navigation/primary-tabs.ts").includes("messages") && read("lib/navigation/primary-tabs.ts").includes("communities")],
  ["no migration edits",fs.readdirSync(path.join(root,"supabase/migrations")).length>=170],
  ["no fake queue claim",!read("components/ghc/attention-command-card.tsx").toLowerCase().includes("queued offline")],
- ["result routing",read("lib/unified-attention.ts").includes("open: \"marketplace\"")],
+ ["result routing",read("lib/unified-attention.ts").includes('"marketplace", (n) => n.type === "marketplace_order"')],
 ]
 let fail=0; for(const [n,ok] of checks){console.log(`${ok?"PASS":"FAIL"} ${n}`); if(!ok) fail++} console.log(`Pass 23 gate: ${checks.length-fail}/${checks.length}`); process.exit(fail?1:0)

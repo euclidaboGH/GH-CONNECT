@@ -347,7 +347,7 @@ export function ShareSheet({
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder={tab === "private" ? "Search chats…" : "Search communities…"}
-                  className="h-9 w-full rounded-xl border border-border/70 bg-muted/40 pl-9 pr-3 text-sm focus:border-emerald-400 focus:outline-none"
+                  className="min-h-10 w-full rounded-xl border border-border/70 bg-muted/40 py-2 pl-9 pr-3 text-sm focus:border-emerald-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30"
                 />
               </div>
               {(tab === "private" ? filteredPrivate : filteredGroups).length === 0 ? (

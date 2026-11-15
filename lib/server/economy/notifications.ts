@@ -276,6 +276,9 @@ export async function notifyTransferCompleted(input: {
       counterpartyName: input.recipientName,
       role: "sent",
       open: "transaction",
+      transactionId: input.referenceId,
+      referenceId: input.referenceId,
+      deepLink: { open: "wallet", tab: "wallet", section: "transaction", transactionId: input.referenceId, referenceId: input.referenceId },
     },
   })
   await recordGhcNotification({
@@ -291,6 +294,9 @@ export async function notifyTransferCompleted(input: {
       counterpartyName: input.senderName,
       role: "received",
       open: "transaction",
+      transactionId: input.referenceId,
+      referenceId: input.referenceId,
+      deepLink: { open: "wallet", tab: "wallet", section: "transaction", transactionId: input.referenceId, referenceId: input.referenceId },
     },
   })
 }

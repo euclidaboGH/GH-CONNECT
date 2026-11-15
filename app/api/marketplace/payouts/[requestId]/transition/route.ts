@@ -1,10 +1,10 @@
 /** Privileged seller-payout lifecycle operator. This endpoint can never mark a payout paid. */
-import { timingSafeEqual } from "node:crypto"
 import { NextResponse } from "next/server"
 import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+import { operatorKeyAuthorized, OPERATOR_KEY_MIN_BYTES } from "@/lib/server/security/operator-key"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -12,9 +12,11 @@ function reply(body: unknown, status = 200) {
   return NextResponse.json(body, { status, headers: { "Cache-Control": "private, no-store, max-age=0", Pragma: "no-cache" } })
 }
 function authorized(request: Request): boolean {
-  const expected = Buffer.from(String(process.env.GHC_PAYOUT_RECONCILIATION_KEY || ""), "utf8")
-  const supplied = Buffer.from(String(request.headers.get("x-ghc-payout-reconciliation-key") || ""), "utf8")
-  return expected.length > 0 && supplied.length === expected.length && timingSafeEqual(supplied, expected)
+  return operatorKeyAuthorized(request, {
+    headers: ["x-ghc-payout-reconciliation-key"],
+    envNames: ["GHC_PAYOUT_RECONCILIATION_KEY"],
+    minBytes: OPERATOR_KEY_MIN_BYTES,
+  })
 }
 
 export async function POST(request: Request, context: { params: Promise<{ requestId: string }> }) {

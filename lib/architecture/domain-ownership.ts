@@ -43,9 +43,34 @@ export const DOMAIN_OWNERS = {
     clientRead: ["lib/media"],
     authority: "server",
   },
+  rewards: {
+    server: ["lib/server/economy/reward-engine.ts", "lib/server/economy/claim-engine.ts", "lib/server/content-reward", "app/api/economy/rewards"],
+    clientRead: ["lib/rewards", "components/ghc/rewards-centre-screen.tsx"],
+    authority: "server",
+  },
+  communities: {
+    server: ["lib/server/community", "app/api/communities"],
+    clientRead: ["components/ghc/premium-community-hub.tsx"],
+    authority: "server",
+  },
+  notifications: {
+    server: ["lib/server/notifications", "app/api/notifications"],
+    clientRead: ["contexts/domains/notifications-provider.tsx", "components/ghc/notification-bell.tsx"],
+    authority: "server",
+  },
+  trustSafety: {
+    server: ["lib/server/security", "lib/server/community/governance-store.ts", "app/api/reports"],
+    clientRead: ["components/ghc/report-chooser.tsx"],
+    authority: "server",
+  },
+  payments: {
+    server: ["lib/server/payments", "lib/server/pi", "app/api/payments", "app/api/economy/earnings/withdrawals"],
+    clientRead: ["lib/client/pi-wallet-consent.ts"],
+    authority: "server",
+  },
 } as const
 
 export type DomainKey = keyof typeof DOMAIN_OWNERS
 
 /** Financial domains that must never accept client-authoritative amounts for settlement. */
-export const FINANCIAL_DOMAINS: DomainKey[] = ["walletGhc", "walletPiEarnings", "marketplace", "membership"]
+export const FINANCIAL_DOMAINS: DomainKey[] = ["walletGhc", "walletPiEarnings", "marketplace", "membership", "rewards", "payments"]

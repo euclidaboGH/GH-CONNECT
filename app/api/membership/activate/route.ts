@@ -26,6 +26,7 @@ import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { addCalendarMonths, getMembershipGhcPrice, getMembershipPiPrice, membershipPeriodForPaidMonths, paidMonthsForMembershipPeriod, type PaidMembershipMonths } from "@/lib/membership-pricing"
 import { queueReferralReward } from "@/lib/server/referral/referral-service"
 import { isVerifiedPiMembershipIntent } from "@/lib/server/membership/renewal-policy"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -75,6 +76,14 @@ export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: { "x-request-id": reqCtx.requestId } })
+  }
+
+  const rateLimit = await checkDurableRateLimit(`membership-activate:${auth.userId}`, 8, 60_000, { onUnavailable: "deny" })
+  if (!rateLimit.ok) {
+    return NextResponse.json({ ok: false, error: durableRateLimitCode(rateLimit), message: "Membership purchase protection is temporarily limiting requests." }, {
+      status: durableRateLimitStatus(rateLimit),
+      headers: { "x-request-id": reqCtx.requestId, "Cache-Control": "private, no-store, max-age=0", Pragma: "no-cache" },
+    })
   }
 
   const boundedBody = await readBoundedJson(request, 8 * 1024)
@@ -138,6 +147,16 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { ok: false, error: "MEMBERSHIP_STORE_UNAVAILABLE", message: "Membership status could not be verified. No payment was taken." },
         { status: 503 }
+      )
+    }
+    const existingIsActive = existingResult.ok &&
+      existingResult.entitlement.tier !== "free" &&
+      existingResult.entitlement.active !== false &&
+      (!existingResult.entitlement.expiresAt || existingResult.entitlement.expiresAt > Date.now() + 60_000)
+    if (existingIsActive && existingResult.entitlement.tier === "vvip" && tier === "vip") {
+      return NextResponse.json(
+        { ok: false, error: "MEMBERSHIP_DOWNGRADE_NOT_ALLOWED", message: "Your VVIP membership is already the highest tier. A lower-tier purchase is not available while it is active." },
+        { status: 409, headers: { "Cache-Control": "no-store" } },
       )
     }
     if (

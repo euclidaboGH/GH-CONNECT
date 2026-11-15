@@ -14,7 +14,7 @@ const checks = [
   ['refresh continues to append intelligence history', /INSERT INTO public\.gh_reputation_intelligence_history/.test(fixMigration)],
   ['RPC remains service-role-only', /REVOKE ALL ON FUNCTION public\.gh_reputation_intelligence_refresh\(text\) FROM PUBLIC, anon, authenticated[\s\S]*?GRANT EXECUTE ON FUNCTION public\.gh_reputation_intelligence_refresh\(text\) TO service_role/.test(fixMigration)],
   ['correction does not add wallet, GHC ledger, or reward mutations', !/INSERT INTO public\.(?:ghc_ledger|ghc_transactions|ghc_user_accounts)|UPDATE public\.(?:ghc_user_accounts|ghc_wallets)|ghc_curation_reward_credit/.test(fixMigration)],
-  ['regression gate is registered in prebuild and static verification', (pkg.scripts.prebuild || '').includes('check-curation-intelligence-refresh-recovery.mjs') && (pkg.scripts['verify:static'] || '').includes('check-curation-intelligence-refresh-recovery.mjs')],
+  ['regression gate is registered in prebuild and static verification', (pkg.scripts['prebuild:checks'] || '').includes('check-curation-intelligence-refresh-recovery.mjs') && (pkg.scripts['verify:static'] || '').includes('check-curation-intelligence-refresh-recovery.mjs')],
 ]
 let passed = 0
 for (const [name, ok] of checks) { console.log(`${ok ? 'PASS' : 'FAIL'} ${name}`); if (ok) passed++ }

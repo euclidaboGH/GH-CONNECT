@@ -17,11 +17,13 @@ import {
 export function SaveToCollectionSheet({
   open,
   postId,
+  scopeId,
   onClose,
   onSaved,
 }: {
   open: boolean
   postId: string | null
+  scopeId?: string
   onClose: () => void
   onSaved?: (collectionName: string) => void
 }) {
@@ -31,16 +33,16 @@ export function SaveToCollectionSheet({
 
   useEffect(() => {
     if (open) {
-      setCols(loadCollections())
+      setCols(loadCollections(scopeId))
       setCreating(false)
       setNewName("")
     }
-  }, [open])
+  }, [open, scopeId])
 
   if (!open || !postId) return null
 
   const pick = (c: SavedCollection) => {
-    savePostToCollection(c.id, postId)
+    savePostToCollection(c.id, postId, scopeId)
     onSaved?.(c.name)
     onClose()
   }
@@ -48,9 +50,9 @@ export function SaveToCollectionSheet({
   const createAndSave = () => {
     const name = newName.trim()
     if (!name) return
-    const col = createCollection(name)
-    savePostToCollection(col.id, postId)
-    setCols(loadCollections())
+    const col = createCollection(name, scopeId)
+    savePostToCollection(col.id, postId, scopeId)
+    setCols(loadCollections(scopeId))
     onSaved?.(col.name)
     onClose()
   }
@@ -73,12 +75,13 @@ export function SaveToCollectionSheet({
           </button>
         </div>
         <p className="mb-2 text-[11px] text-muted-foreground">
-          Collections organize saved posts on this device. The post is already saved to your account when the bookmark is on.
+          Collections are stored on this device and separated by account. The bookmark itself is saved to your account separately.
         </p>
-        <ul className="max-h-56 space-y-1 overflow-y-auto">
+        <div role="list" aria-label="Saved collections" className="max-h-56 space-y-1 overflow-y-auto">
           {cols.map((c) => (
             <button
               key={c.id}
+              role="listitem"
               type="button"
               className="flex w-full items-center justify-between rounded-xl px-3 py-3 text-left hover:bg-purple-50 dark:hover:bg-purple-950/30"
               onClick={() => pick(c)}
@@ -87,7 +90,7 @@ export function SaveToCollectionSheet({
               <span className="text-xs text-muted-foreground">{c.postIds.length}</span>
             </button>
           ))}
-        </ul>
+        </div>
         {creating ? (
           <div className="mt-3 flex gap-2">
             <input

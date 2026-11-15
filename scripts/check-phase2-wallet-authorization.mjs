@@ -12,6 +12,7 @@ const a2u = read('app/api/payments/a2u/create/route.ts')
 const me = read('app/api/identity/me/route.ts')
 const payoutRequest = read('app/api/economy/earnings/withdrawals/route.ts')
 const payoutUi = read('components/ghc/unified-earnings-dashboard.tsx')
+const withdrawSheet = read('components/ghc/pi-withdraw-sheet.tsx')
 const authCard = read('components/ghc/pi-payout-authorization-card.tsx')
 const withdrawable = read('app/api/economy/earnings/withdrawable/route.ts')
 const checks = []
@@ -34,7 +35,16 @@ test('RPC failures produce sanitized server diagnostics', /RPC request failed/.t
 test('Authorization UI uses genuine Pi consent helper and never shows raw HTTP/error strings', /requestPiWalletConsent/.test(read('components/ghc/pi-payout-authorization-card.tsx')) && !/HTTP \$\{/.test(read('components/ghc/pi-payout-authorization-card.tsx')) && !/HTTP \$\{/.test(payoutUi))
 test('Payout request requires active wallet authorization before reservation', /assertPayoutWalletAuthorization/.test(payoutRequest) && /WALLET_AUTHORIZATION_REQUIRED/.test(payoutRequest))
 test('Consent helper confirms active consent and matching UID from a fresh server read', /authorizationActive: body\.authorizationActive === true && uidMatches/.test(read('lib/client/pi-wallet-consent.ts')) && /verified\.status\.uidMatchesAuthorization/.test(read('lib/client/pi-wallet-consent.ts')))
-test('Withdrawal retries reuse an idempotency key until the request is confirmed', /payoutIdempotencyRef = useRef/.test(payoutUi) && /pendingIntent\.amountAtomic !== amountAtomic/.test(payoutUi) && /payoutIdempotencyRef\.current = null/.test(payoutUi))
+const submitStart = withdrawSheet.indexOf('const onSubmit')
+const failedResponseGuard = withdrawSheet.indexOf('if (!res.ok || !body?.ok)', submitStart)
+const acceptedIntentReset = withdrawSheet.indexOf('intentRef.current = null', failedResponseGuard)
+test('Withdrawal retries reuse the sheet intent key until the server accepts the request',
+  /intentRef = useRef<\{ amountAtomic: number; key: string \} \| null>/.test(withdrawSheet) &&
+  /intentRef\.current = pinIntent/.test(withdrawSheet) &&
+  /intentRef\.current = intent/.test(withdrawSheet) &&
+  /intent\.amountAtomic !== amountAtomic/.test(withdrawSheet) &&
+  /body: \{ amountAtomic, idempotencyKey: intent\.key, pinProof \}/.test(withdrawSheet) &&
+  submitStart >= 0 && failedResponseGuard > submitStart && acceptedIntentReset > failedResponseGuard)
 
 
 test('Additive Phase 2 completion migration exists', existsSync(join(root, 'supabase/migrations/20261105160001_pi_wallet_authorization_explicit_consent_only.sql')))
@@ -42,7 +52,7 @@ test('Grant RPC accepts only user_explicit consent source', /v_source <> 'user_e
 test('Grant RPC serializes concurrent grants by user and Pi UID', /pg_advisory_xact_lock\(v_user_lock\)/.test(phase2Completion) && /pg_advisory_xact_lock\(v_uid_lock\)/.test(phase2Completion))
 test('Grant API independently verifies persisted authorization and mapped UID', /getWalletAuthorization\(auth\.userId\)/.test(api) && /verified\.uidMatchesAuthorization !== true/.test(api) && /verified\.authorizedPiAppUid !== mapping\.piAppUid/.test(api))
 test('Grant API exposes only sanitized diagnostic code and upstream status', /diagnosticCode/.test(api) && /upstreamStatus/.test(api) && !/rawBody|serviceRoleKey/.test(api))
-test('Authorization store fails closed unless active authorization matches mapped UID', /authorizationActive: value\.authorizationActive === true && uidMatches/.test(store) && /uidMatchesAuthorization: uidMatches/.test(store))
+test('Authorization store fails closed unless active authorization matches mapped UID', /authorizationActive: active/.test(store) && /uidMatchesAuthorization: uidMatches/.test(store) && /trustedAddress/.test(store) && /walletAddressVerifiedAt/.test(store))
 test('Withdrawable API exposes UID match and derives active from match', /uidMatchesAuthorization: walletAuth\.uidMatchesAuthorization === true/.test(withdrawable) && /authorizationActive: walletAuth\.authorizationActive === true && walletAuth\.uidMatchesAuthorization === true/.test(withdrawable))
 test('Authorization card shows active only from server status with UID match', /requestPiWalletConsent/.test(authCard) && /snap\?\.uidMatchesAuthorization === true/.test(authCard))
 test('Dashboard never unlocks from authorizationActive without UID match', /wa\.uidMatchesAuthorization === true/.test(payoutUi) && /aJson\.uidMatchesAuthorization === true/.test(payoutUi))

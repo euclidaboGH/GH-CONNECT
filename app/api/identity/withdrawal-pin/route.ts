@@ -6,6 +6,7 @@ import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import {
   getWithdrawalPinStatus,
   setWithdrawalPin,
+  changeWithdrawalPin,
   verifyWithdrawalPin,
   isValidPinFormat,
   isWeakPin,
@@ -37,6 +38,7 @@ export async function GET(request: Request) {
  * POST actions:
  * - { action: "set", pin, confirmPin }
  * - { action: "verify", pin }
+ * - { action: "change", currentPin, newPin, confirmPin }  (requires the current PIN; forgotten PINs use pin-recovery)
  */
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
@@ -49,7 +51,7 @@ export async function POST(request: Request) {
   if (!parsed.ok) {
     return reply({ ok: false, error: parsed.error }, parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400)
   }
-  const body = parsed.value as { action?: unknown; pin?: unknown; confirmPin?: unknown; bindKey?: unknown }
+  const body = parsed.value as { action?: unknown; pin?: unknown; confirmPin?: unknown; bindKey?: unknown; currentPin?: unknown; newPin?: unknown }
   const action = typeof body.action === "string" ? body.action : ""
 
   if (action === "set") {
@@ -65,6 +67,24 @@ export async function POST(request: Request) {
     const result = await setWithdrawalPin({ userId: auth.userId, pin: body.pin })
     if (!result.ok) return reply({ ok: false, error: result.error }, result.error === "PIN_ALREADY_CONFIGURED" ? 409 : 503)
     return reply({ ok: true, configured: true, message: "Withdrawal PIN saved. It is never sent to Pi." })
+  }
+
+  if (action === "change") {
+    if (!isValidPinFormat(body.currentPin) || !isValidPinFormat(body.newPin) || !isValidPinFormat(body.confirmPin)) {
+      return reply({ ok: false, error: "PIN_FORMAT_INVALID", message: "Use 6-digit numeric PINs." }, 400)
+    }
+    if (body.newPin !== body.confirmPin) return reply({ ok: false, error: "PIN_MISMATCH" }, 400)
+    const result = await changeWithdrawalPin({ userId: auth.userId, currentPin: body.currentPin, newPin: body.newPin })
+    if (!result.ok) {
+      const status =
+        result.error === "PIN_LOCKED" || result.error === "PIN_COOLDOWN" ? 423
+        : result.error === "PIN_NOT_CONFIGURED" ? 409
+        : result.error === "PIN_INVALID" ? 401
+        : result.error === "PIN_TOO_WEAK" || result.error === "PIN_UNCHANGED" || result.error === "PIN_FORMAT_INVALID" ? 400
+        : 503
+      return reply({ ok: false, error: result.error }, status)
+    }
+    return reply({ ok: true, changed: true, message: "Withdrawal PIN changed. It is never sent to Pi." })
   }
 
   if (action === "verify") {

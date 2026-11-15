@@ -5,6 +5,9 @@
 
 export interface MarketplaceCartItem {
   listingId: string
+  variantId?: string
+  variantSku?: string
+  variantLabel?: string
   quantity: number
   addedAt: number
   title: string
@@ -53,6 +56,9 @@ function normalizeCartItem(value: unknown): MarketplaceCartItem | null {
 
   return {
     listingId,
+    ...(boundedText(item.variantId, 80) ? { variantId: boundedText(item.variantId, 80) } : {}),
+    ...(boundedText(item.variantSku, 64) ? { variantSku: boundedText(item.variantSku, 64) } : {}),
+    ...(boundedText(item.variantLabel, 120) ? { variantLabel: boundedText(item.variantLabel, 120) } : {}),
     quantity: Math.min(MAX_QUANTITY, maxQuantity, Math.max(1, Math.floor(quantity))),
     addedAt,
     title,
@@ -71,8 +77,9 @@ function normalizeCart(value: unknown): MarketplaceCartItem[] {
   for (const raw of value.slice(0, MAX_CART_LINES * 2)) {
     const item = normalizeCartItem(raw)
     if (!item) continue
-    const existing = unique.get(item.listingId)
-    if (!existing) unique.set(item.listingId, item)
+    const lineKey = `${item.listingId}:${item.variantId || "legacy"}`
+    const existing = unique.get(lineKey)
+    if (!existing) unique.set(lineKey, item)
     else {
       const max = item.availability && item.availability > 0
         ? Math.min(MAX_QUANTITY, item.availability)
@@ -124,7 +131,7 @@ export function addMarketplaceCartItem(item: Omit<MarketplaceCartItem, "addedAt"
   const items = read()
   const candidate = normalizeCartItem({ ...item, addedAt: Date.now() })
   if (!candidate) return items
-  const index = items.findIndex((existing) => existing.listingId === candidate.listingId)
+  const index = items.findIndex((existing) => existing.listingId === candidate.listingId && (existing.variantId || "") === (candidate.variantId || ""))
   if (index >= 0) {
     const existing = items[index]
     const max = candidate.availability && candidate.availability > 0
@@ -143,12 +150,12 @@ export function addMarketplaceCartItem(item: Omit<MarketplaceCartItem, "addedAt"
   return read()
 }
 
-export function updateMarketplaceCartQuantity(listingId: string, quantity: number): MarketplaceCartItem[] {
+export function updateMarketplaceCartQuantity(listingId: string, quantity: number, variantId?: string): MarketplaceCartItem[] {
   const id = boundedText(listingId, 160)
   if (!id || !Number.isFinite(quantity)) return read()
   const items = read()
   const next = items.map((item) => {
-    if (item.listingId !== id) return item
+    if (item.listingId !== id || (item.variantId || "") !== (variantId || "")) return item
     const max = item.availability && item.availability > 0
       ? Math.min(MAX_QUANTITY, item.availability)
       : MAX_QUANTITY
@@ -183,5 +190,20 @@ export function removeMarketplaceCartItemsBySeller(sellerId: string): Marketplac
   if (!id) return read()
   const next = read().filter((item) => item.sellerId !== id)
   write(next)
+  return next
+}
+
+/** Phase 7: drop cart lines where the viewer is the seller (never checkout own inventory). */
+export function removeOwnSellerCartItems(viewerId: string): MarketplaceCartItem[] {
+  const uid = String(viewerId || "").trim()
+  if (!uid) return getMarketplaceCart()
+  const next = getMarketplaceCart().filter((item) => String(item.sellerId || "").trim() !== uid)
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(CART_KEY, JSON.stringify(next))
+    } catch {
+      /* ignore quota */
+    }
+  }
   return next
 }

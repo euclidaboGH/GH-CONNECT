@@ -8,6 +8,7 @@ const dash = read('components/ghc/unified-earnings-dashboard.tsx')
 const withdrawals = read('app/api/economy/earnings/withdrawals/route.ts')
 const quote = read('app/api/economy/earnings/quote/route.ts')
 const execute = read('app/api/economy/earnings/withdrawals/execute/route.ts')
+const withdrawSheet = read('components/ghc/pi-withdraw-sheet.tsx')
 const checks = [
   ['quote API exists', existsSync(join(root, 'app/api/economy/earnings/quote/route.ts'))],
   ['withdrawals request API exists', existsSync(join(root, 'app/api/economy/earnings/withdrawals/route.ts'))],
@@ -21,7 +22,7 @@ const checks = [
   ['structured quoteDetail card', /quoteDetail/.test(dash) && /Withdrawal quote/.test(dash)],
   ['3% fee copy', /3%/.test(dash)],
   ['linked wallet destination copy', /KYC/.test(dash) || /linked Pi wallet/.test(dash)],
-  ['payout success refreshes wallet', /ghc:wallet-refresh/.test(dash) && /payout-request/.test(dash)],
+  ['withdrawal completion refreshes wallet from the owning sheet', /ghc:wallet-refresh/.test(withdrawSheet) && /ghc:earnings-refresh/.test(withdrawSheet) && /onCompleted\?\.\(\)/.test(withdrawSheet) && /ghc:open-pi-withdraw/.test(dash)],
   ['phase 4 doc present', existsSync(join(root, 'docs/PHASE4_PI_WITHDRAW_KYC.md'))],
 ]
 let failed = 0

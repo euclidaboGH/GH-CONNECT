@@ -7,7 +7,12 @@ export function ageFromBornDate(bornDate: string | null | undefined, now = new D
   if (!bornDate || !/^\d{4}-\d{2}-\d{2}$/.test(bornDate)) return null
   const [y, m, d] = bornDate.split("-").map(Number)
   const birth = new Date(y, m - 1, d)
-  if (Number.isNaN(birth.getTime())) return null
+  if (
+    Number.isNaN(birth.getTime()) ||
+    birth.getFullYear() !== y ||
+    birth.getMonth() !== m - 1 ||
+    birth.getDate() !== d
+  ) return null
   let age = now.getFullYear() - birth.getFullYear()
   const md = now.getMonth() - birth.getMonth()
   if (md < 0 || (md === 0 && now.getDate() < birth.getDate())) age -= 1

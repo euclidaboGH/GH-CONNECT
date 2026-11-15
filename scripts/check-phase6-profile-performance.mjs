@@ -23,7 +23,7 @@ const checks = [
   ["profile timeline pagination is abortable", profileScreen.includes("timelineLoadMoreAbortRef") && profileScreen.includes("signal: controller.signal")],
   ["account changes cancel old timeline pagination", profileScreen.includes("profile/account transition invalidates pagination") && profileScreen.includes("timelineLoadMoreAbortRef.current?.abort()")],
   ["stale pagination responses cannot write into a different identity", profileScreen.includes("IdentityService.getCurrentUserId() !== meId")],
-  ["aborted pagination failures do not surface stale errors", profileScreen.includes("if (!controller.signal.aborted) setTimelineError")],
+  ["aborted pagination failures do not surface stale errors", profileScreen.includes("if (!controller.signal.aborted) {") && profileScreen.includes("setTimelineError(\"More posts could not be loaded. Please try again.\")")],
   ["identity overview reads canonical session identity", identityOverview.includes("IdentityService.getCurrentUserId()")],
   ["identity overview subscribes to account changes", identityOverview.includes("IdentityService.subscribe") && identityOverview.includes("setSnapshot(null)")],
   ["identity overview aborts superseded hydration requests", identityOverview.includes("requestRef.current?.abort()") && identityOverview.includes("signal: controller.signal")],

@@ -77,7 +77,7 @@ function saveJoined(ids: string[]) {
   }
 }
 
-export function ChallengeInline({ challenge }: { challenge: ChallengeView }) {
+export function ChallengeInline({ challenge, readOnly = false }: { challenge: ChallengeView; readOnly?: boolean }) {
   const [joined, setJoined] = useState(() => loadJoined().includes(challenge.id))
   const endsLabel = useMemo(() => `${challenge.days} day window`, [challenge.days])
 
@@ -115,7 +115,9 @@ export function ChallengeInline({ challenge }: { challenge: ChallengeView }) {
         Goal {challenge.target} × {challenge.metric} · {endsLabel}
       </p>
       <div className="mt-2 flex flex-wrap gap-2">
-        {!joined ? (
+        {readOnly ? (
+          <span className="rounded-full border border-border px-3 py-1.5 text-[11px] font-semibold text-muted-foreground">Preview only · participation unavailable</span>
+        ) : !joined ? (
           <button
             type="button"
             onClick={onJoin}
@@ -128,7 +130,7 @@ export function ChallengeInline({ challenge }: { challenge: ChallengeView }) {
             Joined
           </span>
         )}
-        <button
+        {!readOnly ? <button
           type="button"
           onClick={() => {
             try {
@@ -140,7 +142,7 @@ export function ChallengeInline({ challenge }: { challenge: ChallengeView }) {
           className="rounded-full border border-border px-3 py-1.5 text-[12px] font-semibold"
         >
           Open Missions
-        </button>
+        </button> : null}
       </div>
     </div>
   )

@@ -22,7 +22,7 @@ const checks = [
   ["forced-colors mode preserves focus and invalid-field affordances", css.includes("@media (forced-colors: active)") && css.includes("border: 2px solid Mark")],
   ["error-summary styling uses logical direction and semantic invalid state", css.includes("[data-gh-error-summary]") && css.includes('[aria-invalid="true"]') && css.includes("border-inline-start")],
   ["catalog version 7 requires fresh native and owner review", governance.includes('currentCatalogVersion: "7"') && i18n.includes('TRANSLATION_CATALOG_VERSION = "7"')],
-  ["accessibility regression gate is in prebuild and static verification", pkg.scripts["check:global-accessibility-phase10"] && pkg.scripts.prebuild.includes("check-global-accessibility-phase10") && pkg.scripts["verify:static"].includes("check-global-accessibility-phase10")],
+  ["accessibility regression gate is in prebuild and static verification", pkg.scripts["check:global-accessibility-phase10"] && pkg.scripts['prebuild:checks'].includes("check-global-accessibility-phase10") && pkg.scripts["verify:static"].includes("check-global-accessibility-phase10")],
 ]
 for (const [name, passed] of checks) { assert.equal(passed, true, name); console.log(`PASS ${name}`) }
 console.log(`Global accessibility Phase 10: ${checks.length}/${checks.length} passed`)

@@ -56,3 +56,32 @@ export function sortCommunityRows<T extends { name?: string; memberCount?: numbe
   }
   return copy
 }
+
+
+/** Prefer the server's explicit aggregate count over a partial member-ID projection. */
+export function communityMemberCount(row: { memberCount?: unknown; members?: unknown[] }): number {
+  const reported = Number(row.memberCount)
+  if (row.memberCount !== undefined && row.memberCount !== null && Number.isFinite(reported) && reported >= 0) {
+    return Math.floor(reported)
+  }
+  return Array.isArray(row.members) ? row.members.length : 0
+}
+
+/**
+ * Board and chat counters are independent lanes. `unreadCount` is a legacy chat
+ * fallback only; adding it to `chatUnread` double-counts the same messages.
+ */
+export function communityUnreadCount(row: {
+  boardUnread?: unknown
+  chatUnread?: unknown
+  unreadCount?: unknown
+}): number {
+  const nonNegative = (value: unknown): number => {
+    const count = Number(value)
+    return Number.isFinite(count) && count > 0 ? Math.floor(count) : 0
+  }
+  const chatValue = row.chatUnread !== undefined && row.chatUnread !== null
+    ? row.chatUnread
+    : row.unreadCount
+  return nonNegative(row.boardUnread) + nonNegative(chatValue)
+}

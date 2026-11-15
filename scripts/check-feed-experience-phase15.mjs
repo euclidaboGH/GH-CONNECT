@@ -19,7 +19,7 @@ const checks = [
   ["interstitials are suppressed in focus mode and non-personalized feeds", feed.includes('!focusMode && activeFilter === "for-you" && interstitialKindAt(index)')],
   ["feed and profile reuse the same composer component", feed.includes("<ComposerPromptBar")],
   ["release and lockfile metadata are synchronized", pkg.version === lock.version && lock.version === pkg.version && lock.packages?.[""]?.version === pkg.version && read("lib/app-release.ts").includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],
-  ["phase 15 gate is registered in prebuild and static verification", pkg.scripts.prebuild.includes("check-feed-experience-phase15") && pkg.scripts["verify:static"].includes("check-feed-experience-phase15")],
+  ["phase 15 gate is registered in prebuild and static verification", pkg.scripts['prebuild:checks'].includes("check-feed-experience-phase15") && pkg.scripts["verify:static"].includes("check-feed-experience-phase15")],
   ["no alternate publisher or new persistence authority was introduced", !composer.includes("createPost(") && !composer.includes("localStorage")],
 ]
 for (const [name, passed] of checks) { assert.equal(passed, true, name); console.log(`PASS ${name}`) }

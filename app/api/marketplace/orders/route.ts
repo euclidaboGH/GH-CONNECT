@@ -14,6 +14,8 @@ import {
   listOrdersForUserDurable,
   type ServerMarketOrder,
 } from "@/lib/server/marketplace/order-store"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
+import { humanizeMarketplaceOrderError } from "@/lib/server/marketplace/marketplace-integrity"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -21,8 +23,11 @@ export const dynamic = "force-dynamic"
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) {
-    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: { "Cache-Control": "no-store, private" } })
   }
+
+  const rateLimited = await enforceUserMutationRateLimit(auth.userId, "marketplace/orders:POST", 20, 60_000, { failClosed: true })
+  if (rateLimited) return rateLimited
 
   const parsed = await readBoundedJson(request, 16 * 1024)
   if (!parsed.ok) {
@@ -31,6 +36,7 @@ export async function POST(request: Request) {
   }
   const body = parsed.value
   const listingId = typeof body.listingId === "string" ? body.listingId.trim() : ""
+  const variantId = typeof body.variantId === "string" ? body.variantId.trim() : ""
   const rawQuantity = body.quantity
   const quantity = rawQuantity === undefined ? 1 : typeof rawQuantity === "number" ? rawQuantity : Number.NaN
   const idempotencyKey = String(request.headers.get("Idempotency-Key") || body.idempotencyKey || "").trim()
@@ -43,7 +49,7 @@ export async function POST(request: Request) {
   void body.totalAmount
   void body.price
 
-  if (!listingId || listingId.length > 160 || /[\u0000-\u001f\u007f]/.test(listingId)) {
+  if (!listingId || listingId.length > 160 || /[\u0000-\u001f\u007f]/.test(listingId) || variantId.length > 80 || /[\u0000-\u001f\u007f]/.test(variantId)) {
     return NextResponse.json({ ok: false, error: "listingId required" }, { status: 400 })
   }
   if (typeof quantity !== "number" || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 99) {
@@ -63,6 +69,7 @@ export async function POST(request: Request) {
     id: genOrderId(),
     listingId,
     listingTitle: "",
+    variantId: variantId || undefined,
     buyerId: auth.userId,
     sellerId: "",
     quantity,
@@ -84,10 +91,15 @@ export async function POST(request: Request) {
       created.error === "CANNOT_BUY_OWN" ? 400 :
       created.error === "INVALID_INPUT" || created.error === "UNSUPPORTED_CURRENCY" ? 400 :
       created.error === "IDEMPOTENCY_CONFLICT" ? 409 :
-      created.error === "LISTING_UNAVAILABLE" ? 409 : 503
+      created.error === "LISTING_UNAVAILABLE" || created.error === "VARIANT_SELECTION_REQUIRED" || created.error === "VARIANT_UNAVAILABLE" ? 409 : 503
     return NextResponse.json(
-      { ok: false, error: created.error, available: created.available },
-      { status, headers: { "Cache-Control": "no-store" } }
+      {
+        ok: false,
+        error: created.error,
+        available: created.available,
+        message: humanizeMarketplaceOrderError(created.error, created.available),
+      },
+      { status, headers: { "Cache-Control": "no-store, private" } }
     )
   }
 

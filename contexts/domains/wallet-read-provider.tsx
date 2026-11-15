@@ -25,7 +25,7 @@ import { fetchWalletV2, emptyWalletV2 } from "@/lib/domains/wallet-v2"
 
 export interface WalletReadProviderValue {
   snapshot: WalletReadSnapshot
-  refresh: () => void
+  refresh: () => Promise<boolean>
   /** Explicit: this provider cannot mutate finances */
   canMutateFinances: false
   mutationsAllowed: typeof WALLET_READ_SEAM_MUTATIONS
@@ -41,15 +41,16 @@ export function WalletReadProvider({ children }: { children: ReactNode }) {
   })
   const requestSequence = useRef(0)
   const activeRequest = useRef<AbortController | null>(null)
-  const refresh = useCallback(() => {
+  const refresh = useCallback(async (): Promise<boolean> => {
     const sequence = ++requestSequence.current
     activeRequest.current?.abort()
     const controller = new AbortController()
     activeRequest.current = controller
     const timeout = window.setTimeout(() => controller.abort(), 10_000)
     const local = readWalletSnapshot()
-    void fetchWalletV2({ signal: controller.signal }).then((wallet) => {
-      if (sequence !== requestSequence.current) return
+    try {
+      const wallet = await fetchWalletV2({ signal: controller.signal })
+      if (sequence !== requestSequence.current) return false
       setSnapshot({
         status: "ready",
         availableGhc: wallet.available,
@@ -64,8 +65,9 @@ export function WalletReadProvider({ children }: { children: ReactNode }) {
         escrowLocked: wallet.escrowLocked,
         reconciliation: wallet.reconciliation,
       })
-    }).catch(() => {
-      if (sequence !== requestSequence.current) return
+      return true
+    } catch {
+      if (sequence !== requestSequence.current) return false
       setSnapshot((previous) => {
         // Preserve the last server-confirmed values on transient failure, but
         // mark them stale. Never replace a known server snapshot with local cache.
@@ -82,10 +84,11 @@ export function WalletReadProvider({ children }: { children: ReactNode }) {
           reconciliation: emptyWalletV2().reconciliation,
         }
       })
-    }).finally(() => {
+      return false
+    } finally {
       window.clearTimeout(timeout)
       if (sequence === requestSequence.current) activeRequest.current = null
-    })
+    }
   }, [])
 
   useEffect(() => {
@@ -122,8 +125,18 @@ export function WalletReadProvider({ children }: { children: ReactNode }) {
     } catch {
       /* */
     }
-    const id = setInterval(refresh, 30000)
+    const onVisibility = () => {
+      if (document.visibilityState === "visible" && navigator.onLine) void refresh()
+    }
+    const onOnline = () => { if (document.visibilityState === "visible") void refresh() }
+    document.addEventListener("visibilitychange", onVisibility)
+    window.addEventListener("online", onOnline)
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible" && navigator.onLine) void refresh()
+    }, 30000)
     return () => {
+      document.removeEventListener("visibilitychange", onVisibility)
+      window.removeEventListener("online", onOnline)
       requestSequence.current += 1
       activeRequest.current?.abort()
       activeRequest.current = null
@@ -165,7 +178,7 @@ export function useWalletRead(): WalletReadProviderValue {
     const empty = emptyWalletV2()
     return {
       snapshot: { ...local, categories: empty.categories, ledgerBalance: null, escrowLocked: 0, reconciliation: empty.reconciliation },
-      refresh: () => {},
+      refresh: async () => false,
       canMutateFinances: false,
       mutationsAllowed: WALLET_READ_SEAM_MUTATIONS,
     }

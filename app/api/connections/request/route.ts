@@ -4,6 +4,7 @@
  * Does not replace session graph — dual-writes when DB available.
  */
 import { NextResponse } from "next/server"
+import { humanizeRelationshipError, sanitizeTargetUserId } from "@/lib/server/social/relationship-integrity"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { normalizeIntents } from "@/lib/connection-intents"
@@ -11,6 +12,7 @@ import { validateConnectionIntents } from "@/lib/domains/adapters/unified-connec
 import { nonDurableWriteResponse } from "@/lib/server/production-guard"
 import { emitSocialNotification } from "@/lib/server/social/notifications"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -21,6 +23,8 @@ export async function POST(req: Request) {
     if (!auth?.userId) {
       return NextResponse.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 })
     }
+    const __rateLimited = await enforceUserMutationRateLimit(auth.userId, "connections/request:POST", 60, 60_000, { failClosed: true })
+    if (__rateLimited) return __rateLimited
     const parsedBody = await readBoundedJson(req, 8 * 1024)
     if (!parsedBody.ok) {
       return NextResponse.json(

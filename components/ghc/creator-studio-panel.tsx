@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { BarChart3, RefreshCw, Sparkles, Wallet } from "lucide-react"
 import { UnifiedActivityCenter } from "./unified-activity-center"
+import { hasUnscopedLegacyPostDrafts, listPostDrafts, removePostDraft } from "@/lib/creator/post-drafts"
+import type { PostDraft } from "@/lib/ghc-types"
 
 type CreatorState = { exists?: boolean; tipsEnabled?: boolean; displayName?: string | null; tagline?: string | null }
 type PostRow = { id: string; content?: string; visibility?: string; community_id?: string | null; community_name?: string | null; like_count?: number; comment_count?: number; share_count?: number; view_count?: number; qualified_view_count?: number; upvote_count?: number; downvote_count?: number }
@@ -17,6 +19,8 @@ export function CreatorStudioPanel({ onClose }: { onClose?: () => void }) {
   const [loading, setLoading] = useState(true)
   const [creator, setCreator] = useState<CreatorState>({})
   const [posts, setPosts] = useState<PostRow[]>([])
+  const [drafts, setDrafts] = useState<PostDraft[]>([])
+  const [hasLegacyDrafts, setHasLegacyDrafts] = useState(false)
   const [rep, setRep] = useState<{ level?: number; levelName?: string; totalPoints?: number } | null>(null)
   const [economy, setEconomy] = useState<EconomyState | null>(null)
   const [creatorEconomy, setCreatorEconomy] = useState<CreatorEconomy | null>(null)
@@ -51,9 +55,10 @@ export function CreatorStudioPanel({ onClose }: { onClose?: () => void }) {
     finally { setLoading(false) }
   }, [])
 
-  useEffect(() => { void load() }, [load])
+  const refreshDrafts = useCallback(() => { setDrafts(listPostDrafts()); setHasLegacyDrafts(hasUnscopedLegacyPostDrafts()) }, [])
+  useEffect(() => { void load(); refreshDrafts() }, [load, refreshDrafts])
   useEffect(() => {
-    const refresh = () => void load()
+    const refresh = () => { refreshDrafts(); void load() }
     window.addEventListener("ghc:curation-updated", refresh)
     window.addEventListener("ghc:post-engagement", refresh)
     window.addEventListener("ghc:wallet-refresh", refresh)
@@ -62,7 +67,11 @@ export function CreatorStudioPanel({ onClose }: { onClose?: () => void }) {
       window.removeEventListener("ghc:post-engagement", refresh)
       window.removeEventListener("ghc:wallet-refresh", refresh)
     }
-  }, [load])
+  }, [load, refreshDrafts])
+  useEffect(() => {
+    window.addEventListener("ghc:post-drafts-changed", refreshDrafts)
+    return () => window.removeEventListener("ghc:post-drafts-changed", refreshDrafts)
+  }, [refreshDrafts])
 
   const filteredPosts = useMemo(() => {
     if (windowDays === "all") return posts
@@ -142,6 +151,20 @@ export function CreatorStudioPanel({ onClose }: { onClose?: () => void }) {
         <button type="button" disabled={busy} onClick={() => void enableStudio()} className="inline-flex min-h-10 items-center justify-center rounded-full bg-emerald-700 px-4 text-sm font-bold text-white hover:bg-emerald-800 disabled:opacity-50">{creator.exists ? "Save settings" : "Enable Creator Studio"}</button>
         {msg ? <p className="text-xs text-muted-foreground">{msg}</p> : null}
       </div>
+
+      <section className="rounded-2xl border border-border bg-card p-4" aria-label="Creator drafts">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div><h3 className="text-sm font-bold text-foreground">Your drafts</h3><p className="text-[10px] text-muted-foreground">Saved on this device · not published</p></div>
+          <span className="rounded-full bg-muted px-2.5 py-1 text-[10px] font-bold tabular-nums">{drafts.length}</span>
+        </div>
+        {drafts.length ? <ul className="space-y-2">{drafts.map((draft) => <li key={draft.id} className="flex min-w-0 items-center gap-2 rounded-xl border border-border/60 bg-muted/30 p-2.5">
+          <div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold text-foreground">{draft.content.trim() || (draft.images.length || draft.video ? "Media draft" : "Empty draft")}</p><p className="mt-0.5 text-[10px] text-muted-foreground">Edited {new Date(draft.lastEditedAt || draft.createdAt).toLocaleString()}</p></div>
+          <button type="button" onClick={() => { window.dispatchEvent(new CustomEvent("ghc:open-compose", { detail: { mode: "post", draftId: draft.id } })); onClose?.() }} className="min-h-9 shrink-0 rounded-full bg-primary px-3 text-[10px] font-bold text-primary-foreground">Open</button>
+          <button type="button" onClick={() => { removePostDraft(draft.id); refreshDrafts() }} aria-label="Delete draft" className="min-h-9 shrink-0 rounded-full border border-border px-3 text-[10px] font-semibold text-muted-foreground">Delete</button>
+        </li>)}</ul> : <p className="text-xs text-muted-foreground">No saved drafts for this account on this device yet. Drafts are not synced across devices.</p>}
+        {hasLegacyDrafts ? <p className="mt-2 rounded-lg border border-amber-500/25 bg-amber-500/5 p-2 text-[10px] leading-4 text-muted-foreground">Older drafts on this device have no recorded account owner, so they are not imported or shown here. This protects drafts from being exposed to a different account.</p> : null}
+        <p className="mt-3 text-[10px] leading-4 text-muted-foreground">Scheduled publishing is not enabled here. Review and publish drafts yourself; no post is published or scheduled automatically.</p>
+      </section>
 
       <div className="rounded-2xl border border-border bg-card p-4">
         <div className="mb-3 flex items-center justify-between"><p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Content performance</p><p className="text-[10px] text-muted-foreground">{totals.comments} comments · {totals.shares} shares</p></div>

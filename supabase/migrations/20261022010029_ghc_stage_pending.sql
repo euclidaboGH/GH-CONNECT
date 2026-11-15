@@ -10,12 +10,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_ghc_pending_user_ref
     AND status = 'pending'
     AND reference_id IS NOT NULL;
 
--- Idempotency: one posted earned credit per (user_id, reference_id)
-CREATE UNIQUE INDEX IF NOT EXISTS uq_ghc_earned_user_ref
-  ON public.ghc_transactions (user_id, reference_id)
-  WHERE kind = 'earned'
-    AND status = 'posted'
-    AND reference_id IS NOT NULL;
+-- Posted earned-credit idempotency is already enforced by the equivalent
+-- uq_ghc_earned_posted_ref index from migration 20261022010009.
 
 CREATE OR REPLACE FUNCTION public.ghc_stage_pending(
   p_user_id text,

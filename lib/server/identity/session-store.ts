@@ -19,6 +19,9 @@ export const SESSION_ABSOLUTE_TTL_MS = 14 * 24 * 60 * 60 * 1000
 /** Idle timeout (ms) — 7 days without activity */
 export const SESSION_IDLE_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
+/** Hard cap on concurrent active sessions per account (Phase 4 identity integrity) */
+export const SESSION_MAX_ACTIVE_PER_USER = 8
+
 /** How often we persist last_seen touch to DB (ms) — reduce write load */
 const TOUCH_MIN_INTERVAL_MS = 5 * 60 * 1000
 
@@ -270,6 +273,33 @@ export async function createSession(input: {
       const revoked = { ...existing, revokedAt: t }
       memByHash.set(hash, revoked)
       memById.set(existing.id, revoked)
+    }
+  }
+
+  // Phase 4: enforce concurrent session ceiling (oldest active first)
+  {
+    const active = (await listSessionsForUser(ghUserId)).filter(
+      (s) => s.revokedAt == null && !isExpired(s)
+    )
+    if (active.length >= SESSION_MAX_ACTIVE_PER_USER) {
+      const overflow = active
+        .slice()
+        .sort((a, b) => a.lastSeenAt - b.lastSeenAt)
+        .slice(0, Math.max(0, active.length - SESSION_MAX_ACTIVE_PER_USER + 1))
+      for (const old of overflow) {
+        if (dbConfigured()) {
+          const persisted = await dbPatch(old.id, { revoked_at: new Date(t).toISOString() })
+          if (!persisted) throw new Error("SESSION_REVOCATION_UNAVAILABLE")
+        }
+        const revoked = { ...old, revokedAt: t }
+        memById.set(old.id, revoked)
+        memByHash.set(old.tokenHash, revoked)
+      }
+      console.info("[session] SESSION_CAP_ENFORCED", {
+        userId: ghUserId,
+        revoked: overflow.length,
+        cap: SESSION_MAX_ACTIVE_PER_USER,
+      })
     }
   }
 
@@ -672,6 +702,62 @@ export async function revokeOtherSessionsForUser(
   }
   console.info("[session] SESSIONS_REVOKED", { userId: uid, count, kept: keep.slice(0, 8) })
   return count
+}
+
+
+/**
+ * Phase 4: rotate session token after step-up / privilege elevation.
+ * Revokes the previous token hash and issues a fresh opaque token for the same session id
+ * only when the caller presents the current raw token. Returns null if rotation is unavailable.
+ */
+export async function rotateSession(input: {
+  rawToken: string
+  userAgent?: string | null
+}): Promise<IssuedSession | null> {
+  const raw = String(input.rawToken || "").trim()
+  if (!raw) return null
+  const current = await validateSession(raw, { touch: false })
+  if (!current || current.revokedAt != null || isExpired(current)) return null
+
+  const t = now()
+  const newRaw = newRawToken()
+  const newHash = hashToken(newRaw)
+  const uaHash = hashUserAgent(input.userAgent) ?? current.userAgentHash
+  const deviceLabel = deriveDeviceLabel(input.userAgent) || current.deviceLabel || "Device"
+
+  const rotated: SessionRecord = {
+    ...current,
+    tokenHash: newHash,
+    lastSeenAt: t,
+    expiresAt: t + SESSION_IDLE_TTL_MS,
+    userAgentHash: uaHash,
+    deviceLabel,
+  }
+
+  if (dbConfigured()) {
+    // Revoke old hash row identity by patching token_hash if schema allows; else revoke + create
+    const persisted = await dbPatch(current.id, {
+      token_hash: newHash,
+      last_seen_at: new Date(t).toISOString(),
+      expires_at: new Date(t + SESSION_IDLE_TTL_MS).toISOString(),
+      user_agent_hash: uaHash,
+      meta: { deviceLabel },
+    })
+    if (!persisted) {
+      // Fail closed: do not leave dual-valid tokens
+      console.error("[session] SESSION_ROTATION_UNAVAILABLE")
+      return null
+    }
+  }
+
+  memByHash.delete(current.tokenHash)
+  memByHash.set(newHash, rotated)
+  memById.set(rotated.id, rotated)
+  console.info("[session] SESSION_ROTATED", {
+    userId: rotated.ghUserId,
+    sessionId: rotated.id.slice(0, 8),
+  })
+  return { rawToken: newRaw, record: rotated }
 }
 
 export function _resetSessionStoreForTests() {

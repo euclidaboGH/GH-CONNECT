@@ -5,8 +5,8 @@
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { readGhcServerEnv } from "@/lib/server/economy/env"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit } from "@/lib/server/security/control-plane"
+import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -38,19 +38,27 @@ function publicIdentityPayload(value: unknown, row: Record<string, unknown>) {
   const privacy = payload.privacySettings && typeof payload.privacySettings === "object"
     ? payload.privacySettings as Record<string, unknown>
     : payload.privacy && typeof payload.privacy === "object" ? payload.privacy as Record<string, unknown> : {}
-  const visibility = privacy.profileVisibility
-  if (visibility === "hidden" || visibility === "matches-only") return null
+  const visibility = String(privacy.profileVisibility ?? payload.profileVisibility ?? "everyone").toLowerCase()
+  const whoCanDiscover = String(privacy.whoCanDiscover ?? payload.whoCanDiscover ?? "everyone").toLowerCase()
+  // The database RPC is authoritative for matches-only eligibility. This
+  // projection is a second fail-closed boundary for legacy/root-level settings
+  // and for any future RPC regression: never return an opted-out identity.
+  if (["hidden", "private", "no-one", "no_one"].includes(visibility)) return null
+  if (["hidden", "private", "no-one", "no_one"].includes(whoCanDiscover)) return null
+  const locationVisible = privacy.showLocation !== false && privacy.locationPrivacy !== "hidden"
+  const interestsVisible = privacy.showInterests !== false
+  const bioVisible = privacy.showBio !== false
 
   const rawProfessional = payload.professional && typeof payload.professional === "object" && !Array.isArray(payload.professional)
     ? payload.professional as Record<string, unknown> : null
   const rawBusiness = payload.business && typeof payload.business === "object" && !Array.isArray(payload.business)
     ? payload.business as Record<string, unknown> : null
-  const showProfession = !(rawProfessional && rawProfessional.contactPreferences && typeof rawProfessional.contactPreferences === "object" && (rawProfessional.contactPreferences as Record<string, unknown>).showProfessionOnSocial === false)
+  const showProfession = privacy.showProfessional !== false && !(rawProfessional && rawProfessional.contactPreferences && typeof rawProfessional.contactPreferences === "object" && (rawProfessional.contactPreferences as Record<string, unknown>).showProfessionOnSocial === false)
   const professional = rawProfessional && showProfession
     ? {
       title: safeText(rawProfessional.title, 100), about: safeText(rawProfessional.about, 600),
       skills: safeList(rawProfessional.skills, 8, 48), services: safeList(rawProfessional.services, 6, 80),
-      professionalInterests: privacy.showInterests === false ? [] : safeList(rawProfessional.professionalInterests, 8, 64),
+      professionalInterests: interestsVisible ? safeList(rawProfessional.professionalInterests, 8, 64) : [],
       experience: (Array.isArray(rawProfessional.experience) ? rawProfessional.experience : []).slice(0, 3).flatMap((entry) => {
         if (!entry || typeof entry !== "object" || Array.isArray(entry)) return []
         const item = entry as Record<string, unknown>
@@ -64,13 +72,13 @@ function publicIdentityPayload(value: unknown, row: Record<string, unknown>) {
         if (!title) return []
         return [{ title, description: safeText(item.description, 180), url: safeHttpsUrl(item.url), mediaUrl: safeHttpsUrl(item.mediaUrl) }]
       }),
-      locationLabel: privacy.showLocation === false ? undefined : safeText(rawProfessional.locationLabel, 90),
+      locationLabel: locationVisible ? safeText(rawProfessional.locationLabel, 90) : undefined,
       // Never project client-controlled verification flags or private contact preferences.
     } : null
   const business = rawBusiness ? {
     businessName: safeText(rawBusiness.businessName, 100), category: safeText(rawBusiness.category, 80),
     about: safeText(rawBusiness.about, 600), services: safeList(rawBusiness.services, 6, 80),
-    locationLabel: privacy.showLocation === false ? undefined : safeText(rawBusiness.locationLabel, 90),
+    locationLabel: locationVisible ? safeText(rawBusiness.locationLabel, 90) : undefined,
     hours: safeText(rawBusiness.hours, 90),
     // Verification is not projected from profile payload; it requires a trusted verification service.
   } : null
@@ -81,7 +89,10 @@ function publicIdentityPayload(value: unknown, row: Record<string, unknown>) {
     profession: showProfession ? safeText(professional?.title || row.profession, 100) : undefined,
     professional: professional || undefined,
     business: business || undefined,
-    skills: professional ? safeList(rawProfessional?.skills, 8, 48) : [],
+    skills: professional && interestsVisible ? safeList(rawProfessional?.skills, 8, 48) : [],
+    locationVisible,
+    interestsVisible,
+    bioVisible,
   }
 }
 
@@ -91,105 +102,60 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
 
-  const rl = checkRateLimit(`people-discover:${auth.userId}`, 30, 60_000)
-  if (!rl.ok) {
-    return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429 })
+  const rl = await checkDurableRateLimit(`people-discover:${auth.userId}`, 30, 60_000, { onUnavailable: "deny" })
+  if (!rl.ok) return NextResponse.json({ ok: false, error: "RATE_LIMITED", retryAfterSec: rl.retryAfterSec }, { status: rl.unavailable ? 503 : 429, headers: { "Cache-Control": "no-store", "Retry-After": String(rl.retryAfterSec) } })
+
+  const url = new URL(request.url)
+  const limit = Math.min(40, Math.max(1, Number(url.searchParams.get("limit") || 30) || 30))
+  const query = safeText(url.searchParams.get("q"), 80)
+  const beforeUpdatedAt = url.searchParams.get("beforeUpdatedAt")
+  const beforeUserId = url.searchParams.get("beforeUserId")
+  if (Boolean(beforeUpdatedAt) !== Boolean(beforeUserId) || (beforeUpdatedAt && (!Number.isFinite(Date.parse(beforeUpdatedAt)) || beforeUpdatedAt.length > 40)) || (beforeUserId && beforeUserId.length > 180)) {
+    return NextResponse.json({ ok: false, error: "INVALID_CURSOR" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+  }
+  if (!socialDbConfigured()) return NextResponse.json({ ok: false, durable: false, people: [], error: "SOCIAL_DB_UNAVAILABLE" }, { status: 503, headers: { "Cache-Control": "no-store" } })
+
+  // The database function applies blocks, follows, pending connections, prior passes,
+  // profile visibility and discovery preferences before any profile data is returned.
+  const result = await socialRpc("gh_discovery_candidates", {
+    p_actor_id: auth.userId,
+    p_limit: limit,
+    p_before_updated_at: beforeUpdatedAt || null,
+    p_before_user_id: beforeUserId || null,
+    p_query: query || null,
+  })
+  if (!result.ok || !Array.isArray(result.data)) {
+    return NextResponse.json({ ok: false, durable: false, people: [], error: "DISCOVERY_UNAVAILABLE" }, { status: 503, headers: { "Cache-Control": "no-store" } })
   }
 
-  const limit = Math.min(
-    40,
-    Math.max(1, Number(new URL(request.url).searchParams.get("limit") || 30) || 30)
-  )
-
-  const env = readGhcServerEnv()
-  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
-    return NextResponse.json({
-      ok: true,
-      durable: false,
-      people: [],
-      message: "SOCIAL_DB_UNAVAILABLE",
-    })
-  }
-
-  try {
-    const base = env.supabaseUrl.replace(/\/$/, "")
-    // Prefer onboarded profiles; exclude actor
-    // All registered profiles (not only onboarded=true) so new KYC'd users appear
-    const url =
-      `${base}/rest/v1/gh_user_profiles` +
-      `?gh_user_id=neq.${encodeURIComponent(auth.userId)}` +
-      `&select=gh_user_id,display_name,username,bio,photos,city,country,profession,skills,interests,profile_payload,updated_at,onboarded` +
-      `&order=updated_at.desc` +
-      `&limit=${limit}`
-
-    const res = await fetch(url, {
-      headers: {
-        apikey: env.supabaseServiceRoleKey,
-        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-        Accept: "application/json",
-      },
-      cache: "no-store",
-    })
-
-    if (!res.ok) {
-      const text = await res.text().catch(() => "")
-      return NextResponse.json(
-        {
-          ok: false,
-          durable: false,
-          people: [],
-          error: "QUERY_FAILED",
-          detail: text.slice(0, 160),
-        },
-        { status: 503 }
-      )
+  const rows = result.data as Array<Record<string, unknown>>
+  const people = rows.flatMap((row) => {
+    const publicIdentity = publicIdentityPayload(row.profile_payload, row)
+    if (!publicIdentity) return []
+    const { locationVisible, interestsVisible, bioVisible, ...identityPayload } = publicIdentity
+    const photos = row.photos
+    let avatar = ""
+    if (Array.isArray(photos) && photos.length > 0) avatar = String(photos[0] || "")
+    else if (typeof photos === "string") {
+      try { const parsed = JSON.parse(photos); if (Array.isArray(parsed) && parsed[0]) avatar = String(parsed[0]) } catch { /* invalid legacy photo JSON */ }
     }
-
-    const rows = (await res.json().catch(() => [])) as Array<Record<string, unknown>>
-    const people = (Array.isArray(rows) ? rows : []).flatMap((row) => {
-      const publicIdentity = publicIdentityPayload(row.profile_payload, row)
-      if (!publicIdentity) return []
-      const photos = row.photos
-      let avatar = ""
-      if (Array.isArray(photos) && photos.length > 0) avatar = String(photos[0] || "")
-      else if (typeof photos === "string") {
-        try {
-          const parsed = JSON.parse(photos)
-          if (Array.isArray(parsed) && parsed[0]) avatar = String(parsed[0])
-        } catch {
-          /* */
-        }
-      }
-      return [{
-        userId: String(row.gh_user_id || ""),
-        displayName: String(row.display_name || row.username || "Member"),
-        username: row.username ? String(row.username) : "",
-        bio: row.bio ? String(row.bio) : "",
-        avatarUrl: avatar,
-        city: row.city ? String(row.city) : "",
-        country: row.country ? String(row.country) : "",
-        interests: Array.isArray(row.interests)
-          ? (row.interests as unknown[]).map(String).slice(0, 12)
-          : [],
-        ...publicIdentity,
-        onboarded: row.onboarded === true,
-      }]
-    }).filter((p) => p.userId)
-
-    return NextResponse.json({
-      ok: true,
-      durable: true,
-      people,
-    })
-  } catch (e) {
-    return NextResponse.json(
-      {
-        ok: false,
-        durable: false,
-        people: [],
-        error: e instanceof Error ? e.message : "discover_failed",
-      },
-      { status: 500 }
-    )
-  }
+    return [{
+      userId: String(row.gh_user_id || ""),
+      displayName: safeText(row.display_name || row.username || "Member", 100) || "Member",
+      username: safeText(row.username, 60) || "",
+      bio: bioVisible ? safeText(row.bio, 600) || "" : "",
+      avatarUrl: safeHttpsUrl(avatar) || "",
+      city: locationVisible ? safeText(row.city, 80) || "" : "",
+      country: locationVisible ? safeText(row.country, 80) || "" : "",
+      interests: interestsVisible ? safeList(row.interests, 12, 64) : [],
+      ...identityPayload,
+      onboarded: row.onboarded === true,
+      updatedAt: typeof row.updated_at === "string" ? row.updated_at : null,
+    }]
+  }).filter((person) => person.userId)
+  const last = rows[rows.length - 1]
+  const nextCursor = last && rows.length === limit && last.updated_at && last.gh_user_id
+    ? { beforeUpdatedAt: String(last.updated_at), beforeUserId: String(last.gh_user_id) }
+    : null
+  return NextResponse.json({ ok: true, durable: true, people, nextCursor }, { headers: { "Cache-Control": "private, no-store" } })
 }

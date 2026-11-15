@@ -7,7 +7,7 @@ const read = (file) => readFileSync(join(root, file), 'utf8')
 const pkg = JSON.parse(read('package.json'))
 const lock = JSON.parse(read('package-lock.json'))
 const release = read('lib/app-release.ts')
-const prebuild = pkg.scripts?.prebuild ?? ''
+const prebuild = pkg.scripts?.['prebuild:checks'] ?? ''
 const migrations = readdirSync(join(root, 'supabase/migrations')).filter((name) => name.endsWith('.sql'))
 const manifest = read('VERIFIED_MANIFEST.txt')
 const checks = [

@@ -26,6 +26,9 @@ import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { splitMarketplaceCommission } from "@/lib/server/marketplace/commission"
 import { appendVerifiedCompanyRevenueEvent } from "@/lib/server/revenue/revenue-event"
 import { attachLedgerCorrelation, buildCorrelationEnvelope } from "@/lib/server/economy/correlation"
+import { parseGhcSpendRpcResult } from "@/lib/server/economy/spend-rpc-contract"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
+import { notifyMarketplaceOrderPaid } from "@/lib/server/notifications/unified"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -123,24 +126,10 @@ async function rpcGhcSpend(input: {
       }
     )
     const data = await res.json().catch(() => null)
-    if (!res.ok) {
-      const err =
-        data && typeof data === "object" && "message" in data
-          ? String((data as { message: string }).message)
-          : "SPEND_FAILED"
-      return { ok: false, error: err }
-    }
-    if (data && typeof data === "object" && (data as { ok?: boolean }).ok === false) {
-      return {
-        ok: false,
-        error: String((data as { error?: string }).error || "SPEND_FAILED"),
-      }
-    }
-    return {
-      ok: true,
-      idempotent: Boolean(data && (data as { idempotent?: boolean }).idempotent),
-      tx: data,
-    }
+    if (!res.ok) return { ok: false, error: "SPEND_FAILED" }
+    const result = parseGhcSpendRpcResult(data, input)
+    if (!result.ok) return { ok: false, error: result.error }
+    return { ok: true, idempotent: result.idempotent, tx: result.tx }
   } catch {
     return { ok: false, error: "SPEND_FAILED" }
   }
@@ -154,6 +143,8 @@ export async function POST(
   if (!auth) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
+  const __rateLimited = await enforceUserMutationRateLimit(auth.userId, "marketplace/orders/[orderId]/pay:POST", 12, 60_000, { failClosed: true })
+  if (__rateLimited) return __rateLimited
 
   const { orderId } = await ctx.params
   const order = await loadOrder(orderId)
@@ -174,6 +165,7 @@ export async function POST(
       order.status === "fulfilling" ||
       order.status === "completed")
   ) {
+    await notifyMarketplaceOrderPaid({ order, actorUserId: auth.userId, paymentMethod: "ghc" })
     return NextResponse.json({ ok: true, order, idempotent: true, recovered: true })
   }
 
@@ -216,8 +208,9 @@ export async function POST(
         verifiedAt: priorIntent.completedAt ? new Date(priorIntent.completedAt).toISOString() : "",
       })
       const refreshedOrder = await loadOrder(order.id)
+      await notifyMarketplaceOrderPaid({ order: refreshedOrder || order, actorUserId: auth.userId, paymentIntentId: priorIntent.id, paymentMethod: "pi" })
       if (isRevenueReconciliationPending(commission)) return reconciliationPendingResponse(refreshedOrder || order, commission)
-      return NextResponse.json({ ok: true, order: refreshedOrder || order, idempotent: true, recovered: true, commission, durableOrders: marketplaceOrdersDurable() }, { headers: { "Cache-Control": "no-store" } })
+    return NextResponse.json({ ok: true, order: refreshedOrder || order, idempotent: true, recovered: true, commission, durableOrders: marketplaceOrdersDurable() }, { headers: { "Cache-Control": "no-store" } })
     }
     return NextResponse.json({ ok: false, error: "PAYMENT_VERIFIED_RECONCILIATION_REQUIRED", retryable: true }, { status: 503, headers: { "Cache-Control": "no-store" } })
   }
@@ -325,8 +318,15 @@ export async function POST(
       if (spendError === "INSUFFICIENT_BALANCE") {
         await releaseOrderPaymentClaim(order.id, auth.userId, spendError)
       }
-      const status = spendError === "INSUFFICIENT_BALANCE" ? 402 : 400
-      return NextResponse.json({ ok: false, error: spendError }, { status })
+      const status = spendError === "INSUFFICIENT_BALANCE"
+        ? 402
+        : spendError === "IDEMPOTENCY_CONFLICT"
+          ? 409
+          : 503
+      return NextResponse.json(
+        { ok: false, error: spendError, retryable: status === 503 },
+        { status, headers: { "Cache-Control": "no-store", "Retry-After": status === 503 ? "5" : "0" } },
+      )
     }
 
     order.paymentMethod = "ghc"
@@ -358,6 +358,7 @@ export async function POST(
       paymentMethod: "ghc",
       buyerId: order.buyerId,
     })
+    await notifyMarketplaceOrderPaid({ order, actorUserId: auth.userId, paymentMethod: "ghc" })
     return NextResponse.json({
       ok: true,
       order: await loadOrder(order.id),
@@ -463,6 +464,7 @@ export async function POST(
       verifiedAt: intent.completedAt ? new Date(intent.completedAt).toISOString() : "",
     })
     const refreshedOrder = await loadOrder(order.id)
+    await notifyMarketplaceOrderPaid({ order: refreshedOrder || order, actorUserId: auth.userId, paymentIntentId: intent.id, paymentMethod: "pi" })
     if (isRevenueReconciliationPending(commission)) return reconciliationPendingResponse(refreshedOrder || order, commission)
     return NextResponse.json({
       ok: true,

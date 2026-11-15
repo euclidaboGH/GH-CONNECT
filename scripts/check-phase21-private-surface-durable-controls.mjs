@@ -26,7 +26,7 @@ for (const route of criticalRoutes) {
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 const packageLock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8'))
 if (packageJson.version !== packageLock.version || packageJson.version !== packageLock.packages?.['']?.version) failures.push('package and lockfile versions disagree')
-for (const pipeline of ['prebuild', 'verify:static']) {
+for (const pipeline of ['prebuild:checks', 'verify:static']) {
   const script = packageJson.scripts?.[pipeline] || ''
   if (!script.includes('check-phase21-private-surface-durable-controls.mjs')) failures.push(`${pipeline}: Phase 21 durable-control gate is not registered`)
 }

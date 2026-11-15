@@ -32,7 +32,7 @@ const checks = [
   ['deletion endpoint explicitly does not execute destructive deletion', /deletionExecuted: false/.test(lifecycleRoute)],
   ['shared image primitive resolves private facade URLs and reacts to session changes', /resolveDisplayMediaUrl/.test(durableImage) && /ghc:media-session-change/.test(durableImage)],
   ['shared video primitive preserves native media events and forwards ref', /VideoHTMLAttributes/.test(durableVideo) && /forwardRef/.test(durableVideo) && /ghc:media-session-change/.test(durableVideo)],
-  ['story viewer uses canonical private facade URLs for both media types', /DurableVideo key=\{viewing\.id\} src=\{viewing\.media\.url\}/.test(story) && /DurableImage src=\{viewing\.media\.url\}/.test(story)],
+  ['story viewer uses canonical private facade URLs for both media types', /DurableVideo ref=\{storyVideoRef\} key=\{viewing\.id\} src=\{viewing\.media\.url\}/.test(story) && /DurableImage src=\{viewing\.media\.url\}/.test(story)],
   ['short-video player retains video ref and lifecycle events through shared resolver', /DurableVideo/.test(shortVideo) && /ref=\{videoRef\}/.test(shortVideo) && /onTimeUpdate/.test(shortVideo)],
   ['full-screen lightbox re-resolves after account changes', /ghc:media-session-change/.test(lightbox) && /viewerEpoch/.test(lightbox) && /current\?\.url, viewerEpoch/.test(lightbox)],
   ['high-value dynamic image surfaces use the shared private-media component', imageSurfaces.every((name) => /<DurableImage/.test(read(`components/ghc/${name}.tsx`)))],

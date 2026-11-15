@@ -19,6 +19,7 @@ import { LazyImage } from "./lazy-image"
 import { downloadMedia } from "@/lib/media/download-media"
 import { prefetchStoryMediaUrls } from "@/lib/media/prefetch-story-media"
 import { prefersReducedMotion } from "@/lib/ui/prefers-reduced-motion"
+import { a11y } from "@/lib/accessibility"
 
 type StoryMode = "choose" | "text" | "camera"
 type StoryViewerRecord = Record<string, unknown>
@@ -123,6 +124,7 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
   const [audience, setAudience] = useState<StoryAudience>("followers")
   const [audienceOpen, setAudienceOpen] = useState(false)
   const [publishing, setPublishing] = useState(false)
+  const pendingStoryRequestRef = useRef<{ id: string; signature: string } | null>(null)
   const [uploading, setUploading] = useState<"image" | "video" | null>(null)
   const [cameraOpen, setCameraOpen] = useState(false)
   const [cameraError, setCameraError] = useState("")
@@ -143,6 +145,7 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
   const cameraVideoRef = useRef<HTMLVideoElement>(null)
   const cameraStreamRef = useRef<MediaStream | null>(null)
   const cameraCanvasRef = useRef<HTMLCanvasElement>(null)
+  const storyVideoRef = useRef<HTMLVideoElement>(null)
   const touchStartX = useRef<number | null>(null)
 
   useEffect(() => {
@@ -193,6 +196,8 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
 
   useEffect(() => {
     if (!viewing) return
+    const root = document.querySelector('[data-gh-story-viewer="true"]') as HTMLElement | null
+    const release = root ? a11y.createFocusTrap(root) : () => undefined
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setViewing(null)
       if (event.key === "ArrowRight") navigateStory(1)
@@ -204,6 +209,7 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
     return () => {
       window.removeEventListener("keydown", handleKey)
       document.body.style.overflow = previousOverflow
+      release()
     }
     // navigation is stable for this view's queue
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -217,11 +223,35 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
     setCreatorOpen(true)
   }
 
-  const closeCreator = () => {
+  const closeCreator = useCallback(() => {
     stopCamera()
     setCreatorOpen(false)
     setCameraError("")
-  }
+  }, [stopCamera])
+
+  useEffect(() => {
+    if (!creatorOpen) return
+    const root = document.querySelector('[data-gh-story-creator="true"]') as HTMLElement | null
+    const release = root ? a11y.createFocusTrap(root) : () => undefined
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !publishing && !uploading) {
+        event.preventDefault()
+        closeCreator()
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => {
+      window.removeEventListener("keydown", onKeyDown)
+      release()
+    }
+  }, [creatorOpen, publishing, uploading, closeCreator])
+
+  useEffect(() => {
+    const video = storyVideoRef.current
+    if (!video || viewing?.media?.type !== "video") return
+    if (viewerPaused) video.pause()
+    else void video.play().catch(() => undefined)
+  }, [viewerPaused, viewing?.id, viewing?.media?.type])
 
   useEffect(() => {
     if (!creatorHost) return
@@ -336,8 +366,17 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
       const publishMedia = media
         ? { type: media.type, url: media.url }
         : undefined
+      const requestSignature = JSON.stringify({ text: cleanText, media: publishMedia, background: media ? null : background, audience })
+      if (pendingStoryRequestRef.current && pendingStoryRequestRef.current.signature !== requestSignature) {
+        pendingStoryRequestRef.current = null
+      }
+      const randomPart = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID().replace(/-/g, "")
+        : `${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`
+      const requestId = pendingStoryRequestRef.current?.id || `story_${now.toString(36)}_${randomPart}`
+      pendingStoryRequestRef.current = { id: requestId, signature: requestSignature }
       const next: StoryItem = {
-        id: `story-${now}`,
+        id: requestId,
         ownerId: "current-user",
         name: profile.displayName || "You",
         photo: profile.photos?.[0],
@@ -363,6 +402,7 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
         addToast?.(result.error || "Your story is saved locally, but the server did not confirm it. It may not be visible to other people yet.", "error")
         return
       }
+      pendingStoryRequestRef.current = null
       closeCreator()
       addToast?.("Your story is live · expires in 24 hours", "success")
     } catch {
@@ -575,7 +615,7 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
   )
 
   const creator = creatorOpen ? (
-    <div className="fixed inset-0 z-[220] flex flex-col bg-[#07110f] text-white" role="dialog" aria-modal="true" aria-label="Create a story">
+    <div data-gh-story-creator="true" className="fixed inset-0 z-[220] flex flex-col bg-[#07110f] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-white" role="dialog" aria-modal="true" aria-label="Create a story">
       <header className="flex shrink-0 items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <button type="button" onClick={closeCreator} className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 transition hover:bg-white/20" aria-label="Close story creator"><X size={20} /></button>
         <div className="min-w-0 text-center"><p className="text-sm font-bold tracking-wide">Create a story</p><p className="text-[11px] text-white/55">A moment that disappears in 24 hours</p></div>
@@ -608,7 +648,7 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
   ) : null
 
   const viewer = viewing ? (
-    <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black text-white" role="dialog" aria-modal="true" aria-label={`${viewing.name || "Member"}'s story`} onClick={() => setViewing(null)} onTouchStart={(e) => { touchStartX.current = e.touches[0]?.clientX ?? null }} onTouchEnd={(e) => { if (touchStartX.current == null) return; const delta = (e.changedTouches[0]?.clientX ?? touchStartX.current) - touchStartX.current; if (Math.abs(delta) > 65) navigateStory(delta < 0 ? 1 : -1); touchStartX.current = null }}>
+    <div data-gh-story-viewer="true" className="fixed inset-0 z-[85] flex items-center justify-center bg-black pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-white" role="dialog" aria-modal="true" aria-label={`${viewing.name || "Member"}'s story`} onClick={() => setViewing(null)} onTouchStart={(e) => { touchStartX.current = e.touches[0]?.clientX ?? null }} onTouchEnd={(e) => { if (touchStartX.current == null) return; const delta = (e.changedTouches[0]?.clientX ?? touchStartX.current) - touchStartX.current; if (Math.abs(delta) > 65) navigateStory(delta < 0 ? 1 : -1); touchStartX.current = null }}>
       <div className="absolute inset-x-0 top-0 z-20 space-y-2.5 bg-gradient-to-b from-black/70 via-black/35 to-transparent p-3 pb-6 sm:px-6 sm:pt-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex min-w-0 flex-1 gap-1">
           {queue.map((item) => {
@@ -641,11 +681,9 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
               {viewing.audience ? ` · ${viewing.audience}` : ""}
             </p>
           </div>
-          {viewing.media?.type !== "video" ? (
-            <button type="button" onClick={() => setViewerPaused((paused) => !paused)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/35" aria-label={viewerPaused ? "Resume story" : "Pause story"}>
-              {viewerPaused ? <Play size={17} /> : <Pause size={17} />}
-            </button>
-          ) : null}
+          <button type="button" onClick={() => setViewerPaused((paused) => !paused)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/35" aria-label={viewerPaused ? "Resume story" : "Pause story"}>
+            {viewerPaused ? <Play size={17} /> : <Pause size={17} />}
+          </button>
           {viewing.media?.url ? (
             <button
               type="button"
@@ -665,7 +703,7 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
         </div>
       </div>
       <div className="relative flex h-full w-full max-w-5xl items-center justify-center sm:px-14" onClick={(e) => e.stopPropagation()}>
-        {viewing.media?.url ? <div className="absolute inset-0 sm:inset-y-4 sm:rounded-[1.7rem] sm:bg-[#101010]" onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); void downloadMedia(viewing.media!.url, { kind: viewing.media?.type === "video" ? "video" : "image" }) }} onPointerDown={(e) => { if (e.button !== 0) return; if ((e.target as HTMLElement).closest("button, video")) return; const el = e.currentTarget; const timer = window.setTimeout(() => { void downloadMedia(viewing.media!.url, { kind: viewing.media?.type === "video" ? "video" : "image" }); try { if ("vibrate" in navigator) navigator.vibrate(10) } catch { /* */ } }, 550); const clear = () => window.clearTimeout(timer); el.addEventListener("pointerup", clear, { once: true }); el.addEventListener("pointercancel", clear, { once: true }) }}>{viewing.media.type === "video" ? <DurableVideo key={viewing.id} src={viewing.media.url} controls autoPlay playsInline onEnded={() => navigateStory(1)} className="h-full w-full object-contain sm:rounded-[1.7rem]" /> : <DurableImage src={viewing.media.url} alt="Story" className="h-full w-full object-contain sm:rounded-[1.7rem]" draggable={false} />}</div> : <div className="absolute inset-0 flex items-center justify-center p-8 sm:inset-y-4 sm:rounded-[1.7rem]" style={{ background: viewing.background || STORY_BACKGROUNDS[0].value }}><p className="max-w-xl whitespace-pre-wrap text-center text-3xl font-bold leading-relaxed drop-shadow-lg sm:text-5xl">{viewing.text}</p></div>}
+        {viewing.media?.url ? <div className="absolute inset-0 sm:inset-y-4 sm:rounded-[1.7rem] sm:bg-[#101010]" onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); void downloadMedia(viewing.media!.url, { kind: viewing.media?.type === "video" ? "video" : "image" }) }} onPointerDown={(e) => { if (e.button !== 0) return; if ((e.target as HTMLElement).closest("button, video")) return; const el = e.currentTarget; const timer = window.setTimeout(() => { void downloadMedia(viewing.media!.url, { kind: viewing.media?.type === "video" ? "video" : "image" }); try { if ("vibrate" in navigator) navigator.vibrate(10) } catch { /* */ } }, 550); const clear = () => window.clearTimeout(timer); el.addEventListener("pointerup", clear, { once: true }); el.addEventListener("pointercancel", clear, { once: true }) }}>{viewing.media.type === "video" ? <DurableVideo ref={storyVideoRef} key={viewing.id} src={viewing.media.url} controls autoPlay playsInline onEnded={() => { if (!viewerPaused) navigateStory(1) }} className="h-full w-full object-contain sm:rounded-[1.7rem]" /> : <DurableImage src={viewing.media.url} alt="Story" className="h-full w-full object-contain sm:rounded-[1.7rem]" draggable={false} />}</div> : <div className="absolute inset-0 flex items-center justify-center p-8 sm:inset-y-4 sm:rounded-[1.7rem]" style={{ background: viewing.background || STORY_BACKGROUNDS[0].value }}><p className="max-w-xl whitespace-pre-wrap text-center text-3xl font-bold leading-relaxed drop-shadow-lg sm:text-5xl">{viewing.text}</p></div>}
         <div className="absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-black/70 to-transparent px-4 pb-8 pt-16 sm:inset-x-4 sm:rounded-t-[1.7rem] sm:px-6"><div className="flex items-center gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/60 bg-white/15">{viewing.photo ? <DurableImage src={viewing.photo} alt="" className="h-full w-full object-cover" /> : <span className="font-bold">{(viewing.name || "M").slice(0, 1).toUpperCase()}</span>}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{isOwnStory(viewing) ? "Your story" : viewing.name || "Member"}</p><p className="text-[11px] text-white/75">{Math.max(0, Math.floor((Date.now() - viewing.createdAt) / 60000)) < 1 ? "Just now" : `${Math.floor((Date.now() - viewing.createdAt) / 60000)}m ago`} · {STORY_AUDIENCES.find((item) => item.id === viewing.audience)?.title || "Story"}</p></div>{isOwnStory(viewing) && <><button type="button" title="Save a shortcut on this device" onClick={() => toggleHighlight(viewing.id)} className="inline-flex items-center gap-1.5 rounded-full bg-black/35 px-3 py-2 text-xs font-semibold"><Sparkles size={14} />{highlights.includes(viewing.id) ? "Saved" : "Save"}</button><button type="button" onClick={() => void loadViewers(viewing)} className="inline-flex items-center gap-1.5 rounded-full bg-black/35 px-3 py-2 text-xs font-semibold"><Eye size={15} /> Viewers</button></>}</div></div>
         {queue.findIndex((item) => item.id === viewing.id) > 0 && <button type="button" onClick={() => navigateStory(-1)} className="absolute left-2 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 sm:left-0" aria-label="Previous story"><ArrowLeft size={20} /></button>}
         {queue.findIndex((item) => item.id === viewing.id) < queue.length - 1 && <button type="button" onClick={() => navigateStory(1)} className="absolute right-2 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 sm:right-0" aria-label="Next story"><ArrowRight size={20} /></button>}

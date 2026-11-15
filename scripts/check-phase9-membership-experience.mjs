@@ -36,7 +36,7 @@ const checks = [
   ['Expiry sweep is operator-gated and bounded', expiryRoute.includes('assertOperatorKey') && expiryRoute.includes('rawLimit > 2_000') && expiryRoute.includes('ghc_membership_expire_due')],
   ['Migration is classified for operator review, not auto-application', read('scripts/generate-migration-inventory.mjs').includes('20261106123001_phase9_membership_lifecycle_and_renewal_guard.sql')],
   ['Release and package metadata are synchronized', Boolean(pkg.version) && lock.version === pkg.version && lock.packages?.['']?.version === pkg.version && release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],
-  ['Phase 9 source is complete with acceptance open; Phase 10 is active', roadmap.includes('| 9 | Membership | Source implementation complete') && roadmap.includes(`| 10 | Settings and platform performance | Active: ${pkg.version}`)],
+  ['Membership source is complete with acceptance open; Feed and Wallet occupy priorities 1 and 2', roadmap.includes('| 4 | **Membership** |') && roadmap.includes('| 1 | **Feed** |') && roadmap.includes('Source implementation completed in 0.330.19;') && roadmap.includes('| 2 | **Wallet** |') && roadmap.includes('Source implementation completed in 0.330.20;')],
 ]
 let failed = 0
 for (const [label, ok] of checks) { console.log(`${ok ? 'PASS' : 'FAIL'} ${label}`); if (!ok) failed++ }

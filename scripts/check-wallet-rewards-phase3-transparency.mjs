@@ -12,7 +12,7 @@ const checks = [
   ['pending and locked funds are explicitly described as not spendable', /Pending and locked rewards are not spendable/.test(screen)],
   ['history action opens existing history tab', /onClick=\{\(\) => setTab\("history"\)\}/.test(screen)],
   ['history action has visible keyboard focus', /focus-visible:ring-emerald-600/.test(screen)],
-  ['summary counts reward records without minting or claiming', /\{snapshot\.pending\.length\} reward record/.test(screen)],
+  ['summary separates claim-ready and under-review reward records without treating them as ledger credits', /Ready to claim/.test(screen) && /Under review \/ maturity/.test(screen) && /credited value is confirmed only by the server ledger/.test(screen)],
 ]
 let failed = 0
 for (const [label, passed] of checks) {

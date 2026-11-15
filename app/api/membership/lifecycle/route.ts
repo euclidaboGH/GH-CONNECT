@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import { callOperationalRpc } from "@/lib/server/marketplace/operational-rpc"
 
 export const runtime = "nodejs"
@@ -11,6 +12,14 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, {
       status: 401,
       headers: { "Cache-Control": "private, no-store, max-age=0" },
+    })
+  }
+
+  const rateLimit = await checkDurableRateLimit(`membership-lifecycle:${auth.userId}`, 60, 60_000, { onUnavailable: "deny" })
+  if (!rateLimit.ok) {
+    return NextResponse.json({ ok: false, error: durableRateLimitCode(rateLimit) }, {
+      status: durableRateLimitStatus(rateLimit),
+      headers: { "Cache-Control": "private, no-store, max-age=0", Pragma: "no-cache" },
     })
   }
 

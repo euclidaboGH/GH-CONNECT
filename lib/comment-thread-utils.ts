@@ -16,7 +16,7 @@ function normalizeComment(raw: unknown): (PostComment & { replies: PostComment[]
     authorName: typeof c.authorName === "string" && c.authorName.trim() ? c.authorName : "Member",
     authorPhoto: typeof c.authorPhoto === "string" ? c.authorPhoto : "",
     text: typeof c.text === "string" ? c.text : "",
-    createdAt: typeof c.createdAt === "number" ? c.createdAt : Date.now(),
+    createdAt: typeof c.createdAt === "number" && Number.isFinite(c.createdAt) ? c.createdAt : 0,
     replyTo: typeof c.replyTo === "string" ? c.replyTo : undefined,
     // Always rebuild nesting from replyTo — ignore pre-nested replies to avoid doubles
     replies: [],
@@ -46,14 +46,24 @@ export function buildCommentTree(comments: PostComment[] | null | undefined): Po
     }
 
     const roots: PostComment[] = []
+    const wouldCreateCycle = (commentId: string, parentId: string): boolean => {
+      const seen = new Set<string>([commentId])
+      let cursor: string | undefined = parentId
+      while (cursor && byId.has(cursor)) {
+        if (seen.has(cursor)) return true
+        seen.add(cursor)
+        cursor = byId.get(cursor)?.replyTo
+      }
+      return false
+    }
     for (const c of byId.values()) {
       const parentId = c.replyTo
-      if (parentId && byId.has(parentId) && parentId !== c.id) {
+      if (parentId && byId.has(parentId) && parentId !== c.id && !wouldCreateCycle(c.id, parentId)) {
         const parent = byId.get(parentId)!
-        if (!parent.replies.some((r) => r.id === c.id)) {
-          parent.replies.push(c)
-        }
+        if (!parent.replies.some((r) => r.id === c.id)) parent.replies.push(c)
       } else {
+        // Missing parents and malformed cycles are surfaced as roots instead of
+        // silently dropping comments or creating an unrenderable thread.
         roots.push(c)
       }
     }
@@ -82,6 +92,35 @@ export function buildCommentTree(comments: PostComment[] | null | undefined): Po
       ? comments.filter((c) => c && typeof c === "object" && (c as PostComment).id)
       : []
   }
+}
+
+
+/**
+ * Remove blocked authors and their entire descendant reply branches before
+ * building a tree. Filtering only root nodes leaves blocked replies visible.
+ */
+export function filterBlockedCommentThreads(
+  comments: PostComment[] | null | undefined,
+  blockedUserIds: string[] | null | undefined,
+): PostComment[] {
+  if (!Array.isArray(comments) || comments.length === 0) return []
+  const blocked = new Set((blockedUserIds || []).filter((id): id is string => typeof id === "string" && id.length > 0))
+  if (!blocked.size) return comments
+  const valid = comments.filter((comment): comment is PostComment => Boolean(comment && typeof comment === "object" && typeof comment.id === "string" && comment.id))
+  const hidden = new Set<string>()
+  for (const comment of valid) if (comment.authorId && blocked.has(comment.authorId)) hidden.add(comment.id)
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const comment of valid) {
+      const parentId = typeof comment.replyTo === "string" ? comment.replyTo : undefined
+      if (parentId && hidden.has(parentId) && !hidden.has(comment.id)) {
+        hidden.add(comment.id)
+        changed = true
+      }
+    }
+  }
+  return valid.filter((comment) => !hidden.has(comment.id))
 }
 
 function reactionTotal(c: PostComment): number {

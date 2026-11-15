@@ -62,7 +62,9 @@ export function ShortVideoScreen({ open, onClose, seedPosts = [] }: ShortVideoSc
     try {
       const res = await fetch(`/api/social/short-video?limit=24&mode=${encodeURIComponent(mode)}`, {
         credentials: "include",
+        cache: "no-store",
         headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(15_000),
       })
       const data = (await res.json().catch(() => ({}))) as {
         ok?: boolean

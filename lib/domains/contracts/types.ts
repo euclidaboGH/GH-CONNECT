@@ -17,6 +17,7 @@ export type DomainId =
   | "notifications"
   | "reputation"
   | "search"
+  | "events"
 
 /** Result of a domain action — never invents success when data is missing */
 export type DomainResult<T> =

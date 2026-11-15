@@ -44,6 +44,24 @@ export function ProfileSectionTabs({
             type="button"
             role="tab"
             aria-selected={selected}
+            aria-controls={`gh-profile-panel-${tab.id}`}
+            id={`gh-profile-tab-${tab.id}`}
+            tabIndex={selected ? 0 : -1}
+            data-profile-tab={tab.id}
+            onKeyDown={(event) => {
+              const current = TABS.findIndex((item) => item.id === tab.id)
+              let next = current
+              if (event.key === "ArrowRight") next = (current + 1) % TABS.length
+              else if (event.key === "ArrowLeft") next = (current - 1 + TABS.length) % TABS.length
+              else if (event.key === "Home") next = 0
+              else if (event.key === "End") next = TABS.length - 1
+              else return
+              event.preventDefault()
+              const nextTab = TABS[next]
+              onChange(nextTab.id)
+              const target = event.currentTarget.parentElement?.querySelector<HTMLButtonElement>(`[data-profile-tab="${nextTab.id}"]`)
+              target?.focus()
+            }}
             onClick={() => onChange(tab.id)}
             className={
               selected

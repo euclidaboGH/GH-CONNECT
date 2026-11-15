@@ -21,6 +21,22 @@ const nextConfig = {
   // Tree-shake icon imports — large win with lucide-react
   experimental: {
     optimizePackageImports: ["lucide-react", "date-fns", "class-variance-authority", "clsx"],
+    // Vercel's 2-core / 8-GB build container killed the Next.js build
+    // worker with SIGKILL after the declared prebuild checks passed. Keep the
+    // production build serial and enable Next's webpack memory optimizations
+    // rather than weakening type/lint checks or increasing the heap beyond
+    // the container's available memory.
+    cpus: 1,
+    webpackBuildWorker: true,
+    webpackMemoryOptimizations: true,
+  },
+  // Disable the persistent Webpack cache in production. The previous Vercel
+  // cache accumulated multi-gigabyte server-production pack files and the
+  // compiler worker was OOM-killed even with a single CPU and memory tuning.
+  // A clean, uncached compile trades some build time for predictable RAM use.
+  webpack(config, { dev }) {
+    if (!dev) config.cache = false
+    return config
   },
   compiler: {
     // Drop noisy console.log in production; keep error/warn for diagnostics

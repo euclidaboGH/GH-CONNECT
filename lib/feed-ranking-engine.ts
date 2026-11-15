@@ -3,6 +3,8 @@
 
 import type { Post, Profile, FeedFilter, PostEngagementMetrics, PostVisibilityReason } from "@/lib/ghc-types"
 import { inspirationBoost } from "@/lib/feed-profile-experience"
+import { isExcludedFromPublicFeed } from "@/lib/feed/essential-controls"
+import { compareFeedOrderDesc, containsWholeInterest, extractHashtags, matchPostInterests } from "@/lib/feed/phase5-feed-primitives"
 
 export interface RankedPost {
   post: Post
@@ -34,14 +36,13 @@ export interface FeedContext {
   intentionBias?: FeedIntentionBias
   /** Focus mode: prefer following/friends, demote pure trending */
   focusMode?: boolean
+  /** Explicit topic controls; exclusions are hard filters, inclusions narrow the lane. */
+  includedTopics?: string[]
+  excludedTopics?: string[]
 }
 
-// Extract hashtags from content
-export function extractHashtags(content: string): string[] {
-  const regex = /#(\w+)/g
-  const matches = content.match(regex) || []
-  return matches.map((tag) => tag.toLowerCase())
-}
+// Extract hashtags from content through the shared Unicode-aware helper.
+export { extractHashtags } from "@/lib/feed/phase5-feed-primitives"
 
 // Extract mentions from content
 export function extractMentions(content: string): string[] {
@@ -54,6 +55,42 @@ export function extractMentions(content: string): string[] {
 export function extractLinks(content: string): string[] {
   const regex = /(https?:\/\/[^\s]+)/g
   return content.match(regex) || []
+}
+
+/**
+ * Privacy and user-control suppression is a hard feed constraint, not a
+ * ranking signal. Every feed lane must apply the same block/mute policy.
+ */
+function getSuppressedAuthorIds(context: FeedContext): Set<string> {
+  return new Set([
+    ...(context.blockedUserIds || []),
+    ...(context.mutedUserIds || []),
+  ].map((id) => String(id).trim()).filter(Boolean))
+}
+
+function isSuppressedAuthor(post: Post, suppressedAuthorIds: Set<string>): boolean {
+  return suppressedAuthorIds.has(String(post.authorId || "").trim())
+}
+
+/** Normalize post topics once for deterministic, user-controlled feed filtering. */
+export function getPostTopicSet(post: Post): Set<string> {
+  const supplied = Array.isArray(post.hashtags) ? post.hashtags : []
+  const extracted = extractHashtags(String(post.content || ""))
+  return new Set([...supplied, ...extracted]
+    .map((value) => String(value || "").replace(/^#/, "").normalize("NFKC").trim().toLocaleLowerCase())
+    .filter((value) => /^[\p{L}\p{N}][\p{L}\p{N}\p{M}_]{1,31}$/u.test(value)))
+}
+
+function matchesTopicControls(post: Post, context: FeedContext): boolean {
+  const topics = getPostTopicSet(post)
+  const excluded = new Set((context.excludedTopics || []).map((v) => String(v).trim().toLowerCase()).filter(Boolean))
+  if ([...topics].some((topic) => excluded.has(topic))) return false
+  const included = (context.includedTopics || []).map((v) => String(v).trim().toLowerCase()).filter(Boolean)
+  return included.length === 0 || included.some((topic) => topics.has(topic))
+}
+
+function compareRankedPosts(a: RankedPost, b: RankedPost): number {
+  return (b.score - a.score) || compareFeedOrderDesc(a.post, b.post)
 }
 
 // Generate link preview (simulated - in production would fetch OG tags)
@@ -72,12 +109,16 @@ export function generateLinkPreview(url: string): any {
  * Fights pure engagement-bait ranking.
  */
 export function calculateContributionScore(post: Post): number {
-  const likes = post.engagement?.likes ?? post.likes ?? 0
-  const comments = post.engagement?.comments ?? post.comments?.length ?? 0
-  const saves = post.engagement?.saves ?? 0
-  const shares = post.engagement?.shares ?? 0
-  const up = Number((post as Post & { upvoteCount?: number }).upvoteCount ?? (post as any).upvote_count ?? 0)
-  const down = Number((post as Post & { downvoteCount?: number }).downvoteCount ?? (post as any).downvote_count ?? 0)
+  const safeCount = (value: unknown, cap = 1_000_000) => {
+    const number = Number(value ?? 0)
+    return Number.isFinite(number) ? Math.max(0, Math.min(cap, number)) : 0
+  }
+  const likes = safeCount(post.engagement?.likes ?? post.likes)
+  const comments = safeCount(post.engagement?.comments ?? post.comments?.length)
+  const saves = safeCount(post.engagement?.saves)
+  const shares = safeCount(post.engagement?.shares)
+  const up = safeCount((post as Post & { upvoteCount?: number }).upvoteCount ?? (post as any).upvote_count)
+  const down = safeCount((post as Post & { downvoteCount?: number }).downvoteCount ?? (post as any).downvote_count)
   // Discussion & saves dominate; content upvotes beat passive likes; downvotes soft-penalize
   return comments * 3 + saves * 2.5 + shares * 2 + up * 1.2 + likes * 0.2 - down * 0.8
 }
@@ -88,25 +129,31 @@ export function calculateEngagementScore(post: Post): number {
     return calculateContributionScore(post)
   }
 
-  const { likes, comments, shares, views, saves, clicks, avgEngagementTime } = post.engagement
+  const { likes, comments, shares, views, saves, clicks } = post.engagement
+  const safeCount = (value: unknown, cap = 1_000_000) => {
+    const number = Number(value ?? 0)
+    return Number.isFinite(number) ? Math.max(0, Math.min(cap, number)) : 0
+  }
   let score = 0
 
   // Contribution-first weights
-  score += likes * 0.4
-  score += comments * 3
-  score += shares * 2
-  score += saves * 2.5
-  score += (clicks || 0) * 0.5
+  score += safeCount(likes) * 0.4
+  score += safeCount(comments) * 3
+  score += safeCount(shares) * 2
+  score += safeCount(saves) * 2.5
+  score += safeCount(clicks) * 0.5
 
   // View-based scoring (capped so view-bait does not dominate)
-  if (views > 0) {
-    const engagementRate = (score / Math.max(views, 1)) * 100
+  const safeViews = safeCount(views)
+  if (safeViews > 0) {
+    const engagementRate = (score / Math.max(safeViews, 1)) * 100
     score *= 1 + Math.min(engagementRate * 0.008, 0.35)
   }
 
   // Time-based decay
-  const hoursOld = (Date.now() - post.createdAt) / (1000 * 60 * 60)
-  const ageDecay = Math.pow(0.95, hoursOld)
+  const createdAt = Number(post.createdAt)
+  const hoursOld = Number.isFinite(createdAt) ? Math.max(0, (Date.now() - createdAt) / (1000 * 60 * 60)) : 0
+  const ageDecay = Math.pow(0.95, Math.min(hoursOld, 24 * 365))
   score *= ageDecay
 
   return Math.floor(score)
@@ -131,27 +178,29 @@ function matchesLocationLane(post: Post, context: FeedContext): boolean {
 
 function intentionBoost(post: Post, bias: FeedIntentionBias | undefined): { score: number; hit: boolean } {
   if (!bias || bias === "balanced") return { score: 0, hit: false }
-  const text = `${post.content || ""} ${(post.hashtags || []).join(" ")}`.toLowerCase()
+  const text = `${post.content || ""} ${(post.hashtags || []).join(" ")}`
+  const hasAnyWholeTerm = (terms: string[]) => terms.some((term) => containsWholeInterest(text, term))
   if (bias === "professional") {
-    const hit = /work|career|job|startup|business|tech|mentor|hire|portfolio|project/.test(text)
+    const hit = hasAnyWholeTerm(["work", "career", "job", "startup", "business", "tech", "mentor", "hire", "portfolio", "project"])
     return { score: hit ? 22 : -4, hit }
   }
   if (bias === "dating") {
-    const hit = /date|relationship|single|love|romance|partner/.test(text)
+    const hit = hasAnyWholeTerm(["date", "relationship", "single", "love", "romance", "partner"])
     return { score: hit ? 18 : -3, hit }
   }
-  // friendship
-  const hit = /friend|hobby|community|hangout|game|music|travel|sport/.test(text)
+  // Friendship
+  const hit = hasAnyWholeTerm(["friend", "hobby", "community", "hangout", "game", "music", "travel", "sport"])
   return { score: hit ? 20 : -2, hit }
 }
 
 // Rank posts for "For You" feed — quality & intention aware
 export function rankForYouFeed(posts: Post[], context: FeedContext): RankedPost[] {
+  const suppressedAuthorIds = getSuppressedAuthorIds(context)
   const ranked = posts
     .filter(
       (post) =>
-        !context.blockedUserIds.includes(post.authorId) &&
-        !(context.mutedUserIds || []).includes(post.authorId) &&
+        !isSuppressedAuthor(post, suppressedAuthorIds) &&
+        matchesTopicControls(post, context) &&
         !post.isDraft &&
         !post.isScheduled &&
         matchesLocationLane(post, context)
@@ -197,22 +246,11 @@ export function rankForYouFeed(posts: Post[], context: FeedContext): RankedPost[
       }
 
       // 4. Shared interests
-      const postHashtags = post.hashtags || extractHashtags(post.content || "")
-      const interestMatches = postHashtags.filter((tag) =>
-        context.userInterests.some(
-          (interest) =>
-            interest.toLowerCase().includes(tag.toLowerCase()) ||
-            tag.toLowerCase().includes(interest.toLowerCase())
-        )
-      ).length
-      const contentInterest = context.userInterests.filter((i) =>
-        (post.content || "").toLowerCase().includes(i.toLowerCase())
-      ).length
-      const totalInterest = interestMatches + contentInterest
-      if (totalInterest > 0) {
-        score += totalInterest * 18
+      const matchedInterests = matchPostInterests(post.content || "", post.hashtags, context.userInterests || [], 3)
+      if (matchedInterests.length > 0) {
+        score += matchedInterests.length * 18
         reason = {
-          reason: `Shared interests${postHashtags[0] ? ` · #${postHashtags[0].replace(/^#/, "")}` : ""}`,
+          reason: `Matches your interests: ${matchedInterests.slice(0, 2).join(", ")}`,
           category: "interest",
           shortLabel: "Interests",
         }
@@ -222,18 +260,12 @@ export function rankForYouFeed(posts: Post[], context: FeedContext): RankedPost[
       const contribution = calculateContributionScore(post)
       score += Math.min(contribution, 40)
       if (contribution >= 12 && (reason.category === "personalization" || reason.category === "trending")) {
+        // Counts alone do not prove velocity. Reserve “trending” for an
+        // explicit upstream trend signal; otherwise explain the measured input.
         reason = {
           reason: "Active discussion and saves — quality signal",
           category: "contribution",
           shortLabel: "Quality",
-        }
-        if ((post as any)._trendingBoost || (post.likes || 0) + (post.comments?.length || 0) > 12) {
-          // soft label when engagement is high — not a ranking lie
-          reason = {
-            reason: "Rising engagement in your network",
-            category: "trending",
-            shortLabel: "Trending",
-          }
         }
       }
 
@@ -310,20 +342,22 @@ export function rankForYouFeed(posts: Post[], context: FeedContext): RankedPost[
 
       return { post, score, reason }
     })
-    .sort((a, b) => b.score - a.score)
+    .sort(compareRankedPosts)
 
   return ranked
 }
 
 // Rank posts for "Following" feed
 export function rankFollowingFeed(posts: Post[], context: FeedContext): RankedPost[] {
+  const suppressedAuthorIds = getSuppressedAuthorIds(context)
   const ranked = posts
     .filter(
       (post) =>
         context.followingIds.includes(post.authorId) &&
         !post.isDraft &&
         !post.isScheduled &&
-        !context.blockedUserIds.includes(post.authorId)
+        !isSuppressedAuthor(post, suppressedAuthorIds) &&
+        matchesTopicControls(post, context)
     )
     .map((post): RankedPost => {
       // Pure Following: chronological only (newest first). No engagement ranking.
@@ -334,7 +368,7 @@ export function rankFollowingFeed(posts: Post[], context: FeedContext): RankedPo
       }
       return { post, score, reason }
     })
-    .sort((a, b) => b.score - a.score)
+    .sort(compareRankedPosts)
 
   return ranked
 }
@@ -353,16 +387,17 @@ function haversineKm(a: { latitude: number; longitude: number }, b: { latitude: 
 
 export function rankNearbyFeed(posts: Post[], context: FeedContext): RankedPost[] {
   if (!context.geolocation) return []
+  const suppressedAuthorIds = getSuppressedAuthorIds(context)
 
   return posts
-    .filter((post) => !post.isDraft && !post.isScheduled && !context.blockedUserIds.includes(post.authorId))
+    .filter((post) => !post.isDraft && !post.isScheduled && !isSuppressedAuthor(post, suppressedAuthorIds) && matchesTopicControls(post, context))
     .map((post) => {
       const coordinates = post.location
       if (!coordinates || !Number.isFinite(coordinates.latitude) || !Number.isFinite(coordinates.longitude)) return null
       const distanceKm = haversineKm(context.geolocation!, coordinates)
       let score = Math.max(0, 60 - Math.min(distanceKm, 60))
       score += calculateEngagementScore(post) * 0.3
-      const hoursOld = (Date.now() - post.createdAt) / (1000 * 60 * 60)
+      const hoursOld = Math.max(0, (Date.now() - post.createdAt) / (1000 * 60 * 60))
       if (hoursOld < 24) score += 20
       const reason: PostVisibilityReason = {
         reason: distanceKm < 1 ? "Happening very close to you" : `${distanceKm.toFixed(distanceKm < 10 ? 1 : 0)} km away`,
@@ -371,16 +406,17 @@ export function rankNearbyFeed(posts: Post[], context: FeedContext): RankedPost[
       return { post, score, reason }
     })
     .filter((item): item is RankedPost => Boolean(item))
-    .sort((a, b) => b.score - a.score)
+    .sort(compareRankedPosts)
 }
 
 // Rank posts for "Trending" feed
 export function rankTrendingFeed(posts: Post[], context: FeedContext): RankedPost[] {
+  const suppressedAuthorIds = getSuppressedAuthorIds(context)
   const ranked = posts
-    .filter((post) => !post.isDraft && !post.isScheduled && !context.blockedUserIds.includes(post.authorId))
+    .filter((post) => !post.isDraft && !post.isScheduled && !isSuppressedAuthor(post, suppressedAuthorIds) && matchesTopicControls(post, context))
     .map((post) => {
       const engagementScore = calculateEngagementScore(post)
-      const timeRecency = (Date.now() - post.createdAt) / (1000 * 60 * 60) // hours
+      const timeRecency = Math.max(0, (Date.now() - post.createdAt) / (1000 * 60 * 60)) // hours
 
       // Trending algorithm: engagement * time decay
       let score = engagementScore * Math.pow(0.8, Math.min(timeRecency, 24))
@@ -392,19 +428,19 @@ export function rankTrendingFeed(posts: Post[], context: FeedContext): RankedPos
       }
       return { post, score, reason }
     })
-    .sort((a, b) => b.score - a.score)
+    .sort(compareRankedPosts)
 
   return ranked
 }
 
 // Rank posts for "Latest" feed
 export function rankLatestFeed(posts: Post[], context: FeedContext): RankedPost[] {
+  const suppressedAuthorIds = getSuppressedAuthorIds(context)
   const ranked = posts
-    .filter((post) => !post.isDraft && !post.isScheduled && !context.blockedUserIds.includes(post.authorId))
+    .filter((post) => !post.isDraft && !post.isScheduled && !isSuppressedAuthor(post, suppressedAuthorIds) && matchesTopicControls(post, context))
     .map((post): RankedPost => {
-      // Newer timestamps sort first. A small following bonus must never invert chronology.
-      let score = post.createdAt || 0
-      if (context.followingIds.includes(post.authorId)) score += 1
+      // Latest is strictly chronological. Following status must never reorder it.
+      const score = post.createdAt || 0
 
       const reason: PostVisibilityReason = {
         reason: "Latest posts",
@@ -412,7 +448,7 @@ export function rankLatestFeed(posts: Post[], context: FeedContext): RankedPost[
       }
       return { post, score, reason }
     })
-    .sort((a, b) => b.score - a.score)
+    .sort(compareRankedPosts)
 
   return ranked
 }
@@ -425,6 +461,7 @@ export function rankFriendsFeed(posts: Post[], context: FeedContext): RankedPost
     .filter(
       (post) =>
         !blocked.has(post.authorId) &&
+        matchesTopicControls(post, context) &&
         !post.isDraft &&
         !post.isScheduled &&
         friends.has(post.authorId)
@@ -440,7 +477,7 @@ export function rankFriendsFeed(posts: Post[], context: FeedContext): RankedPost
         reason,
       }
     })
-    .sort((a, b) => b.score - a.score)
+    .sort(compareRankedPosts)
 }
 
 /** Communities mode — posts tagged with community or from community-linked authors */
@@ -449,7 +486,7 @@ export function rankCommunitiesFeed(posts: Post[], context: FeedContext): Ranked
   const blocked = new Set([...(context.blockedUserIds || []), ...(context.mutedUserIds || [])])
   return posts
     .filter((post) => {
-      if (blocked.has(post.authorId) || post.isDraft || post.isScheduled) return false
+      if (isExcludedFromPublicFeed(post, blocked) || !matchesTopicControls(post, context)) return false
       if (!communities.size) {
         // Soft: show posts that declare a communityId / audience community
         return Boolean((post as any).communityId || (post as any).audience === "community")
@@ -468,7 +505,7 @@ export function rankCommunitiesFeed(posts: Post[], context: FeedContext): Ranked
         reason,
       }
     })
-    .sort((a, b) => b.score - a.score)
+    .sort(compareRankedPosts)
 }
 
 /** Prevent a single author from monopolising For You while preserving score order. */
@@ -492,8 +529,9 @@ export function diversifyRankedFeed(items: RankedPost[], maxConsecutiveAuthor = 
 
 function rankSavedFeed(posts: Post[], context: FeedContext): RankedPost[] {
   const saved = new Set((context.savedPostIds || []).map(String))
+  const suppressedAuthorIds = getSuppressedAuthorIds(context)
   return posts
-    .filter((p) => saved.has(String(p.id)))
+    .filter((p) => saved.has(String(p.id)) && !p.isDraft && !p.isScheduled && !isSuppressedAuthor(p, suppressedAuthorIds) && matchesTopicControls(p, context))
     .map((post) => ({
       post,
       score: 100,

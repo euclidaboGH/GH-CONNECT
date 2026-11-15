@@ -6,8 +6,8 @@ import { NextResponse } from "next/server"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
-import { socialDbConfigured, socialRpc, socialRest } from "@/lib/server/social/rpc"
-import { normalizeReactionType } from "@/lib/social/reactions"
+import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
+import { isDurableReactionType, normalizeReactionType } from "@/lib/social/reactions"
 import { emitSocialNotification, lookupPostAuthor } from "@/lib/server/social/notifications"
 import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
 import { canViewSocialPost } from "@/lib/server/social/post-visibility"
@@ -98,19 +98,33 @@ export async function POST(
   let reactionCounts: Record<string, number> | undefined
   let viewerReactions: string[] | undefined
   try {
-    const query = new URLSearchParams({ post_id: `eq.${postId}`, select: "user_id,reaction", limit: "5000" })
-    const rows = await socialRest<Array<{ user_id?: string; reaction?: string }>>(`gh_post_reactions?${query.toString()}`)
-    if (rows.ok && Array.isArray(rows.data)) {
-      reactionCounts = {}
-      viewerReactions = []
-      for (const row of rows.data) {
-        const type = String(row.reaction || "").trim().toLowerCase()
-        if (!type) continue
-        reactionCounts[type] = (reactionCounts[type] || 0) + 1
-        if (String(row.user_id || "") === auth.userId && viewerReactions && !viewerReactions.includes(type)) viewerReactions.push(type)
+    // Use the canonical bounded aggregate RPC instead of scanning reaction rows
+    // through PostgREST. A fixed row limit silently under-counted popular posts.
+    const engagement = await socialRpc("gh_post_feed_engagement_batch", {
+      p_post_ids: [postId],
+      p_viewer_id: auth.userId,
+    })
+    const rows = Array.isArray(engagement.data) ? engagement.data : []
+    const post = rows.find((row: unknown) => Boolean(row && typeof row === "object" && String((row as { postId?: unknown }).postId || "") === postId)) as {
+      reactionCounts?: unknown
+      viewerReactions?: unknown
+    } | undefined
+    if (engagement.ok && post) {
+      const counts = post.reactionCounts
+      if (counts && typeof counts === "object" && !Array.isArray(counts)) {
+        reactionCounts = {}
+        for (const [kind, count] of Object.entries(counts as Record<string, unknown>)) {
+          const numeric = Number(count)
+          if (isDurableReactionType(kind) && Number.isSafeInteger(numeric) && numeric >= 0) reactionCounts[kind] = numeric
+        }
+      }
+      if (Array.isArray(post.viewerReactions)) {
+        viewerReactions = post.viewerReactions
+          .filter((kind): kind is string => typeof kind === "string")
+          .filter(isDurableReactionType)
       }
     }
-  } catch { /* reaction mutation already succeeded; counts are a best-effort read */ }
+  } catch { /* reaction mutation already succeeded; aggregate hydration is best effort */ }
 
   return NextResponse.json({
     ok: true,

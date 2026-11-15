@@ -3,6 +3,7 @@ import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+import { isSafeInternalNotificationPath } from "@/lib/notification-targets"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -105,7 +106,7 @@ export async function POST(request: Request) {
     }
     const severity: Announcement["severity"] = ["info", "success", "warning", "critical"].includes(String(body.severity)) ? body.severity as Announcement["severity"] : "info"
     const actionPath = body.action_path ?? null
-    if (actionPath !== null && (typeof actionPath !== "string" || !actionPath.startsWith("/") || actionPath.startsWith("//"))) {
+    if (actionPath !== null && !isSafeInternalNotificationPath(actionPath)) {
       return NextResponse.json({ ok: false, error: "INVALID_ACTION_PATH" }, { status: 400 })
     }
     try {

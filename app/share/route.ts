@@ -11,6 +11,8 @@ import { NextResponse } from "next/server"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
+const MAX_SHARE_BODY_BYTES = 256 * 1024
+
 function capped(v: unknown, max: number): string {
   return typeof v === "string" ? v.trim().slice(0, max) : ""
 }
@@ -28,6 +30,12 @@ function redirectHome(request: Request, title: string, text: string, url: string
 
 export async function POST(request: Request) {
   try {
+    // Shared files are never stored, so never buffer them. Refuse to parse multipart bodies that
+    // are large or of unknown length (this route is unauthenticated and reachable by anyone).
+    const declared = Number(request.headers.get("content-length"))
+    if (!Number.isFinite(declared) || declared < 0 || declared > MAX_SHARE_BODY_BYTES) {
+      return NextResponse.redirect(new URL("/", request.url), 303)
+    }
     const form = await request.formData()
     return redirectHome(
       request,

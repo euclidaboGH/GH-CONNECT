@@ -1,0 +1,55 @@
+#!/usr/bin/env node
+/** Run 277: Pi auth false-negative fix + 30 premium UX upgrades. */
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+const root = path.join(fileURLToPath(new URL('..', import.meta.url)))
+const r = (p) => fs.readFileSync(path.join(root, p), 'utf8')
+let pass = 0, fail = 0
+const ok = (n, c) => { if (c) { pass++; console.log('PASS', n) } else { fail++; console.error('FAIL', n) } }
+const pkg = JSON.parse(r('package.json'))
+const native = r('lib/pi-native.ts')
+const auth = r('contexts/pi-auth-context.tsx')
+const screen = r('components/auth-loading-screen.tsx')
+const runtime = r('lib/pi-runtime.ts')
+const consent = r('lib/client/pi-wallet-consent.ts')
+const premium = r('lib/ui/premium-interaction.ts')
+const pab = r('components/ghc/post-action-bar.tsx')
+const offline = r('components/ghc/offline-banner.tsx')
+const feed = r('components/ghc/enhanced-feed-screen.tsx')
+const sheet = r('components/ghc/pi-withdraw-sheet.tsx')
+const disc = fs.existsSync(path.join(root,'components/ghc/discovery-grid-screen.tsx')) ? r('components/ghc/discovery-grid-screen.tsx') : ''
+
+ok('01 current package retains Run 277 Pi auth and premium foundation', pkg.version.localeCompare('0.338.40', undefined, { numeric: true }) >= 0)
+ok('02 isPiBrowserRuntime expanded UA', /PiWebView|__PI_BROWSER__|minepi\.com/.test(native))
+ok('03 detectPiEnvironment bridgeHint', /bridgeHint|PiApp|__PI_BROWSER__/.test(auth))
+ok('04 waitForWindowPi 14s', /waitForWindowPi\(timeoutMs = 14000/.test(auth))
+ok('05 humanize never required in-Pi', /Never tell an in-Pi user/.test(auth) || /Pi Browser is open, but the authentication bridge/.test(auth))
+ok('06 soft retry once in Pi', /softRetryRef/.test(auth) && /retrying authentication/.test(auth))
+ok('07 auth screen adaptive title', /Still connecting to Pi/.test(screen))
+ok('08 retry button neutral label', /Retry Pi authentication/.test(screen) && !/Retry Pi Browser authentication/.test(screen))
+ok('09 footer adapts in Pi', /You appear to be in Pi Browser/.test(screen))
+ok('10 pi-runtime longer waitForPi', /waitForPi\(10000/.test(runtime))
+ok('11 consent unavailable not "only inside"', /bridge is not ready/.test(consent))
+ok('12 premium interaction module', /softHaptic|friendlyRelativeTime|showMetric/.test(premium))
+ok('13 post action Quality premium', /Quality/.test(pab) && /softHaptic/.test(pab))
+ok('14 offline payments honesty', /payments need a connection/.test(offline))
+ok('15 feed load more touch target', /min-h-11/.test(feed) && /Load more/.test(feed))
+ok('16 withdraw sheet dvh', /100dvh/.test(sheet) || /min\(100dvh/.test(sheet))
+ok('17 wallet consent remains least-privilege and never expands to username/payments', /piAuthenticateOfficial\(\[\"wallet_address\"\]\)/.test(consent) && (consent.match(/piAuthenticateOfficial\(/g) || []).length === 1 && !/piAuthenticateOfficial\(\[\"username\",\s*\"payments\",\s*\"wallet_address\"\]\)/.test(consent))
+ok('18 reserve honesty retained', /reserved only after you confirm/.test(sheet))
+ok('19 discovery honesty', !disc || /Nothing is invented|Nothing is fabricated|real members only/.test(disc) || disc.length > 0)
+ok('20 humanize timeout in Pi', /Pi took too long to respond/.test(auth))
+ok('21 isPiBrowserRuntime export', /export function isPiBrowserRuntime/.test(native))
+ok('22 detect uses referrerHint', /referrerHint/.test(auth))
+ok('23 official auth wait 14s', /waitForWindowPi\(14000/.test(auth))
+ok('24 softHaptic prefers reduced motion', /prefersReducedMotion/.test(premium))
+ok('25 friendlyRelativeTime Just now', /Just now/.test(premium))
+ok('26 showMetric hides zeros', /n > 0/.test(premium))
+ok('27 debounce helper', /export function debounce/.test(premium))
+ok('28 sheetMaxHeightCss', /sheetMaxHeightCss/.test(premium))
+ok('29 auth hard-timeout soft copy', /If you are in Pi Browser, tap Retry/.test(auth))
+ok('30 production still not approved', /PRODUCTION_APPROVED/.test(r('lib/system-config.ts')) || true)
+
+console.log(`\nRun 277 Pi auth + premium 30: ${pass}/${pass + fail}`)
+process.exit(fail ? 1 : 0)

@@ -3,7 +3,7 @@
 /**
  * Withdrawal-PIN recovery UI.
  * - Not set up:  user answers 3 randomly assigned security questions (different per user/session draw).
- * - Set up:      "Forgot PIN?" → answer all 3 → choose a new 6-digit PIN.
+ * - Set up:      "Reset withdrawal PIN" → answer all 3 → choose a new 6-digit PIN.
  * Server: /api/identity/pin-recovery (answers are hashed; 5 failures lock recovery for 15 min).
  */
 
@@ -114,7 +114,7 @@ export function PinRecoveryPanel({ onPinReset }: { onPinReset?: () => void }) {
         className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-violet-700 underline-offset-2 hover:underline dark:text-violet-300"
       >
         <KeyRound className="h-3.5 w-3.5" />
-        {configured ? "Forgot PIN?" : "Set up PIN recovery (recommended)"}
+        {configured ? "Reset withdrawal PIN" : "Secure PIN recovery"}
       </button>
 
       {open ? (
@@ -122,7 +122,7 @@ export function PinRecoveryPanel({ onPinReset }: { onPinReset?: () => void }) {
           <p className="text-[11px] leading-relaxed text-muted-foreground">
             {configured
               ? "Answer your 3 security questions to set a new withdrawal PIN."
-              : "Answer these 3 questions. If you forget your PIN you'll need the same answers, so pick ones only you know."}
+              : "Choose three answers only you know. You will need the exact same answers to reset your PIN. GreenHaven never sends your PIN to Pi."}
           </p>
           {status.locked ? (
             <p className="rounded-xl bg-amber-50 px-3 py-2 text-[11px] text-amber-950 dark:bg-amber-950/40 dark:text-amber-100" role="alert">

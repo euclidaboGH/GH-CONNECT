@@ -30,7 +30,7 @@ const checks = [
   ['purpose labels distinguish major payment categories', ['Membership payment','Marketplace purchase','Sponsored listing','Digital product purchase','Premium feature','Service payment','Creator earnings','Refund'].every(x => projection.includes(x)) && /paymentPurposeLabel\(intent\.purpose\)/.test(wallet)],
   ['payment lifecycle states distinguish completed from fulfilled', wallet.includes('Paid · fulfilment pending') && wallet.includes('COMPLETED:') && wallet.includes('FULFILLED:')],
   ['pending filter includes non-terminal payment lifecycle states', /\["created", "approval_pending", "approved", "user_submitted", "completion_pending", "incomplete"\]/.test(wallet)],
-  ['search includes reference and product labels', /i\.productLabel \|\| "".*i\.referenceId \|\| ""/.test(wallet)],
+  ['search includes reference and product labels', /matchesFilterQuery\(q, i\.purpose, i\.productId, i\.productLabel, i\.referenceId/.test(wallet)],
   ['date range filter still applies to Pi history', /if \(startMs <= 0\) return searchable[\s\S]{0,120}createdAt/.test(wallet)],
   ['Pi and GHC rails are kept separate', /GHC ledger and π payments are kept on separate rails/.test(wallet)],
   ['intent creation rejects boolean, blank, excessive-precision, and malformed amounts', /const rawAmount = body\.amount/.test(api) && /amountFormatValid/.test(api) && /Number\(amount\.toFixed\(8\)\) !== amount/.test(api)],

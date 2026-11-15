@@ -6,6 +6,7 @@
 import { readGhcServerEnv, hasPrivilegedDatabase } from "@/lib/server/economy/env"
 import { getPiApiKey } from "@/lib/server/payments/pi-api"
 import { resolvePiSandbox, getPiClientId } from "@/lib/pi-env"
+import { getPiIncompleteA2uPayments, piA2uErrorDiagnostic, piA2uErrorHttpStatus } from "@/lib/server/payments/pi-platform-a2u"
 
 export type ComponentStatus = "ok" | "degraded" | "unavailable" | "not_configured" | "skipped"
 
@@ -17,6 +18,15 @@ export type WithdrawalsHealthComponent = {
   detail: string
   checkedAt: string
   latencyMs?: number
+}
+
+export type WithdrawalsPayoutGate = {
+  variable: string
+  /** What the code requires, e.g. exactly "true" or a minimum length. Secrets show a rule, never a value. */
+  required: string
+  ok: boolean
+  state: "ok" | "missing" | "empty" | "wrong_value" | "wrong_format"
+  hint: string
 }
 
 export type WithdrawalsHealthReport = {
@@ -44,6 +54,10 @@ export type WithdrawalsHealthReport = {
     note: "Per-user withdrawable balance and authorization must be checked via authenticated /api/economy/earnings/withdrawable after Pi wallet authorization."
   }
   components: WithdrawalsHealthComponent[]
+  /** Exact per-variable result of the gates the withdrawal request + payout worker enforce. Values are never exposed. */
+  payoutGates: WithdrawalsPayoutGate[]
+  /** First gate that will block a withdrawal right now, or null when all pass. */
+  firstBlockingGate: string | null
   flags: Record<string, boolean>
   configPresence: Record<string, boolean>
 }
@@ -489,6 +503,72 @@ async function probeEarningsWithdrawableRpc(): Promise<WithdrawalsHealthComponen
   }
 }
 
+async function probeWithdrawalSupportRpc(input: {
+  id: string
+  functionName: string
+  body: Record<string, unknown>
+  accepts: (value: Record<string, unknown>) => boolean
+  purpose: string
+}): Promise<WithdrawalsHealthComponent> {
+  const checkedAt = nowIso()
+  const env = readGhcServerEnv()
+  if (!hasPrivilegedDatabase() || !env.supabaseUrl || !env.supabaseServiceRoleKey) {
+    return { id: input.id, status: "not_configured", code: "SUPABASE_CREDENTIALS_MISSING", detail: `Cannot probe ${input.purpose} without privileged Supabase credentials.`, checkedAt }
+  }
+  const base = env.supabaseUrl.replace(/\/$/, "")
+  try {
+    const { result, latencyMs } = await timed(async () => {
+      const response = await fetch(`${base}/rest/v1/rpc/${input.functionName}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: env.supabaseServiceRoleKey!,
+          Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+          Accept: "application/json",
+        },
+        body: JSON.stringify(input.body),
+        cache: "no-store",
+        signal: AbortSignal.timeout(8_000),
+      })
+      const body = await response.json().catch(() => null)
+      return { status: response.status, body: body && typeof body === "object" ? body as Record<string, unknown> : null }
+    })
+    const errText = JSON.stringify(result.body || {})
+    if (result.status === 404 || /PGRST202|Could not find the function/i.test(errText)) {
+      return { id: input.id, status: "unavailable", code: "RPC_NOT_APPLIED", detail: `${input.functionName} is missing. Reconcile and apply its reviewed migration before enabling this workflow.`, checkedAt, latencyMs }
+    }
+    if (result.status === 401 || result.status === 403) {
+      return { id: input.id, status: "unavailable", code: "RPC_PERMISSION_DENIED", detail: `${input.functionName} exists or was addressed, but the configured server role cannot execute it. Verify the service-role key and function ACL.`, checkedAt, latencyMs }
+    }
+    if (result.status >= 500 || !result.body || !input.accepts(result.body)) {
+      return { id: input.id, status: "unavailable", code: result.status >= 400 ? `RPC_HTTP_${result.status}` : "RPC_RESPONSE_INVALID", detail: `${input.functionName} did not return its expected safe diagnostic response. Check schema, grants and migration state.`, checkedAt, latencyMs }
+    }
+    return { id: input.id, status: "ok", code: "RPC_REACHABLE", detail: `${input.purpose} RPC executed with a synthetic non-user identity; no payout or PIN state was changed.`, checkedAt, latencyMs }
+  } catch (error) {
+    return { id: input.id, status: "unavailable", code: error instanceof Error && error.name === "TimeoutError" ? "RPC_TIMEOUT" : "RPC_NETWORK_ERROR", detail: `Network/timeout while probing ${input.purpose}.`, checkedAt }
+  }
+}
+
+async function probePayoutExecutionLookupRpc(): Promise<WithdrawalsHealthComponent> {
+  return probeWithdrawalSupportRpc({
+    id: "payout_execution_lookup_rpc",
+    functionName: "gh_pi_earnings_payout_get_owned",
+    body: { p_request_id: "00000000-0000-4000-8000-000000000000", p_user_id: "__gh_health_probe_non_user__" },
+    accepts: (value) => value.ok === false && value.error === "REQUEST_NOT_FOUND",
+    purpose: "ownership-scoped Pi earnings payout lookup",
+  })
+}
+
+async function probePinRecoveryRpc(): Promise<WithdrawalsHealthComponent> {
+  return probeWithdrawalSupportRpc({
+    id: "pin_recovery_rpc",
+    functionName: "gh_withdrawal_pin_recovery_get",
+    body: { p_user_id: "__gh_health_probe_non_user__" },
+    accepts: (value) => value.ok === true && value.configured === false,
+    purpose: "server-only withdrawal PIN recovery lookup",
+  })
+}
+
 async function probePiPlatformApi(): Promise<WithdrawalsHealthComponent> {
   const checkedAt = nowIso()
   const apiKey = getPiApiKey()
@@ -570,6 +650,57 @@ async function probePiPlatformApi(): Promise<WithdrawalsHealthComponent> {
   }
 }
 
+async function probePiBackendSdk(): Promise<WithdrawalsHealthComponent> {
+  const checkedAt = nowIso()
+  const apiKey = getPiApiKey()
+  const walletSeed = String(process.env.PI_WALLET_PRIVATE_SEED || "").trim()
+  if (!apiKey || !walletSeed) {
+    return { id: "pi_a2u_sdk", status: "not_configured", code: "PI_BACKEND_CREDENTIALS_MISSING", detail: "Pi A2U backend credentials are not fully configured.", checkedAt }
+  }
+  try {
+    const { default: PiBackend } = await import("pi-backend")
+    // Constructor validates the server wallet secret without making a payment
+    // or any network call. Never log or return the seed/public key here.
+    new PiBackend(apiKey, walletSeed)
+    return { id: "pi_a2u_sdk", status: "ok", code: "PI_BACKEND_SDK_READY", detail: "Pi A2U SDK initialized and accepted the configured server wallet seed.", checkedAt }
+  } catch (error) {
+    const code = piA2uErrorDiagnostic(error, "SDK_INITIALIZATION")
+    return { id: "pi_a2u_sdk", status: "unavailable", code, detail: "Pi A2U backend SDK could not initialize with the configured server credentials. No payment was attempted.", checkedAt }
+  }
+}
+
+async function probePiIncompleteA2u(): Promise<WithdrawalsHealthComponent> {
+  const checkedAt = nowIso()
+  if (!getPiApiKey()) {
+    return { id: "pi_incomplete_a2u", status: "not_configured", code: "PI_API_KEY_MISSING", detail: "Pi A2U incomplete-payment lookup is not configured.", checkedAt }
+  }
+  try {
+    const { result, latencyMs } = await timed(() => getPiIncompleteA2uPayments())
+    const hasBlocker = result.length > 0
+    return {
+      id: "pi_incomplete_a2u",
+      status: hasBlocker ? "degraded" : "ok",
+      code: hasBlocker ? "PI_A2U_INCOMPLETE_PAYMENT_PRESENT" : "PI_A2U_LANE_CLEAR",
+      detail: hasBlocker
+        ? "Pi reports an incomplete App-to-User payment. The shared A2U lane is blocked until its owning workflow reconciles it; this probe did not change any payment."
+        : "Pi reports no incomplete App-to-User payments. The shared A2U lane is clear at probe time.",
+      checkedAt,
+      latencyMs,
+    }
+  } catch (error) {
+    const code = piA2uErrorDiagnostic(error, "INCOMPLETE_LOOKUP")
+    const httpStatus = piA2uErrorHttpStatus(error)
+    return {
+      id: "pi_incomplete_a2u",
+      status: "unavailable",
+      code,
+      detail: "Could not verify Pi's incomplete App-to-User payment lane. New payouts remain blocked until this read-only check succeeds.",
+      checkedAt,
+      ...(httpStatus ? { latencyMs: undefined } : {}),
+    }
+  }
+}
+
 function assessFlags(hostname: string | null): {
   flags: Record<string, boolean>
   configPresence: Record<string, boolean>
@@ -640,7 +771,11 @@ function rollupStatus(components: WithdrawalsHealthComponent[]): "ready" | "degr
     "wallet_authorization_rpc",
     "wallet_authorization_table",
     "pi_platform_api",
+    "pi_a2u_sdk",
+    "pi_incomplete_a2u",
     "earnings_withdrawable_rpc",
+    "payout_execution_lookup_rpc",
+    "pin_recovery_rpc",
   ])
   const critical = components.filter((c) => criticalIds.has(c.id))
   if (critical.some((c) => c.status === "unavailable" || c.status === "not_configured")) {
@@ -650,6 +785,62 @@ function rollupStatus(components: WithdrawalsHealthComponent[]): "ready" | "degr
     return "degraded"
   }
   return "ready"
+}
+
+function flagGate(variable: string, expected: string): WithdrawalsPayoutGate {
+  const raw = process.env[variable]
+  if (raw === undefined) {
+    return { variable, required: `exactly "${expected}"`, ok: false, state: "missing", hint: `Not set in this deployment. Add ${variable}=${expected} for this environment (Preview), then redeploy.` }
+  }
+  if (raw.trim() === "") {
+    return { variable, required: `exactly "${expected}"`, ok: false, state: "empty", hint: `Set but empty. Enter the value ${expected}.` }
+  }
+  if (raw === expected) return { variable, required: `exactly "${expected}"`, ok: true, state: "ok", hint: "OK" }
+  const cleaned = raw.trim().replace(/^["']|["']$/g, "").toLowerCase()
+  return {
+    variable,
+    required: `exactly "${expected}"`,
+    ok: false,
+    state: "wrong_value",
+    hint:
+      cleaned === expected
+        ? `Looks like "${expected}" but has different case, spaces or quote marks. Retype it as plain ${expected}.`
+        : `Set, but the value is not "${expected}" (the code compares the exact text).`,
+  }
+}
+
+function secretGate(variable: string, minLen: number, ...alts: string[]): WithdrawalsPayoutGate {
+  const names = [variable, ...alts]
+  const best = names.map((n) => String(process.env[n] ?? "").trim()).sort((a, b) => b.length - a.length)[0] ?? ""
+  if (!names.some((n) => process.env[n] !== undefined)) {
+    return { variable, required: `secret, ${minLen}+ characters`, ok: false, state: "missing", hint: `Not set in this deployment. Create a random secret of ${minLen}+ characters.` }
+  }
+  if (best.length === 0) return { variable, required: `secret, ${minLen}+ characters`, ok: false, state: "empty", hint: "Set but empty." }
+  if (best.length < minLen) return { variable, required: `secret, ${minLen}+ characters`, ok: false, state: "wrong_format", hint: `Too short (needs ${minLen}+ characters).` }
+  return { variable, required: `secret, ${minLen}+ characters`, ok: true, state: "ok", hint: "OK" }
+}
+
+function evaluatePayoutGates(): WithdrawalsPayoutGate[] {
+  const seed = String(process.env.PI_WALLET_PRIVATE_SEED ?? "").trim()
+  const seedGate: WithdrawalsPayoutGate = process.env.PI_WALLET_PRIVATE_SEED === undefined
+    ? { variable: "PI_WALLET_PRIVATE_SEED", required: "S + 55 chars (A-Z, 2-7)", ok: false, state: "missing", hint: "Not set. Needed by the payout worker (testnet wallet secret)." }
+    : /^S[A-Z2-7]{55}$/.test(seed)
+      ? { variable: "PI_WALLET_PRIVATE_SEED", required: "S + 55 chars (A-Z, 2-7)", ok: true, state: "ok", hint: "OK" }
+      : { variable: "PI_WALLET_PRIVATE_SEED", required: "S + 55 chars (A-Z, 2-7)", ok: false, state: "wrong_format", hint: "Set but not a valid secret seed format (check for spaces, lowercase or a truncated paste)." }
+  const apiKeyOk = Boolean(String(process.env.PI_API_KEY || process.env.PI_SERVER_API_KEY || "").trim())
+  return [
+    flagGate("PI_NETWORK", "testnet"),
+    flagGate("PI_EARNINGS_PAYOUT_REQUESTS_ENABLED", "true"),
+    flagGate("PI_EARNINGS_PAYOUT_EXECUTION_ENABLED", "true"),
+    flagGate("PI_A2U_ENABLED", "true"),
+    flagGate("PI_A2U_TESTNET_ONLY", "true"),
+    flagGate("PI_EARNINGS_AUTO_EXECUTE", "true"),
+    flagGate("PI_ENV", "production"),
+    secretGate("GH_PIN_PROOF_SECRET", 32),
+    secretGate("PI_EARNINGS_EXECUTOR_KEY", 16, "GHC_A2U_ADMIN_KEY"),
+    { variable: "PI_API_KEY", required: "present", ok: apiKeyOk, state: apiKeyOk ? "ok" : "missing", hint: apiKeyOk ? "OK" : "Not set." },
+    seedGate,
+  ]
 }
 
 export async function evaluateWithdrawalsHealth(opts?: {
@@ -664,24 +855,33 @@ export async function evaluateWithdrawalsHealth(opts?: {
 
   const staticAssessment = assessFlags(hostname)
 
-  const [database, walletRpc, walletTable, earningsRpc, piApi] = await Promise.all([
+  const [database, walletRpc, walletTable, earningsRpc, payoutLookupRpc, pinRecoveryRpc, piApi, piA2uSdk, piIncompleteA2u] = await Promise.all([
     probeSupabaseConnectivity(),
     probeWalletAuthorizationRpc(),
     probeWalletAuthorizationTable(),
     probeEarningsWithdrawableRpc(),
+    probePayoutExecutionLookupRpc(),
+    probePinRecoveryRpc(),
     probePiPlatformApi(),
+    probePiBackendSdk(),
+    probePiIncompleteA2u(),
   ])
 
   const components = [
     database,
     piApi,
+    piA2uSdk,
+    piIncompleteA2u,
     ...staticAssessment.components,
     walletRpc,
     walletTable,
     earningsRpc,
+    payoutLookupRpc,
+    pinRecoveryRpc,
   ]
 
   const status = rollupStatus(components)
+  const payoutGates = evaluatePayoutGates()
 
   return {
     ok: status !== "not_ready",
@@ -702,6 +902,8 @@ export async function evaluateWithdrawalsHealth(opts?: {
       note: "Per-user withdrawable balance and authorization must be checked via authenticated /api/economy/earnings/withdrawable after Pi wallet authorization.",
     },
     components,
+    payoutGates,
+    firstBlockingGate: payoutGates.find((g) => !g.ok)?.variable ?? null,
     flags: staticAssessment.flags,
     configPresence: staticAssessment.configPresence,
   }

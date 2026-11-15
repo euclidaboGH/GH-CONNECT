@@ -23,7 +23,7 @@ const checks = [
   ['long text and mobile inputs support reflow', css.includes('.gh-readable-copy') && css.includes('.gh-long-value') && css.includes('max-width: 100%')],
   ['locale presentation reuses canonical direction resolver', formatting.includes('getLocaleDirection(canonical)') && !formatting.includes('function getDirection(')],
   ['catalog version 7 requires renewed review', governance.includes('currentCatalogVersion: "7"')],
-  ['RTL accessibility gate is registered in prebuild and static verification', pkg.scripts['check:global-rtl-accessibility'] && pkg.scripts.prebuild.includes('check-global-rtl-accessibility') && pkg.scripts['verify:static'].includes('check-global-rtl-accessibility')],
+  ['RTL accessibility gate is registered in prebuild and static verification', pkg.scripts['check:global-rtl-accessibility'] && pkg.scripts['prebuild:checks'].includes('check-global-rtl-accessibility') && pkg.scripts['verify:static'].includes('check-global-rtl-accessibility')],
 ]
 for (const [name, passed] of checks) {
   assert.equal(passed, true, name)

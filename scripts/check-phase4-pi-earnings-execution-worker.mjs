@@ -5,14 +5,14 @@ const route=readFileSync('app/api/economy/earnings/withdrawals/execute/route.ts'
 const sql=readFileSync('supabase/migrations/20261030010004_pi_earnings_payout_execution_worker.sql','utf8')
 const heartbeatSql=readFileSync('supabase/migrations/20261030010005_pi_earnings_payout_worker_lease_heartbeat.sql','utf8')
 const checks=[
- ['dedicated authenticated general earnings route',route.includes('resolveAuthenticatedUser')&&route.includes('gh_pi_earnings_payout_requests')],
+ ['dedicated authenticated general earnings route uses the ownership-scoped payout lookup RPC',route.includes('resolveAuthenticatedUser')&&route.includes('gh_pi_earnings_payout_get_owned')&&route.includes('p_user_id:auth.userId')],
  ['explicit server-side operator authorization',route.includes('PI_EARNINGS_EXECUTOR_KEY')&&route.includes('timingSafeEqual')],
  ['execution disabled unless Testnet flags align',route.includes('PI_EARNINGS_PAYOUT_EXECUTION_ENABLED')&&route.includes('PI_A2U_TESTNET_ONLY')&&route.includes('resolvePiSandbox()')],
  ['recipient derived from durable request',route.includes('recipient_pi_app_uid')&&route.includes('begin.recipientUid')],
  ['wallet authorization checked',route.includes('assertPayoutWalletAuthorization')],
  ['global execution lease acquired before provider call',route.indexOf('gh_pi_earnings_payout_begin_execution')<route.indexOf('import("pi-backend")')],
  ['provider payment is durably bound before submit',route.indexOf('gh_pi_earnings_payout_bind_provider_payment')<route.indexOf('sdk.submitPayment')],
- ['existing incomplete payments recovered before creating',route.indexOf('getIncompleteServerPayments')<route.indexOf('sdk.createPayment')],
+ ['existing incomplete payments recovered before creating',route.indexOf('getPiIncompleteA2uPayments')<route.indexOf('sdk.createPayment')],
  ['unrelated incomplete payment blocks duplicate create',route.includes('UNRELATED_INCOMPLETE_A2U_REQUIRES_OPERATOR_REVIEW')],
  ['payment metadata binds payout request and domain',route.includes('payoutRequestId:requestId')&&route.includes('domain:"pi_earnings"')],
  ['provider payment binding independently checked',route.includes('sdk.getPayment(paymentId)')&&route.includes('PROVIDER_PAYMENT_BINDING_MISMATCH')],

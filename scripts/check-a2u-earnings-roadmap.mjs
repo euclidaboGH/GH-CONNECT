@@ -25,7 +25,7 @@ test('cashback A2U uses a separate payout domain from seller payouts', /gh_selle
 test('A2U route remains Testnet-gated', /PI_A2U_TESTNET_ONLY !== "true"/.test(a2uCreate) && /!resolvePiSandbox\(\)/.test(a2uCreate) && /Testnet only/i.test(a2uCreate))
 test('roadmap requires idempotency, refunds, funding and reconciliation controls', /idempotency constraint/i.test(roadmap) && /Refunds, chargebacks/i.test(roadmap) && /Reconciliation of every entitlement/i.test(roadmap))
 test('roadmap documents Mainnet A2U permission gate and official references', /confirm GreenHaven's A2U eligibility and outgoing-wallet approval with Pi/i.test(roadmap) && /developers\.minepi\.com/.test(roadmap))
-test('roadmap regression check runs before production builds', pkg.scripts?.prebuild?.includes('node scripts/check-a2u-earnings-roadmap.mjs'))
+test('roadmap regression check runs before production builds', pkg.scripts?.['prebuild:checks']?.includes('node scripts/check-a2u-earnings-roadmap.mjs'))
 test('roadmap check is registered in network-independent static verification', read('scripts/verify-phase14-static.mjs').includes('check-a2u-earnings-roadmap.mjs'))
 test('package and lockfile versions agree', pkg.version === lock.version && pkg.version === lock.packages?.['']?.version)
 test('release and verified manifest versions match package', release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`) && manifest.includes(`project_version=${pkg.version}`))

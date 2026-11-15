@@ -91,13 +91,21 @@ export async function POST(request: Request) {
   })
   if (!result.ok) {
     const status = result.error === "EARNINGS_LEDGER_UNAVAILABLE" ? 503 : 409
-    return reply({ ok: false, error: result.error }, status)
+    return reply({
+      ok: false,
+      error: result.error,
+      ...(result.error === "PAYOUT_ALREADY_IN_PROGRESS" ? {
+        activeRequestId: result.requestId,
+        activeRequestStatus: result.status,
+        message: "You already have a Pi withdrawal awaiting provider confirmation. No new withdrawal was created and no additional balance was reserved. Please check the existing request status.",
+      } : {}),
+    }, status)
   }
   return reply({
     ok: true, requestId: result.requestId, status: result.status,
     duplicate: result.duplicate === true, grossAtomic: result.grossAtomic,
     feeAtomic: result.feeAtomic, netAtomic: result.netAtomic,
     network: "Pi Testnet", transferSubmitted: false,
-    message: "Payout request reserved. Pi transfer execution is not enabled in this release.",
+    message: "Your payout request is securely reserved. Pi has not been sent yet; the balance will return to Available only after a safe, verified release, or settle after a verified Pi Testnet payment.",
   }, result.duplicate ? 200 : 201)
 }

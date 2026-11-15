@@ -10,16 +10,16 @@ const route = read("app/api/marketplace/listings/[listingId]/report/route.ts")
 const migration = read("supabase/migrations/20261106150001_marketplace_listing_report_intake.sql")
 const discovery = read("lib/marketplace/discovery-presentation.ts")
 const operatorReports = read("app/api/admin/marketplace/listing-reports/route.ts")
-const prebuild = pkg.scripts?.prebuild || ""
+const prebuild = pkg.scripts?.['prebuild:checks'] || ""
 const verify = pkg.scripts?.["verify:static"] || ""
 
 const checks = [
   ["marketplace browse supports product/service/opportunity filtering", /kindFilter/.test(screen) && /kind:\s*kindFilter === "all" \? undefined : kindFilter/.test(screen)],
   ["marketplace browse supports delivery-mode filtering", /deliveryFilter/.test(screen) && /parseDeliveryMode\(listing\.shippingInfo\) === deliveryFilter/.test(screen)],
-  ["combined filters have a one-action clear path", /Clear filters/.test(screen) && /setKindFilter\("all"\).*setDeliveryFilter\("all"\)/.test(screen)],
+  ["combined filters have a one-action clear path", /<FilterSummary/.test(screen) && /onClearAll=\{\(\) => \{ setCategory\(null\); setKindFilter\("all"\); setDeliveryFilter\("all"\); setQuery\(""\); setMinPrice\(""\); setMaxPrice\(""\); setPriceCurrency\("all"\); setBrowseFrom\(""\); setBrowseTo\(""\) \}\}/.test(screen)],
   ["listing cards surface condition and low-stock facts", /listing\.condition\.replace\(\/_\/g, " "\)/.test(screen) && /listing\.availability <= 3/.test(screen)],
   ["listing cards respect reduced motion and keyboard focus", /motion-reduce:transform-none/.test(screen) && /focus-visible:ring-2/.test(screen)],
-  ["seller centre exposes active, paused and sold-out inventory metrics", /pausedListings/.test(screen) && /soldOutListings/.test(screen) && /grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6/.test(screen)],
+  ["seller centre exposes active, paused and sold-out inventory metrics", /pausedListings/.test(screen) && /soldOutListings/.test(screen) && /grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8/.test(screen)],
   ["seller listings can be filtered by active, paused, sold-out and draft status", /mineStatusFilter/.test(screen) && /aria-pressed=\{mineStatusFilter === id\}/.test(screen) && /filteredMineListings/.test(screen)],
   ["browse empty states account for all selected facets", /hasBrowseFilters/.test(screen) && /listing type or delivery method/.test(screen)],
   ["browse result count is announced accessibly", /role="status" aria-live="polite"/.test(screen)],

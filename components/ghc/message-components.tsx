@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useMemo, useRef, useCallback, memo, type KeyboardEvent } from "react"
-import { Send, Smile, Paperclip, X, Search, MessageCircle, Pin, Archive, VolumeX, FileText, Play, Phone, Video } from "lucide-react"
+import { useState, useMemo, useRef, useCallback, useEffect, memo, type KeyboardEvent } from "react"
+import { Send, Smile, Paperclip, X, Search, MessageCircle, Pin, Archive, VolumeX, AudioLines, FileText, Play, Phone, Video, Images, Info , Mic } from "lucide-react"
 import type { Conversation } from "@/lib/ghc-types"
 import { timeAgo } from "@/lib/ghc-data"
 import { LazyImage } from "./lazy-image"
@@ -113,7 +113,7 @@ export function ConversationSearchBar({ searchQuery, onSearchChange }: { searchQ
           className="min-h-10 w-full rounded-xl border border-border bg-background py-2 pl-9 pr-9 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
         />
         {searchQuery && (
-          <button type="button" onClick={() => onSearchChange("")} className="absolute right-3 text-muted-foreground hover:text-foreground active:scale-90 transition" aria-label="Clear search">
+          <button type="button" onClick={() => onSearchChange("")} className="absolute right-1 flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label="Clear search">
             <X size={16} aria-hidden />
           </button>
         )}
@@ -135,9 +135,9 @@ function ConversationItemBase({
   conversation: Conversation
   isSelected: boolean
   onClick: () => void
-  onPin?: (conversationId: string) => void
-  onArchive?: (conversationId: string) => void
-  onMute?: (conversationId: string) => void
+  onPin?: (conversationId: string, pinned: boolean) => void
+  onArchive?: (conversationId: string, archived: boolean) => void
+  onMute?: (conversationId: string, muted: boolean) => void
   onOpenProfile?: () => void
 }) {
   const hasUnread = conversation.unread || Boolean(conversation.unreadCount)
@@ -264,10 +264,10 @@ function ConversationItemBase({
         </div>
       </div>
 
-      <div className="hidden gap-2 border-t border-gray-50 px-3 py-1.5 transition group-hover:flex">
-        {onPin && <button onClick={(e) => { e.stopPropagation(); onPin(conversation.id) }} className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-200" title={conversation.isPinned ? "Unpin" : "Pin"}><Pin size={12} />{conversation.isPinned ? "Unpin" : "Pin"}</button>}
-        {onArchive && <button onClick={(e) => { e.stopPropagation(); onArchive(conversation.id) }} className="inline-flex items-center gap-1 rounded-lg bg-muted px-2.5 py-1.5 text-xs font-semibold text-foreground transition hover:bg-muted/80" title={conversation.isArchived ? "Unarchive" : "Archive"}><Archive size={12} />{conversation.isArchived ? "Unarchive" : "Archive"}</button>}
-        {onMute && <button onClick={(e) => { e.stopPropagation(); onMute(conversation.id) }} className="inline-flex items-center gap-1 rounded-lg bg-muted px-2.5 py-1.5 text-xs font-semibold text-foreground transition hover:bg-muted/80" title={conversation.isMuted ? "Unmute" : "Mute"}><VolumeX size={12} />{conversation.isMuted ? "Unmute" : "Mute"}</button>}
+      <div className="flex gap-2 border-t border-gray-50 px-3 py-2 transition sm:hidden sm:group-hover:flex sm:group-focus-within:flex">
+        {onPin && <button type="button" aria-label={`${conversation.isPinned ? "Unpin" : "Pin"} ${displayName}`} onClick={(e) => { e.stopPropagation(); onPin(conversation.id, !Boolean(conversation.isPinned)) }} className="inline-flex min-h-9 items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-200" title={conversation.isPinned ? "Unpin" : "Pin"}><Pin size={12} />{conversation.isPinned ? "Unpin" : "Pin"}</button>}
+        {onArchive && <button type="button" aria-label={`${conversation.isArchived ? "Restore" : "Archive"} ${displayName}`} onClick={(e) => { e.stopPropagation(); onArchive(conversation.id, !Boolean(conversation.isArchived)) }} className="inline-flex min-h-9 items-center gap-1 rounded-lg bg-muted px-2.5 py-1.5 text-xs font-semibold text-foreground transition hover:bg-muted/80" title={conversation.isArchived ? "Unarchive" : "Archive"}><Archive size={12} />{conversation.isArchived ? "Unarchive" : "Archive"}</button>}
+        {onMute && <button type="button" aria-label={`${conversation.isMuted ? "Unmute" : "Mute"} ${displayName}`} onClick={(e) => { e.stopPropagation(); onMute(conversation.id, !Boolean(conversation.isMuted)) }} className="inline-flex min-h-9 items-center gap-1 rounded-lg bg-muted px-2.5 py-1.5 text-xs font-semibold text-foreground transition hover:bg-muted/80" title={conversation.isMuted ? "Unmute" : "Mute"}><VolumeX size={12} />{conversation.isMuted ? "Unmute" : "Mute"}</button>}
       </div>
     </div>
   )
@@ -282,6 +282,8 @@ const EmojiPickerGrid = memo(({ onEmojiSelect }: { onEmojiSelect: (emoji: string
     {COMMON_EMOJIS.map((emoji) => (
       <button
         key={emoji}
+        type="button"
+        aria-label={`Insert ${emoji}`}
         onClick={() => onEmojiSelect(emoji)}
         className="flex h-10 w-10 items-center justify-center rounded-xl text-xl transition hover:bg-card active:scale-110"
       >
@@ -301,6 +303,7 @@ export function MessageInput({
   onSendMessage,
   onEmojiClick,
   onAttachmentClick,
+  onVoiceNote,
   disabled,
 }: {
   messageText: string
@@ -308,10 +311,24 @@ export function MessageInput({
   onSendMessage: () => void
   onEmojiClick: () => void
   onAttachmentClick: () => void
+  onVoiceNote?: () => void
   disabled: boolean
 }) {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const composerRef = useRef<HTMLTextAreaElement>(null)
   const sendLockRef = useRef(false)
+
+  // Keep the composer compact for short messages and grow it naturally for
+  // multi-line drafts. The hard visual cap prevents the keyboard from pushing
+  // the conversation history off-screen on mobile devices.
+  useEffect(() => {
+    const composer = composerRef.current
+    if (!composer) return
+    composer.style.height = "auto"
+    const nextHeight = Math.min(Math.max(composer.scrollHeight, 44), 120)
+    composer.style.height = `${nextHeight}px`
+    composer.style.overflowY = composer.scrollHeight > 120 ? "auto" : "hidden"
+  }, [messageText])
   const emitTypingUi = (active: boolean) => {
     try {
       window.dispatchEvent(new CustomEvent("ghc:message-typing", { detail: { active } }))
@@ -358,7 +375,15 @@ export function MessageInput({
   }, [])
 
   return (
-    <div className="relative z-40 min-w-0 shrink-0 border-t border-border/70 bg-card p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+    <div
+      className="relative z-40 min-w-0 shrink-0 border-t border-border/70 bg-card p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && showEmojiPicker) {
+          event.preventDefault()
+          setShowEmojiPicker(false)
+        }
+      }}
+    >
       {/* Emoji picker - only renders when visible */}
       {showEmojiPicker && <EmojiPickerGrid onEmojiSelect={handleEmojiSelect} />}
 
@@ -379,6 +404,7 @@ export function MessageInput({
 
         {/* Message input */}
         <textarea
+          ref={composerRef}
           value={messageText}
           onChange={(e) => onMessageChange(e.target.value)}
           onFocus={() => emitTypingUi(true)}
@@ -387,10 +413,26 @@ export function MessageInput({
           placeholder={disabled ? "Messaging unavailable…" : "Type a message…"}
           disabled={disabled}
           aria-label="Message text"
+          aria-describedby="message-composer-hint"
+          maxLength={8000}
           className="min-h-11 min-w-0 max-h-[120px] flex-1 resize-none rounded-2xl border border-border bg-muted px-3 py-2.5 text-[15px] leading-[1.45] transition focus:border-[var(--gh-green)] focus:bg-card focus:outline-none focus:ring-2 focus:ring-emerald-100 disabled:opacity-60"
           rows={1}
-          style={{ minHeight: "44px", maxHeight: "120px" }}
+          style={{ minHeight: "44px", maxHeight: "120px", overflowY: "hidden" }}
         />
+
+        {/* Voice note */}
+        {onVoiceNote && (
+          <button
+            type="button"
+            onClick={onVoiceNote}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-muted text-muted-foreground transition hover:bg-muted/80 active:scale-90"
+            title="Voice note"
+            aria-label="Record voice note"
+            disabled={disabled}
+          >
+            <Mic size={20} aria-hidden />
+          </button>
+        )}
 
         {/* Attachment button */}
         <button
@@ -417,7 +459,10 @@ export function MessageInput({
         </button>
       </div>
 
-      <p className="mt-1.5 text-[10px] text-muted-foreground">{disabled ? "Sending is paused until you are back online or the connection recovers." : "Enter to send · Shift+Enter for new line"}</p>
+      <p id="message-composer-hint" className="mt-1.5 flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
+        <span>{disabled ? "Sending is paused while this message is being processed." : "Enter to send · Shift+Enter for new line"}</span>
+        <span className="shrink-0 tabular-nums">{messageText.length}/8000</span>
+      </p>
     </div>
   )
 }
@@ -523,8 +568,8 @@ function MessageBubbleBase({
           </div>
         ) : (
         <div
-          role="button"
-          tabIndex={0}
+          role="group"
+          aria-label={`Message from ${isSentByCurrentUser ? "you" : "conversation member"} at ${timestamp}`}
           onTouchStart={startLongPress}
           onTouchEnd={clearLongPress}
           onTouchMove={clearLongPress}
@@ -532,10 +577,7 @@ function MessageBubbleBase({
             e.preventDefault()
             setMenuOpen(true)
           }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") setMenuOpen(true)
-          }}
-          className={`group max-w-[min(82vw,24rem)] cursor-pointer select-none rounded-2xl px-4 py-2.5 text-sm shadow-sm ${
+          className={`group max-w-[min(82vw,24rem)] select-text rounded-2xl px-4 py-2.5 text-sm shadow-sm ${
             isSentByCurrentUser ? "rounded-br-none border border-emerald-600/30 bg-emerald-600/15 text-emerald-950 dark:bg-emerald-600/25 dark:text-emerald-50" : "rounded-bl-none bg-muted text-foreground"
           }`}
         >
@@ -571,8 +613,31 @@ function MessageBubbleBase({
                     </div>
                   ) : media.type === "file" ? (
                     <div className="flex items-center gap-2 px-3 py-2 text-xs"><FileText size={16} /><span className="truncate">{media.fileName || "Attached file"}</span></div>
+                  ) : media.type === "voice" ? (
+                    <div className="min-w-[220px] max-w-full px-3 py-2">
+                      <div className="mb-1 flex items-center gap-2 text-xs font-semibold text-foreground">
+                        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-emerald-600/10 text-emerald-700 dark:text-emerald-300" aria-hidden="true">
+                          <AudioLines size={14} />
+                        </span>
+                        <span>Voice message</span>
+                        {typeof media.duration === "number" && media.duration > 0 ? (
+                          <span className="ml-auto tabular-nums text-muted-foreground">{Math.floor(media.duration / 60)}:{String(Math.floor(media.duration % 60)).padStart(2, "0")}</span>
+                        ) : null}
+                      </div>
+                      {media.url ? (
+                        <audio
+                          className="h-9 w-full max-w-[280px]"
+                          controls
+                          preload="none"
+                          src={media.url}
+                          aria-label="Play voice message"
+                        />
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Audio is unavailable.</p>
+                      )}
+                    </div>
                   ) : (
-                    <div className="flex items-center gap-2 px-3 py-2 text-xs"><VolumeX size={16} /><span>Voice message</span></div>
+                    <div className="flex items-center gap-2 px-3 py-2 text-xs"><FileText size={16} /><span>{media.fileName || "Attachment"}</span></div>
                   )}
                 </div>
               ))}
@@ -659,7 +724,7 @@ function MessageBubbleBase({
 
         {/* Desktop hover actions */}
         <div
-          className={`mt-1 flex gap-1 opacity-0 transition group-hover:opacity-100 ${
+          className={`mt-1 flex gap-1 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 ${
             isSentByCurrentUser ? "justify-end" : "justify-start"
           }`}
         >
@@ -667,7 +732,8 @@ function MessageBubbleBase({
             <button
               type="button"
               onClick={() => onReply(message.id)}
-              className="rounded bg-muted px-2 py-1 text-xs text-foreground/90 transition hover:bg-muted/80"
+              className="min-h-9 rounded bg-muted px-3 py-1 text-xs text-foreground/90 transition hover:bg-muted/80"
+              aria-label="Reply to message"
             >
               Reply
             </button>
@@ -675,7 +741,8 @@ function MessageBubbleBase({
           <button
             type="button"
             onClick={() => setMenuOpen(true)}
-            className="rounded bg-muted px-2 py-1 text-xs text-foreground/90 transition hover:bg-muted/80"
+            className="min-h-9 rounded bg-muted px-3 py-1 text-xs text-foreground/90 transition hover:bg-muted/80"
+            aria-label="More message actions"
           >
             More
           </button>
@@ -811,6 +878,9 @@ export function ChatHeader({
   onBack,
   onCall,
   onVideo,
+  onSearch,
+  onSharedMedia,
+  onDetails,
   onOpenProfile,
   onBlock,
   onReport,
@@ -824,6 +894,9 @@ export function ChatHeader({
   onBack: () => void
   onCall?: () => void
   onVideo?: () => void
+  onSearch?: () => void
+  onSharedMedia?: () => void
+  onDetails?: () => void
   onOpenProfile?: () => void
   onBlock?: () => void
   onReport?: () => void
@@ -868,6 +941,39 @@ export function ChatHeader({
       </div>
 
       <div className="relative flex items-center gap-0.5">
+        {onDetails && (
+          <button
+            type="button"
+            onClick={onDetails}
+            className="flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground active:scale-95"
+            aria-label="Conversation information and settings"
+            title="Conversation information"
+          >
+            <Info size={19} strokeWidth={2} />
+          </button>
+        )}
+        {onSharedMedia && (
+          <button
+            type="button"
+            onClick={onSharedMedia}
+            className="flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground active:scale-95"
+            aria-label="View shared media"
+            title="Shared media"
+          >
+            <Images size={19} strokeWidth={2} />
+          </button>
+        )}
+        {onSearch && (
+          <button
+            type="button"
+            onClick={onSearch}
+            className="flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground active:scale-95"
+            aria-label="Search recent messages"
+            title="Search recent messages"
+          >
+            <Search size={19} strokeWidth={2} />
+          </button>
+        )}
         {onCall && !isCommunity && (
           <button
             type="button"

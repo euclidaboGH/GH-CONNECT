@@ -1,4 +1,6 @@
 import type { MarketplaceListing, MarketplaceOrder } from "@/lib/domains/marketplace-domain"
+import { normalizeProductOptions } from "./product-options.ts"
+import { normalizeProductVariants } from "./product-variants.ts"
 
 type RecordValue = Record<string, unknown>
 
@@ -43,13 +45,17 @@ export function mapMarketplaceListingRecord(value: unknown, now = Date.now()): M
     media: strings(row.media),
     category: text(row.category, "Goods") || "Goods",
     tags: Array.isArray(row.tags) ? strings(row.tags) : undefined,
+    productOptions: normalizeProductOptions(row.productOptions ?? row.product_options),
+    variants: normalizeProductVariants(row.variants),
     price: number(row.price, 0),
     currency: text(row.currency, "GHC") || "GHC",
     condition: (text(row.condition, "new") || "new") as MarketplaceListing["condition"],
     location: row.location == null ? undefined : text(row.location) || undefined,
     shippingInfo: row.shippingInfo == null ? undefined : text(row.shippingInfo) || undefined,
     sellerId: text(row.sellerId ?? row.seller_id),
-    availability: number(row.availability, 1),
+    // Missing stock is unknown, never a free unit. Fail closed so the UI cannot
+    // advertise or add inventory that the server did not actually report.
+    availability: number(row.availability, 0),
     status: (text(row.status, "active") || "active") as MarketplaceListing["status"],
     createdAt: timestamp(row.createdAt ?? row.created_at, now),
     updatedAt: timestamp(row.updatedAt ?? row.updated_at, timestamp(row.createdAt ?? row.created_at, now)),
@@ -89,6 +95,9 @@ export function mapMarketplaceOrderRecord(value: unknown, now = Date.now()): Mar
   return {
     id,
     listingId: text(row.listingId ?? row.listing_id),
+    variantId: text(row.variantId ?? row.variant_id) || undefined,
+    variantSku: text(row.variantSku ?? row.variant_sku) || undefined,
+    variantLabel: text(row.variantLabel ?? row.variant_label) || undefined,
     buyerId: text(row.buyerId ?? row.buyer_id),
     sellerId: text(row.sellerId ?? row.seller_id),
     quantity: number(row.quantity, 1),
@@ -103,6 +112,12 @@ export function mapMarketplaceOrderRecord(value: unknown, now = Date.now()): Mar
     cancelledAt: row.cancelledAt == null && row.cancelled_at == null ? undefined : timestamp(row.cancelledAt ?? row.cancelled_at, now),
     paymentStatus: text(row.paymentStatus ?? row.payment_status, "none") as MarketplaceOrder["paymentStatus"],
     deliveryStatus: (text(row.deliveryStatus ?? row.delivery_status, "not_started") || "not_started") as MarketplaceOrder["deliveryStatus"],
+    fulfilmentMethod: (text(row.fulfilmentMethod ?? row.fulfilment_method) || undefined) as MarketplaceOrder["fulfilmentMethod"],
+    shippingCarrier: text(row.shippingCarrier ?? row.shipping_carrier) || undefined,
+    trackingNumber: text(row.trackingNumber ?? row.tracking_number) || undefined,
+    trackingUrl: text(row.trackingUrl ?? row.tracking_url) || undefined,
+    estimatedDeliveryAt: row.estimatedDeliveryAt == null && row.estimated_delivery_at == null ? undefined : timestamp(row.estimatedDeliveryAt ?? row.estimated_delivery_at, 0),
+    dispatchedAt: row.dispatchedAt == null && row.dispatched_at == null ? undefined : timestamp(row.dispatchedAt ?? row.dispatched_at, 0),
     paymentMethod: text(row.paymentMethod ?? row.payment_method, "none") as MarketplaceOrder["paymentMethod"],
     serverOrderId: id,
   }

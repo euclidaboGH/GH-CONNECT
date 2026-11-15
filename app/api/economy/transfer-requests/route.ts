@@ -3,10 +3,13 @@ import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { createTransferRequest, getProcessGhcStore } from "@/lib/server/economy/store"
 import { rpcCreateTransferRequest, rpcListTransferRequests } from "@/lib/server/economy/db"
 import { allowMemoryServer, isDatabaseConfigured, jsonErr, jsonOk } from "@/lib/server/economy/http"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
 
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return jsonErr("AUTH_REQUIRED", "Authentication required", 401)
+  const __rateLimited = await enforceUserMutationRateLimit(auth.userId, "economy/transfer-requests:POST", 12, 60_000, { failClosed: true })
+  if (__rateLimited) return __rateLimited
 
   const parsedBody = await readBoundedJson(request, 8192)
   if (!parsedBody.ok) {

@@ -79,6 +79,12 @@ export interface Profile {
   coverPhotoHistory?: Array<{ url: string; changedAt: number; caption?: string }>
   /** Non-financial extension payload persisted by the server profile store. */
   profilePayload?: Record<string, unknown>
+  /** Optional membership tier supplied by the membership domain when hydrated. */
+  membership?: "free" | "premium" | "vip" | "vvip" | "verified"
+  /** Optional wallet entitlement from the authoritative account/profile projection. */
+  walletEnabled?: boolean
+  /** Optional marketplace entitlement from the authoritative account/profile projection. */
+  marketplaceEnabled?: boolean
   status: string // custom status
   profession: string
   bornDate: string
@@ -148,6 +154,10 @@ export interface Settings {
   whoCanMessage: "everyone" | "matches-only" | "no-one"
   profileVisibility: "everyone" | "matches-only" | "hidden"
   storyVisibility: "everyone" | "matches-only" | "no-one"
+  /** Optional permission-engine inputs; omitted values retain the default-enabled policy. */
+  membership?: "free" | "premium" | "vip" | "vvip" | "verified"
+  walletEnabled?: boolean
+  marketplaceEnabled?: boolean
   /** Who may see you in Find / discovery */
   whoCanDiscover?: "everyone" | "matches-only" | "no-one"
   /** Who may follow you */
@@ -471,8 +481,9 @@ export interface Message {
   /** User ids for whom this message is hidden (delete-for-me) */
   hiddenFor?: string[]
   // Reactions
-  reactions?: Record<string, string[]> // emoji -> user ids
+  reactions?: Record<string, string[]> // legacy/local compatibility only; never expose durable actor lists
   reactionCounts?: Record<string, number>
+  viewerReactions?: string[] // durable reactions selected by the authenticated viewer
   // Replies & forwarding
   replyTo?: string // id of parent message
   replyToPreview?: { senderName: string; text: string }
@@ -576,6 +587,13 @@ export interface PostDraft {
   content: string
   images: string[]
   video: string | null
+  pdf?: string | null
+  pdfName?: string | null
+  visibility?: "public" | "followers" | "mutuals" | "private"
+  communityId?: string | null
+  communityName?: string | null
+  publishRequestId?: string | null
+  publishRequestSignature?: string | null
   hashtags: string[]
   mentions: string[]
   createdAt: number

@@ -5,26 +5,31 @@
  */
 import { readGhcServerEnv, hasPrivilegedDatabase } from "@/lib/server/economy/env"
 
-export const PI_ATOMIC_SCALE = 10_000_000 // 1e7
+export {
+  PI_ATOMIC_SCALE,
+  isValidPiAtomic,
+  piToAtomic,
+  atomicToPi,
+  floorPiToAtomic,
+  previewWithdrawalFeeAtomic,
+} from "@/lib/wallet/pi-atomic"
+import { isValidPiAtomic } from "@/lib/wallet/pi-atomic"
 
-export function piToAtomic(amount: number): number {
-  if (!Number.isFinite(amount) || amount <= 0) return 0
-  return Math.round(amount * PI_ATOMIC_SCALE)
+function validLedgerIdentity(userId: unknown, uniqueRef: unknown): boolean {
+  return typeof userId === "string" && userId.trim().length > 0 && userId.trim().length <= 128
+    && typeof uniqueRef === "string" && uniqueRef.trim().length > 0 && uniqueRef.trim().length <= 128
 }
 
-export function atomicToPi(atomic: number | string): number {
-  const n = typeof atomic === "string" ? Number(atomic) : atomic
-  if (!Number.isFinite(n)) return 0
-  return n / PI_ATOMIC_SCALE
-}
+type RpcFailure = { ok: false; status: number; code: string; message: string }
 
-async function rpc<T extends Record<string, unknown>>(
+/** PostgREST call that preserves why it failed (never includes keys or request bodies). */
+async function rpcDetailed<T extends Record<string, unknown>>(
   name: string,
   body: Record<string, unknown>,
-): Promise<T | null> {
-  if (!hasPrivilegedDatabase()) return null
+): Promise<{ ok: true; data: T } | RpcFailure> {
+  if (!hasPrivilegedDatabase()) return { ok: false, status: 0, code: "DB_NOT_CONFIGURED", message: "Privileged database is not configured" }
   const env = readGhcServerEnv()
-  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return null
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return { ok: false, status: 0, code: "DB_NOT_CONFIGURED", message: "Supabase URL or service key missing" }
   try {
     const response = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/${name}`, {
       method: "POST",
@@ -37,12 +42,28 @@ async function rpc<T extends Record<string, unknown>>(
       cache: "no-store",
       signal: AbortSignal.timeout(12_000),
     })
-    const result = (await response.json().catch(() => null)) as T | null
-    if (!response.ok || result === null) return null
-    return result
-  } catch {
-    return null
+    const parsed = (await response.json().catch(() => null)) as (T & { code?: string; message?: string }) | null
+    if (!response.ok || parsed === null) {
+      return {
+        ok: false,
+        status: response.status,
+        code: String(parsed?.code || `HTTP_${response.status}`).slice(0, 40),
+        message: String(parsed?.message || "").slice(0, 300),
+      }
+    }
+    return { ok: true, data: parsed }
+  } catch (error) {
+    const timeout = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")
+    return { ok: false, status: 0, code: timeout ? "RPC_TIMEOUT" : "RPC_NETWORK_ERROR", message: "" }
   }
+}
+
+async function rpc<T extends Record<string, unknown>>(
+  name: string,
+  body: Record<string, unknown>,
+): Promise<T | null> {
+  const r = await rpcDetailed<T>(name, body)
+  return r.ok ? r.data : null
 }
 
 /** Direct registration-bonus status lookup; does not depend on a paginated statement. */
@@ -124,6 +145,9 @@ export async function postEarningsCredit(input: {
   reason?: string
   metadata?: Record<string, unknown>
 }): Promise<{ ok: boolean; duplicate?: boolean; entryId?: string; error?: string }> {
+  if (!validLedgerIdentity(input.userId, input.uniqueRef) || !isValidPiAtomic(input.amountAtomic)) {
+    return { ok: false, error: "INVALID_LEDGER_INPUT" }
+  }
   const result = await rpc<{
     ok?: boolean
     duplicate?: boolean
@@ -152,6 +176,9 @@ export async function reserveEarningsForPayout(input: {
   payoutRequestId: string
   reason?: string
 }): Promise<{ ok: boolean; duplicate?: boolean; entryId?: string; error?: string }> {
+  if (!validLedgerIdentity(input.userId, input.uniqueRef) || !isValidPiAtomic(input.amountAtomic) || !input.payoutRequestId?.trim()) {
+    return { ok: false, error: "INVALID_LEDGER_INPUT" }
+  }
   const result = await rpc<{
     ok?: boolean
     duplicate?: boolean
@@ -177,6 +204,9 @@ export async function settleEarningsPayout(input: {
   payoutRequestId: string
   reason?: string
 }): Promise<{ ok: boolean; duplicate?: boolean; entryId?: string; error?: string }> {
+  if (!validLedgerIdentity(input.userId, input.uniqueRef) || !isValidPiAtomic(input.amountAtomic) || !input.payoutRequestId?.trim()) {
+    return { ok: false, error: "INVALID_LEDGER_INPUT" }
+  }
   const result = await rpc<{
     ok?: boolean
     duplicate?: boolean
@@ -250,6 +280,9 @@ export async function releaseEarningsReservation(input: {
   payoutRequestId: string
   reason?: string
 }): Promise<{ ok: boolean; duplicate?: boolean; entryId?: string; error?: string }> {
+  if (!validLedgerIdentity(input.userId, input.uniqueRef) || !isValidPiAtomic(input.amountAtomic) || !input.payoutRequestId?.trim()) {
+    return { ok: false, error: "INVALID_LEDGER_INPUT" }
+  }
   const result = await rpc<{
     ok?: boolean
     duplicate?: boolean
@@ -265,12 +298,6 @@ export async function releaseEarningsReservation(input: {
   if (!result) return { ok: false, error: "EARNINGS_LEDGER_UNAVAILABLE" }
   if (result.ok !== true) return { ok: false, error: String(result.error || "RELEASE_FAILED") }
   return { ok: true, duplicate: result.duplicate === true, entryId: result.entryId }
-}
-
-/** Floor PI decimal to integer atomic units (Phase 6 rounding rule). */
-export function floorPiToAtomic(amount: number): number {
-  if (!Number.isFinite(amount) || amount <= 0) return 0
-  return Math.floor(amount * PI_ATOMIC_SCALE + 1e-12)
 }
 
 export type WithdrawalQuote = {
@@ -297,6 +324,7 @@ export async function quoteWithdrawal(input: {
   userId: string
   grossAtomic: number
 }): Promise<WithdrawalQuote> {
+  if (!input.userId?.trim() || !isValidPiAtomic(input.grossAtomic)) return { ok: false, error: "INVALID_LEDGER_INPUT" }
   const result = await rpc<WithdrawalQuote>("gh_earnings_quote_withdrawal", {
     p_user_id: String(input.userId || "").trim(),
     p_gross_atomic: input.grossAtomic,
@@ -329,6 +357,13 @@ export async function createPiEarningsPayoutRequest(input: {
   netAtomic: number
   network: "Pi Testnet"
 }): Promise<PiEarningsPayoutRequestResult> {
+  const validAmounts = isValidPiAtomic(input.grossAtomic) && isValidPiAtomic(input.feeAtomic, true)
+    && isValidPiAtomic(input.netAtomic) && input.feeAtomic < input.grossAtomic
+    && input.grossAtomic === input.feeAtomic + input.netAtomic
+  if (!input.userId?.trim() || !input.idempotencyKey?.trim() || !input.requestFingerprint?.trim()
+    || !validAmounts || input.network !== "Pi Testnet") {
+    return { ok: false, error: "INVALID_PAYOUT_REQUEST" }
+  }
   const result = await rpc<PiEarningsPayoutRequestResult>("gh_pi_earnings_payout_create", {
     p_user_id: input.userId,
     p_idempotency_key: input.idempotencyKey,
@@ -342,27 +377,47 @@ export async function createPiEarningsPayoutRequest(input: {
   return result
 }
 
-/** Compute 3% fee in atomic units (ceil) without DB — for UI preview only; authority is quoteWithdrawal. */
-export function previewWithdrawalFeeAtomic(grossAtomic: number, feeBps = 300): {
-  grossAtomic: number
-  feeAtomic: number
-  netAtomic: number
-} {
-  const gross = Math.floor(Number(grossAtomic) || 0)
-  if (gross <= 0) return { grossAtomic: 0, feeAtomic: 0, netAtomic: 0 }
-  const fee = Math.floor((gross * feeBps + 9999) / 10000)
-  const safeFee = Math.min(fee, Math.max(0, gross - 1))
-  return { grossAtomic: gross, feeAtomic: safeFee, netAtomic: gross - safeFee }
+/** Releases the user's payout reservations that never reached the provider back to Available. */
+export type PiPayoutReservationExplanation = {
+  requestId: string
+  status: "reserved" | "processing" | "uncertain" | "released"
+  grossAtomic: number | string
+  reasonCode: string
+  reason: string
+  unlockCondition: string
 }
 
-
-/** Releases the user's payout reservations that never reached the provider back to Available. */
 export async function cancelUnstartedPayoutRequests(userId: string): Promise<{
-  ok: boolean; error?: string; released?: number; releasedAtomic?: number
+  ok: boolean
+  error?: string
+  released?: number
+  releasedAtomic?: number
+  items?: PiPayoutReservationExplanation[]
+  message?: string
 }> {
-  const result = await rpc<{ ok?: boolean; error?: string; released?: number; releasedAtomic?: number }>(
-    "gh_pi_earnings_payout_cancel_unstarted", { p_user_id: String(userId || "").trim() })
-  if (!result) return { ok: false, error: "EARNINGS_LEDGER_UNAVAILABLE" }
+  const call = await rpcDetailed<{
+    ok?: boolean
+    error?: string
+    released?: number
+    releasedAtomic?: number
+    items?: PiPayoutReservationExplanation[]
+    message?: string
+  }>("gh_pi_earnings_payout_cancel_unstarted", { p_user_id: String(userId || "").trim() })
+  if (!call.ok) {
+    // Log the real cause server-side (no secrets) so operators can diagnose; return a precise, safe code.
+    console.error("[pi-earnings-cancel] rpc failed", { status: call.status, code: call.code, message: call.message })
+    const missing = call.status === 404 || call.code === "PGRST202" || call.code === "42883"
+    if (missing) return { ok: false, error: "PAYOUT_RECOVERY_MIGRATION_PENDING" }
+    if (call.message.startsWith("Release failed for")) return { ok: false, error: "RESERVATION_RELEASE_REJECTED" }
+    return { ok: false, error: "EARNINGS_LEDGER_UNAVAILABLE" }
+  }
+  const result = call.data
   if (result.ok !== true) return { ok: false, error: String(result.error || "CANCEL_FAILED") }
-  return { ok: true, released: Number(result.released || 0), releasedAtomic: Number(result.releasedAtomic || 0) }
+  return {
+    ok: true,
+    released: Number(result.released || 0),
+    releasedAtomic: Number(result.releasedAtomic || 0),
+    items: Array.isArray(result.items) ? result.items : [],
+    message: typeof result.message === "string" ? result.message : undefined,
+  }
 }

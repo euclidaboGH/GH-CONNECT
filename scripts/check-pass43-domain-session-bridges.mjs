@@ -11,7 +11,7 @@ const app = read('app/page.tsx')
 const release = read('lib/app-release.ts')
 const truth = read('docs/PROJECT_TRUTH.md')
 const manifest = read('VERIFIED_MANIFEST.txt')
-const prebuild = pkg.scripts?.prebuild || ''
+const prebuild = pkg.scripts?.['prebuild:checks'] || ''
 const checks = [
   ['GHC provider consumes feed domain read seam', context.includes('useFeedDomain()') && context.includes('feedDomain.bindPostsGetter')],
   ['GHC provider consumes connections domain read seam', context.includes('useConnectionsDomain()') && context.includes('connectionsDomain.bindCountsGetter')],

@@ -1,0 +1,6 @@
+/** Rewards progress UX; claim eligibility and reward amounts are always server-derived. */
+export function rewardProgressPercent(current: unknown, target: unknown): number { const c = Number(current), t = Number(target); if (!Number.isFinite(c) || !Number.isFinite(t) || t <= 0) return 0; return Math.max(0, Math.min(100, Math.round(c / t * 100))) }
+export function rewardClaimState(value: unknown): 'available'|'claimed'|'pending'|'locked'|'unknown' { const s = String(value ?? '').toLowerCase(); return ['available','eligible','claimable'].includes(s) ? 'available' : ['claimed','completed'].includes(s) ? 'claimed' : ['pending','processing'].includes(s) ? 'pending' : ['locked','ineligible'].includes(s) ? 'locked' : 'unknown' }
+export function rewardStreakLabel(days: unknown): string { const n = Number(days); return Number.isSafeInteger(n) && n > 0 ? `${Math.min(n, 9999)}-day streak` : 'Start your streak' }
+export function normalizeRewardHistoryPage(value: unknown): number { const n = Number(value); return Number.isSafeInteger(n) && n > 0 ? Math.min(n, 1000) : 0 }
+export function rewardClaimButtonLabel(state: unknown): string { const s = rewardClaimState(state); return s === 'available' ? 'Claim reward' : s === 'claimed' ? 'Claimed' : s === 'pending' ? 'Processing' : s === 'locked' ? 'Not yet available' : 'Check eligibility' }

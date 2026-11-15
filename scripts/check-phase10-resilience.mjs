@@ -9,7 +9,7 @@ const offline = read("components/ghc/offline-banner.tsx")
 const discovery = read("components/ghc/discovery-grid-screen.tsx")
 const css = read("app/globals.css")
 const checks = [
-  ["service worker uses a versioned public-static cache", /gh-connect-v3-public-static/.test(sw)],
+  ["service worker uses a versioned public-static cache", /greenhaven-v4-public-static/.test(sw)],
   ["service worker never caches navigation documents", /request\.mode === "navigate" \|\| request\.destination === "document"\) return/.test(sw)],
   ["all API paths remain network-only", /isApiRequest\(url\.pathname\)/.test(sw) && /fetch\(request\)\.catch/.test(sw)],
   ["only explicit static paths are cache eligible", /STATIC_ASSETS\.includes\(url\.pathname\)/.test(sw) && /STATIC_PREFIXES\.some/.test(sw)],

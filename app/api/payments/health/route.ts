@@ -9,6 +9,7 @@ import { NextResponse } from "next/server"
 import { getPiApiKey } from "@/lib/server/payments/pi-api"
 import { evaluateReadiness } from "@/lib/server/readiness"
 import { getPiClientId } from "@/lib/pi-env"
+import { diagnosticsDetailAllowed } from "@/lib/server/security/operator-key"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -50,6 +51,13 @@ export async function GET(request: Request) {
       ? "not_ready"
       : "degraded"
     : foundation.status
+
+  if (!diagnosticsDetailAllowed(request)) {
+    return NextResponse.json(
+      { ok: true, ready: paymentReady && foundation.status !== "not_ready", status: readinessLabel, service: "gh-pay", detail: "restricted" },
+      { status, headers: { "Cache-Control": "no-store" } },
+    )
+  }
 
   return NextResponse.json(
     {

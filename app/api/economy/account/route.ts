@@ -7,6 +7,7 @@ import { rpcEnsureAccountCreatedAt } from "@/lib/server/economy/db"
 import { isDatabaseConfigured, jsonErr, jsonOk } from "@/lib/server/economy/http"
 
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
 
 export async function GET(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
@@ -29,6 +30,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return jsonErr("AUTH_REQUIRED", "Authentication required", 401)
+  const __rateLimited = await enforceUserMutationRateLimit(auth.userId, "economy/account:POST", 12, 60_000, { failClosed: true })
+  if (__rateLimited) return __rateLimited
   if (!isDatabaseConfigured()) {
     return jsonOk({ ok: true, mode: "local", accountCreatedAt: null })
   }

@@ -15,7 +15,7 @@ const strictPiMigration = '20261106143001_phase9_membership_pi_renewal_strict_pr
 const checks = [
   ['package and lockfile versions are synchronized with the active release', Boolean(pkg.version) && lock.version === pkg.version && lock.packages?.['']?.version === pkg.version],
   ['Node 24.15.0 remains the supported build runtime', pkg.engines?.node === '^24.15.0' && read('.nvmrc').trim() === '24.15.0'],
-  ['Phase 9 contracts are registered in prebuild', pkg.scripts.prebuild.includes('check-phase9-membership-release-gate.mjs') && pkg.scripts.prebuild.includes('check-phase9-membership-experience.mjs') && pkg.scripts.prebuild.includes('check-phase9-pi-intent-security.mjs') && pkg.scripts.prebuild.includes('test-phase9-pi-intent-contract.mjs')],
+  ['Phase 9 contracts are registered in prebuild', pkg.scripts['prebuild:checks'].includes('check-phase9-membership-release-gate.mjs') && pkg.scripts['prebuild:checks'].includes('check-phase9-membership-experience.mjs') && pkg.scripts['prebuild:checks'].includes('check-phase9-pi-intent-security.mjs') && pkg.scripts['prebuild:checks'].includes('test-phase9-pi-intent-contract.mjs')],
   ['Phase 9 contracts are registered in static verification', pkg.scripts['verify:static'].includes('check-phase9-membership-release-gate.mjs') && pkg.scripts['verify:static'].includes('check-phase9-membership-experience.mjs') && pkg.scripts['verify:static'].includes('check-phase9-pi-intent-security.mjs') && pkg.scripts['verify:static'].includes('test-phase9-pi-intent-contract.mjs')],
   ['New lifecycle/renewal migration is classified REVIEW_REQUIRED', manifest.split('\n').some((line) => line.startsWith(`${renewalMigration},REVIEW_REQUIRED,`))],
   ['Strict Pi renewal follow-up is classified REVIEW_REQUIRED', manifest.split('\n').some((line) => line.startsWith(`${strictPiMigration},REVIEW_REQUIRED,`))],
@@ -28,7 +28,7 @@ const checks = [
   ['GHC and Pi remain separate payment rails', /GHC and Pi remain separate rails and ledgers/i.test(worklog) && /GHC and Pi pricing\/settlement authorities remain separate/i.test(truth)],
   ['72-hour grace is continuity-only and does not grant access', /not\*\* preserve premium access/i.test(phase) && /no grace access/i.test(phase)],
   ['Production acceptance remains explicitly pending', /not production approval/i.test(phase) && /production approval remains pending/i.test(truth)],
-  ['Phase 9 source is complete with acceptance open; Phase 10 is active', roadmap.includes('| 9 | Membership | Source implementation complete') && roadmap.includes(`| 10 | Settings and platform performance | Active: ${pkg.version}`)],
+  ['Membership source is complete with acceptance open; Feed and Wallet occupy priorities 1 and 2', roadmap.includes('| 4 | **Membership** |') && roadmap.includes('| 1 | **Feed** |') && roadmap.includes('Source implementation completed in 0.330.19;') && roadmap.includes('| 2 | **Wallet** |') && roadmap.includes('Source implementation completed in 0.330.20;')],
 ]
 let failed = 0
 for (const [label, ok] of checks) { console.log(`${ok ? 'PASS' : 'FAIL'} ${label}`); if (!ok) failed++ }

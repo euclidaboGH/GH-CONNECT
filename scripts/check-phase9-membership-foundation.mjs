@@ -30,7 +30,7 @@ const checks = [
   ['Pi activation requires a durable completed/fulfilled intent and exact product id', activate.includes('intent.status !== "COMPLETED" && intent.status !== "FULFILLED"') && activate.includes('productId !== expected')],
   ['Membership UI status hydration has a bounded abort timeout', screen.includes('window.setTimeout(() => controller.abort(), 8_000)') && screen.includes('signal: controller.signal')],
   ['Release metadata and lockfile are synchronized', Boolean(pkg.version) && lock.version === pkg.version && lock.packages?.['']?.version === pkg.version && release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],
-  ['Phase 9 source is complete while acceptance remains open and Phase 10 is active', roadmap.includes('| 9 | Membership | Source implementation complete') && roadmap.includes(`| 10 | Settings and platform performance | Active: ${pkg.version}`)],
+  ['Membership source is complete with acceptance open; Feed and Wallet occupy priorities 1 and 2', roadmap.includes('| 4 | **Membership** |') && roadmap.includes('| 1 | **Feed** |') && roadmap.includes('Source implementation completed in 0.330.19;') && roadmap.includes('| 2 | **Wallet** |') && roadmap.includes('Source implementation completed in 0.330.20;')],
 ]
 let failed = 0
 for (const [label, ok] of checks) { console.log(`${ok ? 'PASS' : 'FAIL'} ${label}`); if (!ok) failed++ }

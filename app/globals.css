@@ -3389,3 +3389,457 @@ header img[alt="GreenHaven"],
   .gh-post-card::before { display: none; }
   .gh-avatar-halo { background: Highlight; }
 }
+
+
+/* --------------------------------------------------------------------------
+   Phase II / Work package 11 — shared responsive design-system contract.
+   Additive tokens: existing screens can migrate incrementally without a
+   global restyle or changing any domain / financial behavior.
+   -------------------------------------------------------------------------- */
+:root {
+  --gh-space-6: 2rem;
+  --gh-space-7: 2.5rem;
+  --gh-space-8: 3rem;
+  --gh-type-display: clamp(1.375rem, 1.15rem + 0.55vw, 1.75rem);
+  --gh-type-title: 1.125rem;
+  --gh-type-body: 0.9375rem;
+  --gh-type-meta: 0.75rem;
+  --gh-leading-display: 1.18;
+  --gh-leading-title: 1.3;
+  --gh-leading-body: 1.55;
+  --gh-leading-meta: 1.4;
+  --gh-page-gutter: clamp(0.875rem, 2.5vw, 1.5rem);
+  --gh-shell-max: 100%;
+  --gh-shell-content-max: 76rem;
+  --gh-card-padding: clamp(0.875rem, 1.5vw, 1.25rem);
+  --gh-control-radius: 0.875rem;
+  --gh-dialog-max-width: min(28rem, calc(100vw - 2rem));
+  --gh-focus-outline: 2px solid var(--ring);
+}
+
+.dark {
+  --gh-card-padding: clamp(0.875rem, 1.5vw, 1.25rem);
+}
+
+/* A centered, bounded desktop workspace; phones remain edge-to-edge. */
+.gh-app-shell {
+  width: 100%;
+  max-width: min(100%, var(--gh-shell-max)) !important;
+  margin-inline: auto;
+}
+
+.gh-page-container {
+  width: min(calc(100% - (2 * var(--gh-page-gutter))), var(--gh-shell-content-max));
+  min-width: 0;
+  margin-inline: auto;
+}
+
+.gh-section-stack > * + * { margin-block-start: var(--gh-space-4); }
+.gh-card-padding { padding: var(--gh-card-padding); }
+.gh-field { border-radius: var(--gh-control-radius); }
+.gh-app-shell :where(button, a, input, textarea, select, [role="button"]):focus-visible {
+  outline: var(--gh-focus-outline);
+  outline-offset: 3px;
+}
+
+@media (min-width: 1440px) {
+  :root { --gh-shell-max: 90rem; }
+  .gh-app-shell {
+    border-inline: 1px solid color-mix(in oklab, var(--border) 42%, transparent);
+    box-shadow: 0 0 48px rgb(15 23 42 / 0.045);
+  }
+  .dark .gh-app-shell { box-shadow: 0 0 56px rgb(0 0 0 / 0.22); }
+}
+
+@media (max-width: 639px) {
+  :root {
+    --gh-page-gutter: 0.875rem;
+    --gh-card-padding: 0.875rem;
+    --gh-dialog-max-width: calc(100vw - 1.5rem);
+  }
+}
+
+/* Explicit type helpers now consume the same runtime scale as JS consumers. */
+.gh-type-display { font-size: var(--gh-type-display); line-height: var(--gh-leading-display); }
+.gh-type-title { font-size: var(--gh-type-title); line-height: var(--gh-leading-title); }
+.gh-type-body { font-size: var(--gh-type-body); line-height: var(--gh-leading-body); }
+.gh-type-meta { font-size: var(--gh-type-meta); line-height: var(--gh-leading-meta); }
+
+
+/* 0.338.9 — refined chrome, generous content rhythm, stable touch surfaces. */
+.gh-app-header-expanded {
+  min-height: 2.25rem;
+  border-bottom-color: color-mix(in oklab, var(--border) 62%, transparent);
+  background: color-mix(in oklab, var(--background) 96%, transparent);
+  -webkit-backdrop-filter: blur(16px) saturate(1.12);
+  backdrop-filter: blur(16px) saturate(1.12);
+}
+.gh-app-header-compact {
+  z-index: 31;
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+  backdrop-filter: blur(18px) saturate(1.15);
+}
+.gh-app-header :where(button, a) {
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+}
+.gh-app-header :where(h2) {
+  font-size: 0.925rem;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+/* Keep the visual hierarchy calm: compact chrome, roomier product content. */
+.gh-marketplace-content {
+  padding-inline: clamp(0.875rem, 2.4vw, 1.75rem);
+  padding-top: clamp(0.875rem, 1.8vw, 1.25rem);
+  padding-bottom: max(1.75rem, env(safe-area-inset-bottom, 0px));
+  scroll-padding-block: 1rem;
+}
+.gh-world-community .gh-scroll-stable {
+  padding-inline: clamp(0.875rem, 2.4vw, 1.75rem);
+  padding-top: 0.75rem;
+  padding-bottom: max(1.75rem, env(safe-area-inset-bottom, 0px));
+  scroll-padding-block: 1rem;
+}
+.gh-world-community .gh-scroll-stable > * + * {
+  margin-top: clamp(0.875rem, 1.8vw, 1.25rem);
+}
+.gh-marketplace-content :where(.grid) {
+  min-width: 0;
+}
+.gh-marketplace-content :where(button, a, [role="button"]) {
+  min-width: 0;
+}
+.gh-tab-panel {
+  min-width: 0;
+  min-height: 0;
+  isolation: isolate;
+}
+.gh-bottom-nav {
+  min-height: var(--gh-bottom-nav-height);
+  padding-inline: max(0.375rem, env(safe-area-inset-left, 0px)) max(0.375rem, env(safe-area-inset-right, 0px));
+}
+.gh-bottom-nav button {
+  min-width: 0;
+  min-height: 2.75rem;
+  touch-action: manipulation;
+}
+@media (max-width: 380px) {
+  .gh-app-header-expanded > div { padding-inline: 0.625rem; }
+  .gh-app-header :where(button, a) { min-width: 2rem; min-height: 2rem; }
+  .gh-bottom-nav button { padding-inline: 0.125rem; }
+}
+@media (min-width: 768px) {
+  .gh-marketplace-content { padding-inline: clamp(1.25rem, 3vw, 2.5rem); }
+  .gh-world-community .gh-scroll-stable { padding-inline: clamp(1.25rem, 3vw, 2.5rem); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gh-app-header { transition: none !important; }
+}
+
+.gh-marketplace-header {
+  gap: 0.375rem;
+  border-bottom-color: color-mix(in oklab, var(--border) 58%, transparent);
+  background: color-mix(in oklab, var(--background) 96%, transparent);
+}
+.gh-marketplace-header > div:first-child { min-height: 2.25rem; }
+.gh-marketplace-header h1 { font-size: 0.95rem; line-height: 1.2; letter-spacing: -0.025em; }
+.gh-marketplace-header p { font-size: 0.625rem; line-height: 1.2; }
+.gh-marketplace-header [role="toolbar"] button { min-height: 1.875rem; padding-block: 0.375rem; }
+.gh-marketplace-detail-header { min-height: 2.75rem; }
+@media (max-width: 380px) {
+  .gh-marketplace-header { padding-inline: 0.625rem; }
+  .gh-marketplace-header [role="toolbar"] { gap: 0.375rem; }
+  .gh-marketplace-header [role="toolbar"] button { padding-inline: 0.625rem; }
+}
+
+/* Run #266 — one consistent, mobile-first post experience across Feed, Profile and Community. */
+.gh-post-card[data-post-surface] {
+  isolation: isolate;
+  min-width: 0;
+  border-color: color-mix(in srgb, var(--border) 82%, transparent);
+  background: var(--card);
+}
+.gh-post-card[data-post-surface="profile"],
+.gh-post-card[data-post-surface="community"] {
+  box-shadow: var(--gh-card-shadow, 0 1px 3px rgb(0 0 0 / .06));
+}
+.gh-post-card > header {
+  min-width: 0;
+}
+.gh-post-card > header > div:first-child > button:first-child {
+  flex: 0 0 auto;
+  min-width: 44px;
+  min-height: 44px;
+}
+.gh-post-action-dock {
+  display: block;
+  width: 100%;
+}
+.gh-post-action-primary,
+.gh-post-action-secondary {
+  width: 100%;
+}
+.gh-post-action-secondary .gh-post-response-action {
+  min-height: 44px;
+  min-width: 0;
+  gap: .35rem;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1;
+}
+.gh-post-action-secondary .gh-post-response-action:focus-visible {
+  position: relative;
+  z-index: 2;
+}
+@media (max-width: 380px) {
+  .gh-post-action-dock { padding-inline: .625rem; }
+  .gh-post-action-secondary { gap: .375rem; }
+  .gh-post-action-secondary .gh-post-response-action {
+    gap: .25rem;
+    padding-inline: .25rem;
+    font-size: 10px;
+  }
+  .gh-post-action-primary { column-gap: .375rem; }
+}
+@media (min-width: 640px) {
+  .gh-post-action-secondary {
+    display: flex;
+    justify-content: flex-end;
+    gap: .375rem;
+  }
+  .gh-post-action-secondary .gh-post-response-action {
+    flex: 0 0 auto;
+    min-width: 6.25rem;
+    padding-inline: .75rem;
+    font-size: 12px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gh-post-card[data-post-surface] { transition: none; }
+}
+
+
+/* Run #267 — premium compact section chrome across the application.
+   Keep content visible sooner: slim top bars, quiet borders, bright neutral surfaces,
+   and consistent controls across Discovery, Community, Marketplace and utility screens. */
+:root {
+  --gh-header-slim: 2.5rem;
+  --gh-header-icon: 2.125rem;
+}
+.gh-page-header-slim,
+.gh-page-chrome,
+.gh-marketplace-header,
+.gh-app-header-expanded {
+  background: color-mix(in srgb, var(--background) 97%, white 3%);
+  border-bottom-color: color-mix(in srgb, var(--border) 48%, transparent) !important;
+  box-shadow: 0 1px 0 rgb(15 23 42 / 0.015) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(155%);
+  backdrop-filter: blur(16px) saturate(155%);
+}
+.gh-page-header-slim {
+  padding-block: max(0.2rem, env(safe-area-inset-top, 0px)) 0.25rem;
+}
+.gh-page-header-slim > :first-child,
+.gh-page-chrome > :first-child { min-height: 2.125rem; }
+.gh-page-header-slim h1,
+.gh-page-chrome h1,
+.gh-marketplace-header h1,
+.gh-app-header-expanded h2 {
+  font-size: 0.9rem !important;
+  line-height: 1.15 !important;
+  letter-spacing: -0.025em;
+  font-weight: 750;
+}
+.gh-page-header-slim :where(input, select),
+.gh-marketplace-header :where(input, select) { font-size: 0.8125rem; }
+.gh-page-header-slim .gh-icon-btn,
+.gh-page-chrome .gh-icon-btn {
+  height: var(--gh-header-icon); width: var(--gh-header-icon);
+  min-height: var(--gh-header-icon); min-width: var(--gh-header-icon);
+}
+.gh-app-header-expanded > div { padding-block: 0.2rem; }
+.gh-app-header-expanded .flex.min-h-9 { min-height: 2.125rem; }
+.gh-app-header-expanded :where(button, a) { touch-action: manipulation; }
+.gh-app-header-expanded :where(button:not([aria-label="Back to Home"])) {
+  border-radius: 999px;
+}
+.gh-app-header-compact > div { min-height: 2.25rem; }
+.gh-marketplace-header { gap: 0.25rem !important; padding-bottom: 0.25rem !important; }
+.gh-marketplace-header > div:first-child { min-height: 2.125rem !important; }
+.gh-marketplace-header [role="toolbar"] {
+  gap: 0.375rem; padding-bottom: 0.125rem;
+  scrollbar-width: none;
+}
+.gh-marketplace-header [role="toolbar"]::-webkit-scrollbar { display: none; }
+.gh-marketplace-header [role="toolbar"] button {
+  min-height: 2rem; padding-block: 0.375rem;
+  font-size: 0.6875rem; font-weight: 700;
+}
+.gh-world-discovery-header { gap: 0.375rem; }
+.gh-world-discovery-header > div { min-height: 2.125rem; }
+.gh-world-discovery-header > div:nth-child(2) { min-height: 2rem !important; }
+.gh-world-community .gh-app-header-expanded + * { scroll-margin-top: 2.5rem; }
+.gh-world-marketplace :where(.gh-marketplace-header + section, .gh-marketplace-header + div) {
+  scroll-margin-top: 2.5rem;
+}
+/* Keep section filters compact without shrinking their usable touch targets. */
+.gh-app-shell :where([role="tablist"], [data-section-toolbar="true"]) {
+  min-height: 2.25rem; gap: 0.375rem;
+}
+.gh-app-shell :where([role="tablist"] button, [data-section-toolbar="true"] button) {
+  min-height: 2rem; font-size: 0.6875rem;
+}
+.gh-app-shell :where(header button, header a):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--gh-green) 75%, white);
+  outline-offset: 2px;
+}
+@media (min-width: 768px) {
+  .gh-page-header-slim, .gh-page-chrome, .gh-marketplace-header { padding-inline: clamp(1rem, 2vw, 1.75rem); }
+}
+@media (max-width: 380px) {
+  .gh-page-header-slim, .gh-page-chrome, .gh-marketplace-header { padding-inline: 0.625rem; }
+  .gh-marketplace-header [role="toolbar"] button { padding-inline: 0.625rem; }
+}
+@media (prefers-color-scheme: light) {
+  .gh-page-header-slim, .gh-page-chrome, .gh-marketplace-header, .gh-app-header-expanded {
+    background: color-mix(in srgb, #ffffff 97%, var(--gh-green) 3%);
+  }
+}
+
+/* Run #292 — mobile-first content recovery for the four over-height modules.
+   These are composition-only overrides: all controls remain present and functional. */
+@media (max-width: 639px) {
+  /* Marketplace: single compact identity row + horizontally scrolling tools. */
+  .gh-world-marketplace > .gh-marketplace-header,
+  .gh-world-marketplace .gh-marketplace-header {
+    gap: .125rem !important;
+    padding-top: max(.125rem, env(safe-area-inset-top, 0px)) !important;
+    padding-bottom: .125rem !important;
+  }
+  .gh-marketplace-header > div:first-child { min-height: 1.875rem !important; }
+  .gh-marketplace-header h1 { font-size: .875rem !important; line-height: 1.1 !important; }
+  .gh-marketplace-header p { display: none !important; }
+  .gh-marketplace-header [role="toolbar"] { gap: .25rem !important; padding-block: .125rem !important; }
+  .gh-marketplace-header [role="toolbar"] button {
+    min-height: 1.75rem !important;
+    padding: .25rem .55rem !important;
+    font-size: .625rem !important;
+    line-height: 1 !important;
+  }
+
+  /* Community: remove the old 10.5rem hero minimum; compact the expanded header. */
+  .gh-world-community > header,
+  .gh-communities-shell > header,
+  .gh-world-community .gh-app-header-expanded {
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+  .gh-world-community .gh-app-header-expanded > div { padding-block: .125rem !important; }
+  .gh-world-community .gh-app-header-expanded > div > div:first-child { min-height: 2rem !important; }
+  .gh-world-community .gh-app-header-expanded > div > div:nth-child(2) { margin-top: .125rem !important; padding-bottom: .125rem !important; }
+  .gh-world-community .gh-app-header-expanded :where(input,button,[role="tab"] ) { min-height: 1.875rem; }
+  .gh-world-community > header > div:first-child { min-height: 0 !important; }
+  .gh-world-community > header h1 { font-size: .9rem !important; }
+
+  /* Discovery: keep search/filter controls, compress explanatory panels and outcome summary. */
+  .gh-world-discovery-header { padding-block: max(.125rem, env(safe-area-inset-top, 0px)) .125rem !important; }
+  .gh-world-discovery-header > div { min-height: 1.875rem !important; }
+  .gh-world-discovery-header > div:nth-child(2) { min-height: 1.75rem !important; }
+  .gh-discovery-intro { padding: .25rem .625rem 0 !important; }
+  .gh-discovery-intro > div { margin: 0 !important; padding: .375rem .5rem !important; border-radius: .625rem !important; }
+  .gh-discovery-intro > div p { font-size: .625rem !important; line-height: 1.25 !important; }
+  .gh-discovery-shell > section[aria-label] { margin: .25rem .625rem 0 !important; padding: .5rem .625rem !important; border-radius: .75rem !important; }
+  .gh-discovery-shell > section[aria-label] p { line-height: 1.25 !important; }
+
+  /* Messages: compact relationship summary and move inbox filters closer to the list. */
+  .gh-world-inbox > header { padding: max(.125rem, env(safe-area-inset-top, 0px)) .625rem .375rem !important; }
+  .gh-world-inbox > header h1 { font-size: .9rem !important; line-height: 1.1 !important; }
+  .gh-world-inbox > header > div:first-child p { font-size: .625rem !important; }
+  .gh-world-inbox > header > div:nth-child(2) { margin-top: .25rem !important; }
+  .gh-world-inbox > header > section[aria-label="Relationship action centre"] {
+    margin-top: .375rem !important;
+    padding: .375rem .5rem !important;
+    border-radius: .75rem !important;
+    box-shadow: none !important;
+  }
+  .gh-world-inbox > header > section[aria-label="Relationship action centre"] > div { gap: .375rem !important; }
+  .gh-world-inbox > header > section[aria-label="Relationship action centre"] :where(p,span) { line-height: 1.2 !important; }
+  .gh-world-inbox > header > section[aria-label="Relationship action centre"] .h-8.w-8 { width: 1.5rem !important; height: 1.5rem !important; }
+  .gh-world-inbox > header [role="tablist"] { margin-top: .375rem !important; }
+}
+
+/* Ensure content regions can actually shrink and own the remaining viewport. */
+.gh-world-marketplace,
+.gh-world-community,
+.gh-world-discovery,
+.gh-world-inbox { min-height: 0; }
+.gh-world-marketplace > :not(header),
+.gh-world-community > :not(header),
+.gh-world-discovery > :not(header),
+.gh-world-inbox > :not(header) { min-height: 0; }
+
+/* PHASE 1 — canonical post-card finish. This final, scoped layer intentionally
+   supersedes legacy post-card declarations while keeping their unrelated rules
+   intact. Remove older duplicates only after visual regression review. */
+:root {
+  --gh-post-radius: 1rem;
+  --gh-post-border: color-mix(in srgb, var(--border) 78%, transparent);
+  --gh-post-shadow: 0 1px 2px rgba(15, 23, 42, 0.035), 0 6px 20px rgba(15, 23, 42, 0.035);
+  --gh-post-content-line-height: 1.62;
+}
+.gh-post-card[data-post-surface] {
+  border: 1px solid var(--gh-post-border) !important;
+  border-radius: var(--gh-post-radius) !important;
+  background: var(--card) !important;
+  box-shadow: var(--gh-post-shadow) !important;
+  color: var(--card-foreground);
+  isolation: isolate;
+  overflow: clip;
+}
+.gh-post-card[data-post-surface] :where(p) {
+  line-height: var(--gh-post-content-line-height);
+}
+.gh-post-card[data-post-surface] :where(img, video) {
+  border-radius: inherit;
+}
+.gh-quoted-post {
+  margin: 0.25rem 0.875rem 0.875rem;
+  overflow: hidden;
+  border: 1px solid var(--gh-post-border);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--card) 94%, var(--muted));
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+.gh-quoted-post:has(button:hover) {
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--gh-post-border));
+}
+.gh-quoted-post button { border-radius: inherit; }
+.dark .gh-post-card[data-post-surface] {
+  --gh-post-border: color-mix(in srgb, var(--border) 88%, transparent);
+  --gh-post-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+@media (max-width: 639px) {
+  .gh-post-card[data-post-surface] {
+    border-radius: 0.875rem !important;
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--border) 55%, transparent) !important;
+  }
+  .gh-quoted-post { margin-inline: 0.75rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gh-quoted-post { transition: none; }
+}
+
+
+/* Phase 3 creator media: indeterminate upload feedback never implies a fake percentage. */
+@keyframes gh-upload-indeterminate {
+  0% { transform: translateX(-110%); }
+  50% { transform: translateX(110%); }
+  100% { transform: translateX(310%); }
+}
+.gh-compose-upload-indeterminate { animation: gh-upload-indeterminate 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .gh-compose-upload-indeterminate { animation: none; transform: translateX(0); width: 100%; }
+}

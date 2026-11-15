@@ -26,6 +26,8 @@ export type DurableConversation = {
   avatarUrl?: string | null
   isPinned?: boolean
   isArchived?: boolean
+  isMuted?: boolean
+  muteUntil?: number | null
 }
 
 export type DurableMediaAttachment = {
@@ -57,6 +59,8 @@ export type DurableMessage = {
   mediaAttachments?: DurableMediaAttachment[]
   deliveredAt?: number | null
   readAt?: number | null
+  reactionCounts?: Record<string, number>
+  viewerReactions?: string[]
 }
 
 const memConv = new Map<string, DurableConversation>()
@@ -223,8 +227,8 @@ export async function listConversationsForUser(
       if (!convRes.ok || !Array.isArray(convRes.data)) return []
       {
         const out: DurableConversation[] = []
-        const memberRows = await rest<Array<{ conversation_id: string; gh_user_id: string; is_pinned?: boolean; is_archived?: boolean }>>(
-          `gh_conversation_members?conversation_id=in.(${inList})&gh_user_id=eq.${encodeURIComponent(uid)}&left_at=is.null&select=conversation_id,gh_user_id,is_pinned,is_archived`
+        const memberRows = await rest<Array<{ conversation_id: string; gh_user_id: string; is_pinned?: boolean; is_archived?: boolean; muted_until?: string | null }>>(
+          `gh_conversation_members?conversation_id=in.(${inList})&gh_user_id=eq.${encodeURIComponent(uid)}&left_at=is.null&select=conversation_id,gh_user_id,is_pinned,is_archived,muted_until`
         )
         const membersByConversation = new Map<string, string[]>()
         if (memberRows.ok && Array.isArray(memberRows.data)) {
@@ -234,8 +238,14 @@ export async function listConversationsForUser(
             membersByConversation.set(member.conversation_id, list)
           }
         }
-        const selfPrefs = new Map<string, {is_pinned:boolean; is_archived:boolean}>()
-        if (memberRows.ok && Array.isArray(memberRows.data)) for (const m of memberRows.data) selfPrefs.set(m.conversation_id,{is_pinned:Boolean(m.is_pinned),is_archived:Boolean(m.is_archived)})
+        const selfPrefs = new Map<string, { is_pinned: boolean; is_archived: boolean; muted_until: string | null }>()
+        if (memberRows.ok && Array.isArray(memberRows.data)) {
+          for (const m of memberRows.data) selfPrefs.set(m.conversation_id, {
+            is_pinned: Boolean(m.is_pinned),
+            is_archived: Boolean(m.is_archived),
+            muted_until: m.muted_until ? String(m.muted_until) : null,
+          })
+        }
         const allMemberRows = await rest<Array<{ conversation_id: string; gh_user_id: string }>>(`gh_conversation_members?conversation_id=in.(${inList})&left_at=is.null&select=conversation_id,gh_user_id`)
         if (allMemberRows.ok && Array.isArray(allMemberRows.data)) {
           membersByConversation.clear()
@@ -259,6 +269,9 @@ export async function listConversationsForUser(
         for (const row of convRes.data) {
           const id = String(row.id || "")
           const members = membersByConversation.get(id) || []
+          const rawMuteUntil = selfPrefs.get(id)?.muted_until
+          const parsedMuteUntil = rawMuteUntil ? Date.parse(String(rawMuteUntil)) : null
+          const muteUntil = parsedMuteUntil !== null && Number.isFinite(parsedMuteUntil) ? parsedMuteUntil : null
           out.push({
             id,
             kind: (row.kind as ConversationKind) || "direct",
@@ -278,8 +291,12 @@ export async function listConversationsForUser(
             contextType: row.context_type != null ? String(row.context_type) : null,
             contextId: row.context_id != null ? String(row.context_id) : null,
             avatarUrl: row.avatar_url != null ? String(row.avatar_url) : null,
-            isPinned: Boolean(selfPrefs.get(id)?.is_pinned),
-            isArchived: Boolean(selfPrefs.get(id)?.is_archived),
+            ...(memberRows.ok ? {
+              isPinned: Boolean(selfPrefs.get(id)?.is_pinned),
+              isArchived: Boolean(selfPrefs.get(id)?.is_archived),
+              isMuted: muteUntil !== null && muteUntil > Date.now(),
+              muteUntil,
+            } : {}),
           })
         }
         return out
@@ -767,9 +784,36 @@ export async function listMessages(input: {
           }
         }
       }
+      const reactionRowsByMessage = new Map<string, Array<{ actor_id: string; emoji: string }>>()
+      if (ids.length) {
+        const inList = ids.map((id) => encodeURIComponent(id)).join(",")
+        // Reaction hydration is additive: if the new migration is not installed yet,
+        // older messages remain readable and simply return an empty reaction projection.
+        const reactionRows = await rest<Array<{ message_id: string; actor_id: string; emoji: string }>>(
+          `gh_message_reactions?conversation_id=eq.${encodeURIComponent(cid)}&message_id=in.(${inList})&select=message_id,actor_id,emoji&limit=4000`
+        )
+        if (reactionRows.ok && Array.isArray(reactionRows.data)) {
+          for (const reaction of reactionRows.data) {
+            const list = reactionRowsByMessage.get(reaction.message_id) || []
+            list.push({ actor_id: reaction.actor_id, emoji: reaction.emoji })
+            reactionRowsByMessage.set(reaction.message_id, list)
+          }
+        }
+      }
       const members = await listMemberIds(cid)
       const messages = rows.map((row) => {
         const message = rowToMessage(row)
+        const reactions = reactionRowsByMessage.get(message.id) || []
+        if (reactions.length) {
+          message.reactionCounts = reactions.reduce<Record<string, number>>((counts, reaction) => {
+            counts[reaction.emoji] = (counts[reaction.emoji] || 0) + 1
+            return counts
+          }, {})
+          message.viewerReactions = [...new Set(reactions.filter((reaction) => reaction.actor_id === uid).map((reaction) => reaction.emoji))]
+        } else {
+          message.reactionCounts = {}
+          message.viewerReactions = []
+        }
         if (message.deletedAt) {
           message.status = "deleted"
           return message
@@ -1292,6 +1336,72 @@ export async function markConversationRead(input: {
   return { ok: true }
 }
 
+/** Toggle a durable message reaction. Actor identity is supplied by the authenticated route only. */
+export async function toggleMessageReaction(input: {
+  conversationId: string
+  messageId: string
+  actorId: string
+  emoji: string
+}): Promise<
+  | { ok: true; durable: boolean; active: boolean; reactionCounts: Record<string, number>; viewerReactions: string[] }
+  | { ok: false; error: string }
+> {
+  const cid = String(input.conversationId || "").trim()
+  const mid = String(input.messageId || "").trim()
+  const uid = String(input.actorId || "").trim()
+  const emoji = String(input.emoji || "").trim()
+  const allowed = new Set(["❤️", "👍", "😂", "😮", "😢", "🙏", "🔥", "🎉"])
+  if (!allowed.has(emoji)) return { ok: false, error: "INVALID_REACTION" }
+  if (!(await isMember(cid, uid))) return { ok: false, error: "FORBIDDEN" }
+
+  if (dbConfigured()) {
+    const env = readGhcServerEnv()
+    if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return { ok: false, error: "STORE_UNAVAILABLE" }
+    try {
+      const response = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/gh_message_toggle_reaction`, {
+        method: "POST",
+        headers: {
+          apikey: env.supabaseServiceRoleKey,
+          Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ p_conversation_id: cid, p_message_id: mid, p_actor_id: uid, p_emoji: emoji }),
+        cache: "no-store",
+        signal: AbortSignal.timeout(8_000),
+      })
+      const result = await response.json().catch(() => null) as {
+        ok?: boolean; error?: string; active?: boolean;
+        reaction_counts?: Record<string, number>; viewer_reactions?: string[]
+      } | null
+      if (!response.ok || !result?.ok) {
+        return { ok: false, error: String(result?.error || "REACTION_FAILED") }
+      }
+      const counts = result.reaction_counts && typeof result.reaction_counts === "object" ? result.reaction_counts : {}
+      const viewer = Array.isArray(result.viewer_reactions) ? result.viewer_reactions.filter((v): v is string => typeof v === "string") : []
+      return { ok: true, durable: true, active: Boolean(result.active), reactionCounts: counts, viewerReactions: viewer }
+    } catch {
+      return { ok: false, error: "STORE_UNAVAILABLE" }
+    }
+  }
+
+  // Local-only mode is explicitly non-production and exists for isolated development.
+  if (isProd()) return { ok: false, error: "STORE_UNAVAILABLE" }
+  const list = memMessages.get(cid) || []
+  const message = list.find((item) => item.id === mid && !item.deletedAt)
+  if (!message) return { ok: false, error: "NOT_FOUND" }
+  const reactions = (message as DurableMessage & { reactions?: Record<string, string[]> }).reactions || {}
+  const actors = new Set(reactions[emoji] || [])
+  const active = !actors.has(uid)
+  if (active) actors.add(uid); else actors.delete(uid)
+  if (actors.size) reactions[emoji] = [...actors]; else delete reactions[emoji]
+  ;(message as DurableMessage & { reactions?: Record<string, string[]> }).reactions = reactions
+  memMessages.set(cid, list)
+  const reactionCounts = Object.fromEntries(Object.entries(reactions).map(([key, users]) => [key, users.length]))
+  const viewerReactions = Object.entries(reactions).filter(([, users]) => users.includes(uid)).map(([key]) => key)
+  return { ok: true, durable: false, active, reactionCounts, viewerReactions }
+}
+
 /**
  * Edit own message body. Durable when DB configured (requires migration 55 RPCs
  * or direct PATCH). Sender + membership enforced.
@@ -1370,9 +1480,11 @@ export async function editMessage(input: {
           return { ok: false, error: String(rpcData.error || "EDIT_FAILED") }
         }
       } catch {
-        /* fall through to PATCH */
+        /* A production RPC failure must not downgrade to a service-role table mutation. */
       }
     }
+    if (isProd()) return { ok: false, error: "EDIT_FAILED" }
+    // Development-only fallback; production always requires the membership-checking RPC.
     // Fallback PATCH: ownership enforced by sender_id filter
     const patch = await rest(
       `gh_messages?id=eq.${encodeURIComponent(mid)}&conversation_id=eq.${encodeURIComponent(cid)}&sender_id=eq.${encodeURIComponent(uid)}&deleted_at=is.null`,
@@ -1445,9 +1557,10 @@ export async function pinMessage(input: {
         if (rpcRes.ok && rpcData?.ok === true) return { ok: true, durable: true }
         if (rpcData?.ok === false) return { ok: false, error: String(rpcData.error || "PIN_FAILED") }
       } catch {
-        /* fall through */
+        /* A production RPC failure must not downgrade to a service-role table mutation. */
       }
     }
+    if (isProd()) return { ok: false, error: "PIN_FAILED" }
     const patch = await rest(
       `gh_messages?id=eq.${encodeURIComponent(mid)}&conversation_id=eq.${encodeURIComponent(cid)}&deleted_at=is.null`,
       {

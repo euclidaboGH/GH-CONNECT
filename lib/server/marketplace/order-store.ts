@@ -29,6 +29,9 @@ export type ServerMarketOrder = {
   id: string
   listingId: string
   listingTitle: string
+  variantId?: string
+  variantSku?: string
+  variantLabel?: string
   buyerId: string
   sellerId: string
   quantity: number
@@ -45,6 +48,12 @@ export type ServerMarketOrder = {
   reservationExpiresAt?: number
   escrowStatus?: "none" | "held" | "releasable" | "released" | "refund_pending" | "refunded"
   deliveryStatus?: "not_started" | "processing" | "shipped" | "delivered" | "service_active" | "completed"
+  fulfilmentMethod?: "shipping" | "pickup" | "digital"
+  shippingCarrier?: string
+  trackingNumber?: string
+  trackingUrl?: string
+  estimatedDeliveryAt?: number
+  dispatchedAt?: number
   disputeReason?: string
   cancellationReason?: string
   buyerNote?: string
@@ -115,6 +124,9 @@ function orderToRow(order: ServerMarketOrder): Record<string, unknown> {
     id: order.id,
     listingId: order.listingId,
     listingTitle: order.listingTitle,
+    variantId: order.variantId ?? null,
+    variantSku: order.variantSku ?? null,
+    variantLabel: order.variantLabel ?? null,
     buyerId: order.buyerId,
     sellerId: order.sellerId,
     quantity: order.quantity,
@@ -137,6 +149,10 @@ function orderToRow(order: ServerMarketOrder): Record<string, unknown> {
     escrowStatus: order.escrowStatus ?? "none", deliveryStatus: order.deliveryStatus ?? "not_started",
     disputeReason: order.disputeReason ?? null, cancellationReason: order.cancellationReason ?? null,
     buyerNote: order.buyerNote ?? null, sellerNote: order.sellerNote ?? null,
+    fulfilmentMethod: order.fulfilmentMethod ?? null, shippingCarrier: order.shippingCarrier ?? null,
+    trackingNumber: order.trackingNumber ?? null, trackingUrl: order.trackingUrl ?? null,
+    estimatedDeliveryAt: order.estimatedDeliveryAt ? new Date(order.estimatedDeliveryAt).toISOString() : null,
+    dispatchedAt: order.dispatchedAt ? new Date(order.dispatchedAt).toISOString() : null,
     deliveredAt: order.deliveredAt ? new Date(order.deliveredAt).toISOString() : null,
     buyerConfirmedAt: order.buyerConfirmedAt ? new Date(order.buyerConfirmedAt).toISOString() : null,
     sellerConfirmedAt: order.sellerConfirmedAt ? new Date(order.sellerConfirmedAt).toISOString() : null,
@@ -164,6 +180,9 @@ function rowToOrder(data: Record<string, unknown>): ServerMarketOrder {
     id: String(data.id || ""),
     listingId: String(data.listingId || ""),
     listingTitle: String(data.listingTitle || ""),
+    variantId: data.variantId ? String(data.variantId) : undefined,
+    variantSku: data.variantSku ? String(data.variantSku) : undefined,
+    variantLabel: data.variantLabel ? String(data.variantLabel) : undefined,
     buyerId: String(data.buyerId || ""),
     sellerId: String(data.sellerId || ""),
     quantity: Number(data.quantity) || 1,
@@ -181,6 +200,9 @@ function rowToOrder(data: Record<string, unknown>): ServerMarketOrder {
     escrowStatus: data.escrowStatus as ServerMarketOrder["escrowStatus"], deliveryStatus: data.deliveryStatus as ServerMarketOrder["deliveryStatus"],
     disputeReason: data.disputeReason ? String(data.disputeReason) : undefined, cancellationReason: data.cancellationReason ? String(data.cancellationReason) : undefined,
     buyerNote: data.buyerNote ? String(data.buyerNote) : undefined, sellerNote: data.sellerNote ? String(data.sellerNote) : undefined,
+    fulfilmentMethod: data.fulfilmentMethod === "shipping" || data.fulfilmentMethod === "pickup" || data.fulfilmentMethod === "digital" ? data.fulfilmentMethod : undefined,
+    shippingCarrier: data.shippingCarrier ? String(data.shippingCarrier) : undefined, trackingNumber: data.trackingNumber ? String(data.trackingNumber) : undefined, trackingUrl: data.trackingUrl ? String(data.trackingUrl) : undefined,
+    estimatedDeliveryAt: data.estimatedDeliveryAt != null ? timestampMs(data.estimatedDeliveryAt) : undefined, dispatchedAt: data.dispatchedAt != null ? timestampMs(data.dispatchedAt) : undefined,
     deliveredAt: data.deliveredAt != null ? timestampMs(data.deliveredAt) : undefined, buyerConfirmedAt: data.buyerConfirmedAt != null ? timestampMs(data.buyerConfirmedAt) : undefined, sellerConfirmedAt: data.sellerConfirmedAt != null ? timestampMs(data.sellerConfirmedAt) : undefined,
     createdAt: timestampMs(data.createdAt, 0),
     updatedAt: timestampMs(data.updatedAt, 0),
@@ -225,10 +247,16 @@ export async function createReservedOrder(
   idempotencyKey: string
 ): Promise<{ ok: true; order: ServerMarketOrder; idempotent: boolean } | { ok: false; error: string; available?: number }> {
   if (!dbConfigured()) return { ok: false, error: "DURABLE_RESERVATION_REQUIRED" }
-  const result = await rpcJson("gh_marketplace_order_create_reserved", {
-    p_row: orderToRow(order),
-    p_idempotency_key: idempotencyKey,
-  })
+  const result = order.variantId
+    ? await rpcJson("gh_marketplace_order_create_variant_reserved", {
+        p_row: orderToRow(order),
+        p_idempotency_key: idempotencyKey,
+        p_variant_id: order.variantId,
+      })
+    : await rpcJson("gh_marketplace_order_create_reserved", {
+        p_row: orderToRow(order),
+        p_idempotency_key: idempotencyKey,
+      })
   if (!result || typeof result !== "object") {
     return { ok: false, error: "RESERVATION_RPC_UNAVAILABLE" }
   }
@@ -408,6 +436,65 @@ export async function updateCommerceOrder(orderId: string, actorId: string, acti
   const payload=result as Record<string,unknown>
   if(payload.ok!==true || !payload.order || typeof payload.order!=="object") return {ok:false,error:String(payload.error||"COMMERCE_UPDATE_FAILED")}
   const order=rowToOrder(payload.order as Record<string,unknown>); map().set(order.id,order); return {ok:true,order}
+}
+
+export type MarketplaceFulfilmentAction = "seller_fulfill" | "seller_dispatch" | "seller_mark_delivered" | "buyer_confirm"
+export type MarketplaceFulfilmentInput = {
+  method?: "shipping" | "pickup" | "digital"
+  carrier?: string
+  trackingNumber?: string
+  trackingUrl?: string
+  estimatedDeliveryAt?: number
+  note?: string
+}
+
+export async function updateOrderFulfilment(
+  orderId: string,
+  actorId: string,
+  action: MarketplaceFulfilmentAction,
+  input: MarketplaceFulfilmentInput = {},
+): Promise<{ ok: true; order: ServerMarketOrder } | { ok: false; error: string }> {
+  if (!dbConfigured()) return { ok: false, error: "DATABASE_REQUIRED" }
+  const result = await rpcJson("gh_marketplace_order_fulfilment_update", {
+    p_order_id: orderId, p_actor_id: actorId, p_action: action, p_note: input.note || null,
+    p_fulfilment_method: input.method || null, p_carrier: input.carrier || null,
+    p_tracking_number: input.trackingNumber || null, p_tracking_url: input.trackingUrl || null,
+    p_estimated_delivery_at: input.estimatedDeliveryAt ? new Date(input.estimatedDeliveryAt).toISOString() : null,
+  })
+  if (!result || typeof result !== "object") return { ok: false, error: "FULFILMENT_RPC_UNAVAILABLE" }
+  const payload = result as Record<string, unknown>
+  if (payload.ok !== true || !payload.order || typeof payload.order !== "object") return { ok: false, error: String(payload.error || "FULFILMENT_UPDATE_FAILED") }
+  const order = rowToOrder(payload.order as Record<string, unknown>)
+  map().set(order.id, order)
+  return { ok: true, order }
+}
+
+export type MarketplaceOrderEvent = {
+  id: number
+  actorRole: "buyer" | "seller" | "system" | "operator"
+  eventType: string
+  note?: string
+  metadata: Record<string, unknown>
+  createdAt: number
+}
+
+export async function listOrderTimeline(orderId: string, actorId: string): Promise<{ ok: true; events: MarketplaceOrderEvent[] } | { ok: false; error: string }> {
+  if (!dbConfigured()) return { ok: false, error: "DATABASE_REQUIRED" }
+  const result = await rpcJson("gh_marketplace_order_timeline", { p_order_id: orderId, p_actor_id: actorId })
+  if (!result || typeof result !== "object") return { ok: false, error: "TIMELINE_RPC_UNAVAILABLE" }
+  const payload = result as Record<string, unknown>
+  if (payload.ok !== true) return { ok: false, error: String(payload.error || "TIMELINE_UNAVAILABLE") }
+  const events = Array.isArray(payload.events) ? payload.events.map((item) => {
+    const row = item && typeof item === "object" ? item as Record<string, unknown> : {}
+    return {
+      id: Number(row.id) || 0,
+      actorRole: (row.actorRole === "buyer" || row.actorRole === "seller" || row.actorRole === "operator" ? row.actorRole : "system") as MarketplaceOrderEvent["actorRole"],
+      eventType: String(row.eventType || "update"), note: row.note == null ? undefined : String(row.note),
+      metadata: row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata) ? row.metadata as Record<string, unknown> : {},
+      createdAt: timestampMs(row.createdAt, 0),
+    }
+  }) : []
+  return { ok: true, events }
 }
 
 export function marketplaceOrdersDurable(): boolean {

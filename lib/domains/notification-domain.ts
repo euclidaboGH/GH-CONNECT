@@ -7,12 +7,13 @@
  * Reuses lib/notifications.ts storage; does not invent a second store.
  */
 
-import { domainEvents, type DomainEvent, type DomainEventType } from "../realtime/event-bus"
+import { domainEvents, type DomainEvent, type DomainEventType } from "../realtime/event-bus.ts"
+import { IdentityService } from "../identity/identity-service.ts"
 import {
   notificationSystem,
   type Notification,
   type NotificationType,
-} from "../notifications"
+} from "../notifications.ts"
 
 /** User-facing preference categories */
 export type NotificationCategory =
@@ -27,6 +28,8 @@ export type NotificationCategory =
   | "rewards"
   | "wallet"
   | "premium"
+  | "profile_views"
+  | "product_updates"
   | "system"
 
 export const NOTIFICATION_CATEGORIES: NotificationCategory[] = [
@@ -41,6 +44,8 @@ export const NOTIFICATION_CATEGORIES: NotificationCategory[] = [
   "rewards",
   "wallet",
   "premium",
+  "profile_views",
+  "product_updates",
   "system",
 ]
 
@@ -52,37 +57,126 @@ export type NotificationChannelPrefs = {
 export type NotificationPreferences = Record<NotificationCategory, NotificationChannelPrefs>
 
 const PREFS_KEY = "ghc_notification_preferences"
-
+const ACCOUNT_PREFS_KEY = "ghc_notification_account_preferences"
+const DEVICE_PREFS_KEY = "ghc_notification_device_preferences"
+function scopedAccountKey(userId = IdentityService.getCurrentUserId()): string {
+  return `${ACCOUNT_PREFS_KEY}:${encodeURIComponent(String(userId || "anonymous"))}`
+}
+function deviceId(): string {
+  if (typeof localStorage === "undefined") return "unavailable"
+  const key = "ghc_notification_device_id"
+  try {
+    let id = localStorage.getItem(key)
+    if (!id) {
+      id = typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `device_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`
+      localStorage.setItem(key, id)
+    }
+    return id
+  } catch { return "unavailable" }
+}
+function scopedDeviceKey(userId = IdentityService.getCurrentUserId()): string {
+  return `${DEVICE_PREFS_KEY}:${encodeURIComponent(String(userId || "anonymous"))}:${encodeURIComponent(deviceId())}`
+}
+function parsePrefs(raw: string | null): Partial<Record<NotificationCategory, Partial<NotificationChannelPrefs>>> {
+  if (!raw) return {}
+  const parsed = JSON.parse(raw)
+  return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {}
+}
 export function defaultNotificationPreferences(): NotificationPreferences {
   const base: NotificationChannelPrefs = { inApp: true, push: true }
   const prefs = {} as NotificationPreferences
-  for (const c of NOTIFICATION_CATEGORIES) {
-    prefs[c] = { ...base }
-  }
-  // System always on for in-app by default
+  for (const c of NOTIFICATION_CATEGORIES) prefs[c] = { ...base }
+  // Security/system notices remain in-app; optional categories start muted.
   prefs.system = { inApp: true, push: false }
+  prefs.profile_views = { inApp: false, push: false }
+  prefs.product_updates = { inApp: false, push: false }
   return prefs
 }
 
-export function loadNotificationPreferences(): NotificationPreferences {
+/**
+ * Synchronous compatibility view used by notification producers.
+ * Account-level inApp choices and this browser's push/browser-alert choices
+ * are stored separately. The server is the cross-device account preference
+ * authority; localStorage is only its cache.
+ */
+export function loadNotificationPreferences(userId = IdentityService.getCurrentUserId()): NotificationPreferences {
   try {
     if (typeof localStorage === "undefined") return defaultNotificationPreferences()
-    const raw = localStorage.getItem(PREFS_KEY)
-    if (!raw) return defaultNotificationPreferences()
-    const parsed = JSON.parse(raw) as Partial<NotificationPreferences>
-    return { ...defaultNotificationPreferences(), ...parsed }
-  } catch {
-    return defaultNotificationPreferences()
-  }
+    const account = parsePrefs(localStorage.getItem(scopedAccountKey(userId)))
+    const device = parsePrefs(localStorage.getItem(scopedDeviceKey(userId)))
+    const legacy = parsePrefs(localStorage.getItem(`${PREFS_KEY}:${encodeURIComponent(String(userId || "anonymous"))}`) || (userId === "current-user" ? localStorage.getItem(PREFS_KEY) : null))
+    const merged = defaultNotificationPreferences()
+    for (const category of NOTIFICATION_CATEGORIES) {
+      const old = legacy[category]
+      const accountSaved = account[category]
+      const deviceSaved = device[category]
+      merged[category] = {
+        inApp: typeof accountSaved?.inApp === "boolean" ? accountSaved.inApp : typeof old?.inApp === "boolean" ? old.inApp : merged[category].inApp,
+        push: typeof deviceSaved?.push === "boolean" ? deviceSaved.push : typeof old?.push === "boolean" ? old.push : merged[category].push,
+      }
+    }
+    return merged
+  } catch { return defaultNotificationPreferences() }
 }
 
-export function saveNotificationPreferences(prefs: NotificationPreferences): void {
+export function saveNotificationPreferences(prefs: NotificationPreferences, userId = IdentityService.getCurrentUserId()): void {
+  saveAccountNotificationPreferences(prefs, userId)
+  saveDeviceNotificationPreferences(prefs, userId)
+}
+
+export function saveAccountNotificationPreferences(prefs: NotificationPreferences, userId = IdentityService.getCurrentUserId()): void {
   try {
     if (typeof localStorage === "undefined") return
-    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs))
-  } catch {
-    /* ignore */
+    const account: Record<string, { inApp: boolean }> = {}
+    for (const category of NOTIFICATION_CATEGORIES) account[category] = { inApp: Boolean(prefs[category]?.inApp) }
+    localStorage.setItem(scopedAccountKey(userId), JSON.stringify(account))
+  } catch { /* local cache is best effort; server sync is handled by settings */ }
+}
+
+export function saveDeviceNotificationPreferences(prefs: NotificationPreferences, userId = IdentityService.getCurrentUserId()): void {
+  try {
+    if (typeof localStorage === "undefined") return
+    const device: Record<string, { push: boolean }> = {}
+    for (const category of NOTIFICATION_CATEGORIES) device[category] = { push: Boolean(prefs[category]?.push) }
+    localStorage.setItem(scopedDeviceKey(userId), JSON.stringify(device))
+  } catch { /* device preference cache is best effort */ }
+}
+
+export function mergeAccountNotificationPreferences(
+  prefs: NotificationPreferences,
+  accountPrefs: Partial<Record<NotificationCategory, Partial<NotificationChannelPrefs>>>,
+  userId = IdentityService.getCurrentUserId(),
+): NotificationPreferences {
+  const next = { ...prefs }
+  for (const category of NOTIFICATION_CATEGORIES) {
+    if (typeof accountPrefs[category]?.inApp === "boolean") {
+      next[category] = { ...next[category], inApp: accountPrefs[category]!.inApp! }
+    }
   }
+  saveAccountNotificationPreferences(next, userId)
+  return next
+}
+
+export function serializeAccountNotificationPreferences(prefs: NotificationPreferences): Record<string, { inApp: boolean }> {
+  return Object.fromEntries(NOTIFICATION_CATEGORIES.map((category) => [category, { inApp: Boolean(prefs[category]?.inApp) }]))
+}
+
+/** Hydrate account-level in-app choices once after authenticated app bootstrap. */
+export async function hydrateAccountNotificationPreferences(userId = IdentityService.getCurrentUserId()): Promise<boolean> {
+  const owner = String(userId || "").trim()
+  if (!owner || owner === "anonymous" || owner === "current-user" || typeof window === "undefined") return false
+  try {
+    const response = await fetch("/api/notifications/preferences", {
+      headers: { ...IdentityService.getAuthHeaders(), Accept: "application/json" },
+      cache: "no-store",
+    })
+    const body = await response.json().catch(() => null)
+    if (!response.ok || body?.ok !== true || !body?.preferences || IdentityService.getCurrentUserId() !== owner) return false
+    mergeAccountNotificationPreferences(loadNotificationPreferences(owner), body.preferences, owner)
+    return body.durable === true
+  } catch { return false }
 }
 
 /** Map domain event → category + presentation */
@@ -409,7 +503,7 @@ export function createNotificationDomain(deps?: {
   let unsub: (() => void) | null = null
 
   function prefs(): NotificationPreferences {
-    return deps?.getPreferences?.() || loadNotificationPreferences()
+    return deps?.getPreferences?.() || loadNotificationPreferences(actorMe)
   }
 
   function shouldDeliver(category: NotificationCategory, channel: "inApp" | "push"): boolean {
@@ -443,7 +537,7 @@ export function createNotificationDomain(deps?: {
       mapped.title,
       mapped.message,
       mapped.icon || "🔔",
-      { ...mapped.data, category: mapped.category, actorId }
+      { ...mapped.data, category: mapped.category, actorId, pushEnabled: shouldDeliver(mapped.category, "push") }
     )
   }
 
@@ -458,7 +552,7 @@ export function createNotificationDomain(deps?: {
         next[key] = { ...next[key], ...patch[key] }
       }
       if (deps?.setPreferences) deps.setPreferences(next)
-      else saveNotificationPreferences(next)
+      else saveNotificationPreferences(next, actorMe)
       return next
     },
 

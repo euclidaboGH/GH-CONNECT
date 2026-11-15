@@ -8,6 +8,8 @@
 import { runMutation, type MutationResult } from "./mutation-pipeline"
 import { domainEvents } from "../realtime/event-bus"
 import type { DomainServices } from "./create-domains"
+import type { MarketplaceProductOption } from "../marketplace/product-options.ts"
+import type { MarketplaceProductVariant } from "../marketplace/product-variants.ts"
 import { TYPE_LABELS, type VerificationType } from "./verification-domain"
 
 export type ListingKind = "product" | "service" | "opportunity"
@@ -26,6 +28,7 @@ export type OrderStatus =
   | "created"
   | "pending"
   | "confirmed"
+  | "fulfilling"
   | "processing"
   | "fulfilled"
   | "completed"
@@ -43,6 +46,9 @@ export interface MarketplaceListing {
   media: string[]
   category: string
   tags?: string[]
+  /** Descriptive choices; current listing price and stock remain shared across choices. */
+  productOptions?: MarketplaceProductOption[]
+  variants?: MarketplaceProductVariant[]
   price: number
   /** Display currency label — GHC utility or external label (not auto on-chain) */
   currency: string
@@ -61,6 +67,9 @@ export interface MarketplaceListing {
 export interface MarketplaceOrder {
   id: string
   listingId: string
+  variantId?: string
+  variantSku?: string
+  variantLabel?: string
   buyerId: string
   sellerId: string
   quantity: number
@@ -78,6 +87,12 @@ export interface MarketplaceOrder {
   paymentStatus?: "none" | "requested" | "pending" | "held" | "captured" | "verified" | "refunded"
   /** Durable seller delivery state; buyer confirmation is gated on delivered/service_active. */
   deliveryStatus?: "not_started" | "processing" | "shipped" | "delivered" | "service_active" | "completed"
+  fulfilmentMethod?: "shipping" | "pickup" | "digital"
+  shippingCarrier?: string
+  trackingNumber?: string
+  trackingUrl?: string
+  estimatedDeliveryAt?: number
+  dispatchedAt?: number
   /** Server order id when mirrored to /api/marketplace/orders */
   serverOrderId?: string
   paymentMethod?: "ghc" | "pi" | "none"
@@ -283,6 +298,8 @@ export function createMarketplaceDomain(deps: {
       condition?: ListingCondition
       location?: string
       shippingInfo?: string
+      productOptions?: MarketplaceProductOption[]
+      variants?: MarketplaceProductVariant[]
       availability?: number
       status?: ListingStatus
     }): Promise<MutationResult<{ listing: MarketplaceListing }>> {
@@ -305,6 +322,8 @@ export function createMarketplaceDomain(deps: {
             condition: i.condition || (i.kind === "service" ? "not_applicable" : "new"),
             location: i.location,
             shippingInfo: i.shippingInfo,
+            productOptions: i.productOptions,
+            variants: i.variants,
             sellerId: userId,
             availability: i.availability ?? 1,
             status: i.status || "active",
@@ -340,6 +359,8 @@ export function createMarketplaceDomain(deps: {
           | "condition"
           | "location"
           | "shippingInfo"
+          | "productOptions"
+          | "variants"
           | "availability"
           | "status"
         >

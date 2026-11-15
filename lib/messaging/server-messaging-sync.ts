@@ -35,6 +35,29 @@ export async function apiCreateDirectConversation(otherUserId: string) {
   return { httpOk: res.ok, ...body }
 }
 
+
+export type ConversationPreferencePatch = {
+  isPinned?: boolean
+  isArchived?: boolean
+  mutedUntil?: number | null
+}
+
+/** Persist viewer-only inbox preferences through the authenticated server authority. */
+export async function apiSetConversationPrefs(
+  conversationId: string,
+  patch: ConversationPreferencePatch,
+) {
+  const res = await fetch(`/api/messaging/conversations/${encodeURIComponent(conversationId)}/prefs`, {
+    method: "PATCH",
+    credentials: "include",
+    cache: "no-store",
+    headers: authHeaders(),
+    body: JSON.stringify(patch),
+  })
+  const body = await res.json().catch(() => ({}))
+  return { httpOk: res.ok, ...body }
+}
+
 export async function apiListMessages(
   conversationId: string,
   opts?: { limit?: number; before?: string | number; beforeId?: string }

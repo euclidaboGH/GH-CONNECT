@@ -215,6 +215,17 @@ export async function POST(request: Request) {
           redeemableAt: atomic.redeemableAt,
           cycleDay: atomic.cycleDay ?? computed.cycleDay,
           claimKind: "DAILY_CLAIM_V12",
+          rewardId: atomic.referenceId ?? computed.idempotencyKey,
+          claimId: atomic.referenceId ?? computed.idempotencyKey,
+          referenceId: atomic.referenceId ?? computed.idempotencyKey,
+          transactionId: atomic.transactionId ?? undefined,
+          deepLink: {
+            open: "rewards", tab: "rewards", section: "history",
+            rewardId: atomic.referenceId ?? computed.idempotencyKey,
+            claimId: atomic.referenceId ?? computed.idempotencyKey,
+            transactionId: atomic.transactionId ?? undefined,
+            referenceId: atomic.referenceId ?? computed.idempotencyKey,
+          },
         },
       }).catch(() => ({ ok: false }))
     }

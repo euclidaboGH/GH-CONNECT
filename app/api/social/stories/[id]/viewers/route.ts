@@ -23,7 +23,7 @@ export async function GET(
   }
   const { id } = await ctx.params
   const storyId = String(id || "").trim()
-  if (!storyId) {
+  if (!/^story_[a-z0-9_-]{8,100}$/i.test(storyId)) {
     return NextResponse.json({ ok: false, error: "INVALID_ID" }, { status: 400 })
   }
   const limit = Math.min(100, Math.max(1, Number(new URL(request.url).searchParams.get("limit") || 50) || 50))

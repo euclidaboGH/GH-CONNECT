@@ -14,6 +14,7 @@ import { ErrorBoundary } from "@/lib/error-boundary";
 import { a11y } from "@/lib/accessibility";
 import { offlineSupport } from "@/lib/offline";
 import "@/lib/auth/install-api-auth-fetch";
+import { startWebVitalsCollector } from "@/lib/web-vitals-collector";
 
 /**
  * Public routes that must render without Pi sign-in (Pi Portal listing,
@@ -38,6 +39,7 @@ function isPublicPath(pathname: string | null): boolean {
 
 function AccessibilitySetup() {
   useEffect(() => {
+    startWebVitalsCollector();
     a11y.addSkipLink();
 
     if (typeof document !== "undefined") {

@@ -12,6 +12,7 @@ import {
 import { deriveGreenHavenId } from "@/lib/domains/greenhaven-id"
 
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
 
 export async function GET(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
@@ -36,6 +37,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return jsonErr("AUTH_REQUIRED", "Authentication required", 401)
+  const __rateLimited = await enforceUserMutationRateLimit(auth.userId, "economy/public-id/me:POST", 60, 60_000, { failClosed: false })
+  if (__rateLimited) return __rateLimited
 
   const parsedBody = await readBoundedJson(request, 16 * 1024)
   if (!parsedBody.ok) return jsonErr(parsedBody.error, parsedBody.error === "REQUEST_TOO_LARGE" ? "Request too large" : "Invalid request body", parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400)

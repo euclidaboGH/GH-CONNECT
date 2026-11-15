@@ -9,7 +9,7 @@ const mapper = read("lib/marketplace/record-mappers.ts")
 const release = read("lib/app-release.ts")
 const truth = read("docs/PROJECT_TRUTH.md")
 const manifest = read("VERIFIED_MANIFEST.txt")
-const prebuild = pkg.scripts?.prebuild || ""
+const prebuild = pkg.scripts?.['prebuild:checks'] || ""
 const checks = [
   ["shared listing mapper owns API record normalization", mapper.includes("mapMarketplaceListingRecord") && mapper.includes("sellerId: text(row.sellerId ?? row.seller_id)")],
   ["saved listing metadata normalization is isolated", mapper.includes("mapSavedMarketplaceListingRecord") && mapper.includes("const metadata = record(row.metadata)")],

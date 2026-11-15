@@ -9,7 +9,7 @@ const professionalIdentity = read("lib/profile/professional-identity.ts")
 const discoverRoute = read("app/api/social/people/discover/route.ts")
 const privacyProjection = read("lib/server/privacy-feed-contract.ts")
 const checks = [
-  ["owner profile renders professional/business showcase", owner.includes("<ProfileProfessionalShowcase profile={p} onEdit={openEdit} onSave=")],
+  ["owner profile renders professional/business showcase", owner.includes('aria-label="About"') && owner.includes("<ProfileProfessionalShowcase") && owner.includes("profile={p}") && owner.includes("onSave={async (patch)")],
   ["public peer profile renders read-only professional showcase", peer.includes("<ProfileProfessionalShowcase profile={candidate} readOnly />")],
   ["showcase supports service, skills, experience and portfolio", ["Services", "Skills", "Experience", "Selected work"].every((label) => showcase.includes(label))],
   ["portfolio links require HTTPS and reject embedded credentials", showcase.includes('url.protocol !== "https:"') && showcase.includes("url.username || url.password")],
@@ -20,7 +20,7 @@ const checks = [
   ["public profile showcase has no financial or wallet fields", !showcase.match(/\b(wallet|balance|ledger|payout|payment)\b/i) && !showcase.match(/\bGHC\b/)],
   ["discovery relevance includes public professional interests", discovery.includes("raw.professional?.professionalInterests") && discovery.includes("const sharedInterests = interests")],
   ["profile PATCH bounds professional/business payloads and ignores client verification", profileStore.includes("sanitizeProfessionalIdentityPayload") && profileStore.includes("sanitizeBusinessIdentityPayload") && professionalIdentity.includes("Verification is never accepted here")],
-  ["people discovery projects only whitelisted public identity fields", discoverRoute.includes("publicIdentityPayload") && discoverRoute.includes("safeHttpsUrl") && discoverRoute.includes('visibility === "hidden"')],
+  ["people discovery projects only whitelisted public identity fields", discoverRoute.includes("publicIdentityPayload") && discoverRoute.includes("safeHttpsUrl") && discoverRoute.includes('includes(visibility)') && discoverRoute.includes('includes(whoCanDiscover)')],
   ["public profile projection enforces professional and nested location/interests privacy", privacyProjection.includes("preferences.showProfessionOnSocial === false") && privacyProjection.includes("delete professional.locationLabel") && privacyProjection.includes("delete professional.professionalInterests")],
 ]
 for (const [name, ok] of checks) console.log(`${ok ? "PASS" : "FAIL"} — ${name}`)

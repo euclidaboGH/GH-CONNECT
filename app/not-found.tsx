@@ -26,6 +26,12 @@ export default function NotFound() {
           if (typeof window !== "undefined" && window.history.length > 1) router.back()
           else router.push("/")
         }} className="inline-flex min-h-11 items-center justify-center rounded-full border border-border bg-card px-5 text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">Go back</button>
+        <Link href="/support" className="inline-flex min-h-11 items-center justify-center rounded-full border border-border bg-card px-5 text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">Help & support</Link>
+        <p className="mt-2 text-xs text-muted-foreground">
+          <Link href="/privacy" className="underline-offset-2 hover:underline">Privacy</Link>
+          {" · "}
+          <Link href="/terms" className="underline-offset-2 hover:underline">Terms</Link>
+        </p>
       </div>
     </main>
   )

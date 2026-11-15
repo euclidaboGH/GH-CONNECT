@@ -121,12 +121,32 @@ export async function rpcExecuteTransfer(
 
 export async function rpcListTransactions(
   userId: string,
-  env: GhcServerEnv = readGhcServerEnv()
+  env: GhcServerEnv = readGhcServerEnv(),
+  options: { limit?: number; before?: { createdAt: string; id: string }; from?: string; to?: string; status?: "pending" | "posted" | "failed" | "reversed" | "expired"; kind?: "earned" | "spent" | "purchased" | "pending" | "reversed" | "expired" | "adjusted" | "transfer_out" | "transfer_in" | "transfer_request"; q?: string } = {}
 ): Promise<GhcTransaction[] | null> {
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return null
-  const url =
-    `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/ghc_transactions` +
-    `?user_id=eq.${encodeURIComponent(userId)}&order=created_at.desc&limit=500`
+  const requestedLimit = Number(options.limit ?? 500)
+  const limit = Math.min(Math.max(Number.isFinite(requestedLimit) ? Math.floor(requestedLimit) : 100, 1), 500)
+  const params = new URLSearchParams({
+    user_id: `eq.${userId}`,
+    order: "created_at.desc,id.desc",
+    limit: String(limit),
+  })
+  if (options.from) params.set("created_at", `gte.${options.from}T00:00:00.000Z`)
+  if (options.status) params.set("status", `eq.${options.status}`)
+  if (options.kind) params.set("kind", `eq.${options.kind}`)
+  const andFilters: string[] = []
+  if (options.to) andFilters.push(`created_at.lte.${options.to}T23:59:59.999Z`)
+  const search = String(options.q || "").normalize("NFKC").trim().replace(/[%,()\\*]/g, " ").replace(/\s+/g, " ").slice(0, 120)
+  for (const token of search.split(" ").filter(Boolean).slice(0, 6)) andFilters.push(`or(reason.ilike.*${token}*,source_event.ilike.*${token}*,reference_id.ilike.*${token}*)`)
+  if (andFilters.length) params.set("and", `(${andFilters.join(",")})`)
+  if (options.before) {
+    // The caller validates the cursor timestamp and UUID before this query.
+    // Preserve the exact database timestamp (including sub-millisecond precision).
+    const { createdAt, id } = options.before
+    params.set("or", `(created_at.lt.${createdAt},and(created_at.eq.${createdAt},id.lt.${id}))`)
+  }
+  const url = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/ghc_transactions?${params.toString()}`
   try {
     const res = await fetch(url, {
       headers: {
@@ -137,7 +157,7 @@ export async function rpcListTransactions(
     })
     if (!res.ok) return null
     const rows = (await res.json()) as Array<Record<string, unknown>>
-    if (!Array.isArray(rows) || rows.length > 500 || rows.some((r) => !r || typeof r !== "object" ||
+    if (!Array.isArray(rows) || rows.length > limit || rows.some((r) => !r || typeof r !== "object" ||
         !Number.isFinite(Number(r.amount)) || !Number.isFinite(new Date(String(r.created_at)).getTime()) ||
         !String(r.id || "").trim() || String(r.user_id || "") !== userId)) return null
     return rows.map((r) => ({
@@ -150,6 +170,7 @@ export async function rpcListTransactions(
       sourceEvent: String(r.source_event || ""),
       referenceId: r.reference_id != null ? String(r.reference_id) : undefined,
       createdAt: r.created_at ? new Date(String(r.created_at)).getTime() : Date.now(),
+      createdAtCursor: r.created_at == null ? undefined : String(r.created_at),
       postedAt: r.posted_at ? new Date(String(r.posted_at)).getTime() : undefined,
       metadata: (r.metadata as GhcTransaction["metadata"]) || undefined,
     }))
@@ -158,7 +179,6 @@ export async function rpcListTransactions(
   }
 }
 
-/** Full-ledger wallet totals via SECURITY DEFINER RPC (not limited to recent N rows). */
 export async function rpcWalletSnapshot(
   userId: string,
   env: GhcServerEnv = readGhcServerEnv()

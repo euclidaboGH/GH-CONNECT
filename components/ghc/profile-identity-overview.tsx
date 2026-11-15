@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { IdentityService } from "@/lib/identity/identity-service"
+import { parseProfileIdentitySnapshot } from "@/lib/domains/profile-identity-snapshot"
 import { Award, RefreshCw, ShieldCheck, TrendingUp, Users } from "lucide-react"
 
 type Snapshot = {
@@ -39,13 +40,11 @@ export function ProfileIdentityOverview({ onCounts }: { onCounts?: (counts: { fo
       ])
       const [f, r, a] = await Promise.all([followRes.json().catch(() => ({})), repRes.json().catch(() => ({})), achRes.json().catch(() => ({}))])
       if (controller.signal.aborted || IdentityService.getCurrentUserId() !== requestIdentity) return
-      if (!followRes.ok) throw new Error(String(f.error || "Identity graph unavailable"))
-      const next = {
-        followers: Math.max(0, Number(f.followersCount) || 0), following: Math.max(0, Number(f.followingCount) || 0),
-        level: Math.max(1, Number(r.level) || 1), levelName: String(r.levelName || "Seed"), points: Math.max(0, Number(r.totalPoints) || 0),
-        progress: Math.max(0, Math.min(1, Number(r.progressRatio) || 0)), achievements: Array.isArray(a.achievements) ? a.achievements.length : 0,
-        durable: Boolean(f.durable && r.durable !== false && a.durable !== false),
+      if (!followRes.ok || !repRes.ok || !achRes.ok) {
+        const failed = !followRes.ok ? f : !repRes.ok ? r : a
+        throw new Error(String(failed.error || failed.message || "Identity snapshot unavailable"))
       }
+      const next = parseProfileIdentitySnapshot(f, r, a)
       setSnapshot(next); onCounts?.({ followers: next.followers, following: next.following })
     } catch (e) {
       if (!controller.signal.aborted && IdentityService.getCurrentUserId() === requestIdentity) {

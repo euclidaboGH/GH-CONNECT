@@ -28,6 +28,7 @@ import {
   buildSessionCookieHeader,
   isSessionStoreDurable,
 } from "@/lib/server/identity/session-store"
+import { readBoundedText } from "@/lib/server/http/read-bounded-text"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -52,7 +53,12 @@ export async function POST(request: Request) {
     }
     // Enforce the cap on the actual body too; content-length can be absent on
     // streamed/chunked requests. Do not parse an unbounded JSON body first.
-    const rawBody = await request.text()
+    const boundedBody = await readBoundedText(request, 16_384)
+    if (!boundedBody.ok) {
+      const tooLarge = boundedBody.error === "REQUEST_TOO_LARGE"
+      return NextResponse.json({ ok: false, error: tooLarge ? "REQUEST_TOO_LARGE" : "INVALID_BODY" }, { status: tooLarge ? 413 : 400, headers: { "Cache-Control": "no-store" } })
+    }
+    const rawBody = boundedBody.text
     if (Buffer.byteLength(rawBody, "utf8") > 16_384) {
       return NextResponse.json({ ok: false, error: "REQUEST_TOO_LARGE" }, { status: 413, headers: { "Cache-Control": "no-store" } })
     }

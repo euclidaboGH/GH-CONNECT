@@ -20,7 +20,9 @@ PI_EARNINGS_PAYOUT_REQUESTS_ENABLED=true
 # Worker only:
 PI_EARNINGS_PAYOUT_EXECUTION_ENABLED=true
 PI_A2U_ENABLED=true
-PI_A2U_TESTNET_ONLY=1
+PI_A2U_TESTNET_ONLY=true
+PI_EARNINGS_AUTO_EXECUTE=true
+PI_ENV=production
 ```
 - [ ] Redeploy after env change
 - [ ] Never commit real `PI_API_KEY` / wallet seed to git

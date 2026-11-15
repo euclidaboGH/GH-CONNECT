@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import {
   tryGetEntitlementAuthoritative,
   reconcileMembershipFromPaymentHistory,
@@ -16,6 +17,14 @@ export async function GET(request: Request) {
       { status: 401, headers: { "Cache-Control": "no-store, no-cache, must-revalidate", Pragma: "no-cache" } },
     )
   }
+  const rateLimit = await checkDurableRateLimit(`membership-status:${auth.userId}`, 60, 60_000, { onUnavailable: "deny" })
+  if (!rateLimit.ok) {
+    return NextResponse.json(
+      { ok: false, error: durableRateLimitCode(rateLimit) },
+      { status: durableRateLimitStatus(rateLimit), headers: { "Cache-Control": "private, no-store, max-age=0", Pragma: "no-cache" } },
+    )
+  }
+
   // Prefer non-throwing path so unavailable store → 503, not fake free.
   // getEntitlementAuthoritative remains the canonical authority helper.
   const result = await tryGetEntitlementAuthoritative(auth.userId)

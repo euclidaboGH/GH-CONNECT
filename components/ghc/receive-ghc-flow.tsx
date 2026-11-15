@@ -336,7 +336,7 @@ export function ReceiveGhcFlow({
                   {qrSvg ? (
                     <div
                       className="mx-auto"
-                      dangerouslySetInnerHTML={{ __html: qrSvg }}
+                      dangerouslySetInnerHTML={{ __html: qrSvg /* qrSvg is generated locally; never from network HTML */ }}
                     />
                   ) : (
                     <p className="py-8 text-xs text-muted-foreground">QR unavailable — use your ID</p>

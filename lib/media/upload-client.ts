@@ -116,10 +116,15 @@ function authHeaders(): Record<string, string> {
  */
 async function fetchWithPiSessionRecovery(
   input: RequestInfo | URL,
-  init: RequestInit
+  init: RequestInit,
+  expectedUserId?: string
 ): Promise<Response> {
+  const identityAtStart = IdentityService.getCurrentUserId()
+  if (init.signal?.aborted) throw new Error("UPLOAD_CANCELLED")
+  if (expectedUserId && identityAtStart !== expectedUserId) throw new Error("AUTH_CONTEXT_CHANGED")
   const response = await fetch(input, init)
   if (response.status !== 401) return response
+  if (init.signal?.aborted || IdentityService.getCurrentUserId() !== identityAtStart) return response
 
   const accessToken = IdentityService.getAccessToken()
   if (!accessToken) return response
@@ -131,9 +136,11 @@ async function fetchWithPiSessionRecovery(
       cache: "no-store",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({ accessToken }),
+      signal: init.signal,
     })
     const result = (await bridge.json().catch(() => ({}))) as { ok?: boolean; verified?: boolean }
     if (!bridge.ok || result.ok !== true || result.verified !== true) return response
+    if (init.signal?.aborted || IdentityService.getCurrentUserId() !== identityAtStart) return response
 
     // Reuse the original request body and cookie credentials; retry only once.
     return await fetch(input, { ...init, credentials: "include" })
@@ -151,6 +158,8 @@ async function uploadViaProxy(
     durationMs?: number
     onProgress?: (label: string) => void
     category?: "avatars" | "images" | "videos" | "audio" | "documents"
+    signal?: AbortSignal
+    expectedUserId?: string
   }
 ): Promise<DurableMediaResult> {
   const form = new FormData()
@@ -161,13 +170,18 @@ async function uploadViaProxy(
   if (meta?.durationMs != null) form.append("durationMs", String(meta.durationMs))
 
   try {
+    if (meta?.signal?.aborted) return { ok: false, durable: false, error: "UPLOAD_CANCELLED", userMessage: "Upload cancelled." }
+    if (meta?.expectedUserId && IdentityService.getCurrentUserId() !== meta.expectedUserId) return { ok: false, durable: false, error: "AUTH_CONTEXT_CHANGED", userMessage: "Your account changed. Reopen the composer and try again." }
     meta?.onProgress?.("Uploading…")
     const res = await fetchWithPiSessionRecovery("/api/media", {
       method: "POST",
       credentials: "include",
       headers: { ...authHeaders() },
       body: form,
-    })
+      signal: meta?.signal,
+    }, meta?.expectedUserId)
+    if (meta?.signal?.aborted) return { ok: false, durable: false, error: "UPLOAD_CANCELLED", userMessage: "Upload cancelled." }
+    if (meta?.expectedUserId && IdentityService.getCurrentUserId() !== meta.expectedUserId) return { ok: false, durable: false, error: "AUTH_CONTEXT_CHANGED", userMessage: "Your account changed. Reopen the composer and try again." }
     const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
     if (res.ok && data.ok === true && data.url) {
       return {
@@ -187,6 +201,8 @@ async function uploadViaProxy(
       clientCompress: Boolean(data.clientCompress),
     }
   } catch {
+    if (meta?.signal?.aborted) return { ok: false, durable: false, error: "UPLOAD_CANCELLED", userMessage: "Upload cancelled." }
+    if (meta?.expectedUserId && IdentityService.getCurrentUserId() !== meta.expectedUserId) return { ok: false, durable: false, error: "AUTH_CONTEXT_CHANGED", userMessage: "Your account changed. Reopen the composer and try again." }
     return {
       ok: false,
       durable: false,
@@ -206,10 +222,14 @@ async function uploadViaDirect(
     durationMs?: number
     onProgress?: (label: string) => void
     category?: "avatars" | "images" | "videos" | "audio" | "documents"
+    signal?: AbortSignal
+    expectedUserId?: string
   }
 ): Promise<DurableMediaResult> {
   meta?.onProgress?.("Preparing secure upload…")
   try {
+    if (meta?.signal?.aborted) return { ok: false, durable: false, error: "UPLOAD_CANCELLED", userMessage: "Upload cancelled." }
+    if (meta?.expectedUserId && IdentityService.getCurrentUserId() !== meta.expectedUserId) return { ok: false, durable: false, error: "AUTH_CONTEXT_CHANGED", userMessage: "Your account changed. Reopen the composer and try again." }
     const intentRes = await fetchWithPiSessionRecovery("/api/media/direct-upload-intent", {
       method: "POST",
       credentials: "include",
@@ -224,7 +244,10 @@ async function uploadViaDirect(
         fileName: uploadName,
         category: meta?.category,
       }),
-    })
+      signal: meta?.signal,
+    }, meta?.expectedUserId)
+    if (meta?.signal?.aborted) return { ok: false, durable: false, error: "UPLOAD_CANCELLED", userMessage: "Upload cancelled." }
+    if (meta?.expectedUserId && IdentityService.getCurrentUserId() !== meta.expectedUserId) return { ok: false, durable: false, error: "AUTH_CONTEXT_CHANGED", userMessage: "Your account changed. Reopen the composer and try again." }
     const intent = (await intentRes.json().catch(() => ({}))) as Record<string, unknown>
     if (!intentRes.ok || intent.ok !== true || !intent.uploadUrl || !intent.objectPath) {
       const code = String(intent.error || `HTTP_${intentRes.status}`)
@@ -243,17 +266,23 @@ async function uploadViaDirect(
     if (intent.token) {
       putHeaders["x-upsert"] = "false"
     }
+    if (meta?.signal?.aborted) return { ok: false, durable: false, error: "UPLOAD_CANCELLED", userMessage: "Upload cancelled." }
+    if (meta?.expectedUserId && IdentityService.getCurrentUserId() !== meta.expectedUserId) return { ok: false, durable: false, error: "AUTH_CONTEXT_CHANGED", userMessage: "Your account changed. Reopen the composer and try again." }
     const putRes = await fetch(String(intent.uploadUrl), {
       method: "PUT",
       headers: putHeaders,
       body: file,
+      signal: meta?.signal,
     })
     // Some Supabase deployments expect POST to signed URL
     if (!putRes.ok) {
+      if (meta?.signal?.aborted) return { ok: false, durable: false, error: "UPLOAD_CANCELLED", userMessage: "Upload cancelled." }
+      if (meta?.expectedUserId && IdentityService.getCurrentUserId() !== meta.expectedUserId) return { ok: false, durable: false, error: "AUTH_CONTEXT_CHANGED", userMessage: "Your account changed. Reopen the composer and try again." }
       const postRes = await fetch(String(intent.uploadUrl), {
         method: "POST",
         headers: putHeaders,
         body: file,
+        signal: meta?.signal,
       })
       if (!postRes.ok) {
         return {
@@ -266,6 +295,8 @@ async function uploadViaDirect(
     }
 
     meta?.onProgress?.("Finalizing…")
+    if (meta?.signal?.aborted) return { ok: false, durable: false, error: "UPLOAD_CANCELLED", userMessage: "Upload cancelled." }
+    if (meta?.expectedUserId && IdentityService.getCurrentUserId() !== meta.expectedUserId) return { ok: false, durable: false, error: "AUTH_CONTEXT_CHANGED", userMessage: "Your account changed. Reopen the composer and try again." }
     const completeRes = await fetchWithPiSessionRecovery("/api/media/direct-upload-complete", {
       method: "POST",
       credentials: "include",
@@ -286,7 +317,10 @@ async function uploadViaDirect(
         durationMs: meta?.durationMs,
         category: meta?.category,
       }),
-    })
+      signal: meta?.signal,
+    }, meta?.expectedUserId)
+    if (meta?.signal?.aborted) return { ok: false, durable: false, error: "UPLOAD_CANCELLED", userMessage: "Upload cancelled." }
+    if (meta?.expectedUserId && IdentityService.getCurrentUserId() !== meta.expectedUserId) return { ok: false, durable: false, error: "AUTH_CONTEXT_CHANGED", userMessage: "Your account changed. Reopen the composer and try again." }
     const complete = (await completeRes.json().catch(() => ({}))) as Record<string, unknown>
     if (completeRes.ok && complete.ok === true && complete.url) {
       return {
@@ -306,6 +340,8 @@ async function uploadViaDirect(
       userMessage: mediaUserMessage(code, String(complete.message || "") || undefined),
     }
   } catch {
+    if (meta?.signal?.aborted) return { ok: false, durable: false, error: "UPLOAD_CANCELLED", userMessage: "Upload cancelled." }
+    if (meta?.expectedUserId && IdentityService.getCurrentUserId() !== meta.expectedUserId) return { ok: false, durable: false, error: "AUTH_CONTEXT_CHANGED", userMessage: "Your account changed. Reopen the composer and try again." }
     return {
       ok: false,
       durable: false,
@@ -347,6 +383,8 @@ export async function uploadDurableMedia(
     fileName?: string
     onProgress?: (label: string) => void
     category?: "avatars" | "images" | "videos" | "audio" | "documents"
+    signal?: AbortSignal
+    expectedUserId?: string
   }
 ): Promise<DurableMediaResult> {
   const mimeType =
@@ -355,7 +393,9 @@ export async function uploadDurableMedia(
   let uploadFile: Blob = file
   let uploadName =
     meta?.fileName || (file instanceof File && file.name ? file.name : `media_${Date.now()}`)
-  meta = { ...meta, category: meta?.category || (mimeType.startsWith("audio/") ? "audio" : mimeType.startsWith("video/") ? "videos" : mimeType === "application/pdf" ? "documents" : "images") }
+  meta = { ...meta, expectedUserId: meta?.expectedUserId || IdentityService.getCurrentUserId(), category: meta?.category || (mimeType.startsWith("audio/") ? "audio" : mimeType.startsWith("video/") ? "videos" : mimeType === "application/pdf" ? "documents" : "images") }
+  if (meta.signal?.aborted) return { ok: false, durable: false, error: "UPLOAD_CANCELLED", userMessage: "Upload cancelled." }
+  if (meta.expectedUserId && IdentityService.getCurrentUserId() !== meta.expectedUserId) return { ok: false, durable: false, error: "AUTH_CONTEXT_CHANGED", userMessage: "Your account changed. Reopen the composer and try again." }
 
   const isImage = mimeType.startsWith("image/")
   const isVideo = mimeType.startsWith("video/")
@@ -391,6 +431,9 @@ export async function uploadDurableMedia(
       // Fall through to direct upload with original
     }
   }
+
+  if (meta.signal?.aborted) return { ok: false, durable: false, error: "UPLOAD_CANCELLED", userMessage: "Upload cancelled." }
+  if (meta.expectedUserId && IdentityService.getCurrentUserId() !== meta.expectedUserId) return { ok: false, durable: false, error: "AUTH_CONTEXT_CHANGED", userMessage: "Your account changed. Reopen the composer and try again." }
 
   if (uploadFile.size <= SAFE_PROXY_UPLOAD_BYTES) {
     const proxy = await uploadViaProxy(uploadFile, uploadName, meta)

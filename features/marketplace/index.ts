@@ -10,3 +10,4 @@
  */
 export type { MarketplaceListing, MarketplaceOrder, SellerProfileView, OrderStatus } from "@/lib/domains/marketplace-domain"
 export { MARKETPLACE_CATEGORIES, PROMOTION_CATALOG } from "@/lib/domains/marketplace-domain"
+export * from "@/lib/active-upgrades/marketplace"

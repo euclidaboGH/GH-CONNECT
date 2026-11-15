@@ -1,14 +1,14 @@
 {
   "framework": "nextjs",
-  "buildCommand": "npm run build",
-  "installCommand": "npm ci --legacy-peer-deps",
+  "buildCommand": "(node scripts/prepare-vercel-build.mjs || rm -rf .next/cache/webpack) 2>/dev/null || true; unset npm_config_cache_dir NPM_CONFIG_CACHE_DIR; npm run build",
+  "installCommand": "unset npm_config_cache_dir NPM_CONFIG_CACHE_DIR; npm ci --legacy-peer-deps",
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "frame-ancestors 'self' https://sandbox.minepi.com https://app-cdn.minepi.com https://minepi.com https://*.minepi.com https://*.pinet.com https://socialchain.app https://*.socialchain.app"
+          "value": "frame-ancestors 'self' https://sandbox.minepi.com https://app-cdn.minepi.com https://minepi.com https://*.minepi.com https://*.pinet.com https://socialchain.app https://*.socialchain.app; object-src 'none'; base-uri 'self'; form-action 'self'"
         },
         {
           "key": "X-Content-Type-Options",
@@ -28,7 +28,7 @@
         },
         {
           "key": "Strict-Transport-Security",
-          "value": "max-age=31536000"
+          "value": "max-age=63072000; includeSubDomains"
         },
         {
           "key": "X-Permitted-Cross-Domain-Policies",
@@ -39,6 +39,12 @@
           "value": "noopen"
         }
       ]
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/economy/maintenance/release-stale-holds",
+      "schedule": "17 3 * * *"
     }
   ]
 }

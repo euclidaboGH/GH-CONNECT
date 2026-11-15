@@ -24,6 +24,12 @@ export const CONNECTION_INTENT_OPTIONS = [
 export type ConnectionIntentId = (typeof CONNECTION_INTENT_OPTIONS)[number]["id"]
 
 const STORAGE_KEY = "ghc_connection_intents_v1"
+const MAX_STORED_ACCOUNTS = 128
+
+function safeIntentStorageUserId(value: unknown): string | null {
+  const id = String(value ?? "").trim()
+  return id && id.length <= 128 && !["__proto__", "prototype", "constructor"].includes(id) ? id : null
+}
 
 export function normalizeIntents(raw: unknown): ConnectionIntentId[] {
   if (!Array.isArray(raw)) return []
@@ -39,8 +45,11 @@ export function normalizeIntents(raw: unknown): ConnectionIntentId[] {
 export function loadConnectionIntents(userId = "current-user"): ConnectionIntentId[] {
   try {
     if (typeof localStorage === "undefined") return []
-    const all = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}")
-    return normalizeIntents(all[userId])
+    const key = safeIntentStorageUserId(userId)
+    if (!key) return []
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}")
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return []
+    return normalizeIntents((parsed as Record<string, unknown>)[key])
   } catch {
     return []
   }
@@ -49,9 +58,15 @@ export function loadConnectionIntents(userId = "current-user"): ConnectionIntent
 export function saveConnectionIntents(userId: string, intents: ConnectionIntentId[]) {
   try {
     if (typeof localStorage === "undefined") return
-    const all = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}")
-    all[userId] = normalizeIntents(intents)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(all))
+    const key = safeIntentStorageUserId(userId)
+    if (!key) return
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}")
+    const all: Record<string, unknown> = parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? { ...(parsed as Record<string, unknown>) }
+      : {}
+    all[key] = normalizeIntents(intents)
+    const bounded = Object.fromEntries(Object.entries(all).slice(-MAX_STORED_ACCOUNTS))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(bounded))
   } catch {
     /* */
   }

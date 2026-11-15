@@ -31,6 +31,7 @@ import {
 import { PiSupporterBadge, PiStakingStatusNote } from "@/components/ghc/pi-supporter-badge"
 import { PiPlatformCapabilitiesCard } from "@/components/ghc/pi-platform-capabilities-card"
 import { openService } from "@/lib/navigation/navigate"
+import { getServiceUpgradePlan } from "@/lib/navigation/service-upgrade-plan"
 import {
   SERVICE_CATEGORIES,
   getFeaturedServices,
@@ -212,6 +213,29 @@ function ComingSoonPanel({
           <p className="mt-3 text-[11px] text-muted-foreground">
             Status: <strong>Coming soon</strong> · Not a live product surface
           </p>
+          <details className="mt-4 rounded-xl border border-border/70 bg-background text-left">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-[12px] font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+              <span>30 upgrade tracks in preparation</span>
+              <span className="text-[10px] font-semibold text-muted-foreground">View plan</span>
+            </summary>
+            <ol className="space-y-3 border-t border-border/60 px-3 py-3">
+              {getServiceUpgradePlan(service).map((track, index) => (
+                <li key={track.id} className="flex gap-2.5">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-[10px] font-bold text-emerald-800 dark:text-emerald-200">
+                    {index + 1}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-[11px] font-bold text-foreground">{track.title}</span>
+                    <span className="mt-0.5 block text-[10px] leading-relaxed text-muted-foreground">{track.objective}</span>
+                    <span className="mt-1 block text-[10px] leading-relaxed text-foreground/80">Launch gate: {track.launchGate}</span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+            <p className="border-t border-border/60 px-3 py-2 text-[10px] leading-relaxed text-muted-foreground">
+              Preparation roadmap only. These tracks are not represented as completed. This service remains Coming Soon and unavailable until separately reviewed and explicitly released.
+            </p>
+          </details>
           <button
             type="button"
             onClick={onBack}

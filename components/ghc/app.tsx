@@ -1,12 +1,15 @@
 "use client"
 
+import { DirectCallSheet } from "@/components/ghc/direct-call-sheet"
+
 import { incomingRequestBadgeCount } from "@/lib/domains/adapters/connection-connect-flow"
 import { IdentityService } from "@/lib/identity/identity-service"
 import { captureReferralCodeFromLocation, flushPendingReferralAttribution } from "@/lib/referral/capture-ref"
 import { notificationSystem, NOTIFICATIONS_CHANGED_EVENT } from "@/lib/notifications"
+import { hydrateAccountNotificationPreferences } from "@/lib/domains/notification-domain"
 import { APP_RELEASE_VERSION, APP_RELEASE_SUMMARY } from "@/lib/app-release"
 
-import { useState, useCallback, useMemo, memo, useEffect, lazy, Suspense, startTransition, type ReactNode, type UIEvent } from "react"
+import { useState, useCallback, useMemo, memo, useEffect, lazy, Suspense, startTransition, useRef, type ReactNode, type UIEvent } from "react"
 import { useGHCShell, useGHCProfile, useGHCDiscovery, useGHCMessaging } from "@/contexts/ghc-context"
 import type { Candidate } from "@/lib/ghc-types"
 import { usePiAuth } from "@/contexts/pi-auth-context"
@@ -100,10 +103,10 @@ function TabScreenFallback({ label }: { label: string }) {
       label={`${loadingLabel} ${label}`}
       busy
     >
-      <div className="mx-auto flex w-full max-w-[var(--gh-content-max,28rem)] flex-col gap-3">
+      <div className="gh-page-container flex w-full flex-col gap-3">
         <div className="flex items-center gap-2.5">
-          <div className="gh-brand-loading-blink flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-400/30 bg-card/90 p-1.5" aria-hidden="true">
-            <img src="/greenhaven-mark.png" alt="" className="h-full w-full object-contain" width={36} height={30} />
+          <div className="gh-brand-loading-blink flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-50/80 p-1.5 dark:bg-emerald-950/35" aria-hidden="true">
+            <img src="/greenhaven-mark.png" alt="" role="presentation" className="h-full w-full object-contain" width={36} height={30} decoding="async" />
           </div>
           <div className="flex-1 space-y-1.5">
             <div className="h-3 w-2/5 gh-skeleton rounded bg-muted" />
@@ -230,15 +233,24 @@ const NAV_ITEMS = [
 /** Keyboard + deep-link still support secondary tabs */
 const NAV_IDS = PRIMARY_TABS
 
-function scrollActiveTabToTop() {
+function scrollActiveTabToTop(tab: string) {
   try {
-    const main = document.querySelector("main")
-    if (!main) return
-    const active = main.querySelector('[style*="pointer-events: auto"], [style*="pointer-events:auto"]') as HTMLElement | null
-    const scroller = active?.querySelector(".overflow-y-auto, [class*=\"overflow-y-auto\"]") as HTMLElement | null
-    ;(scroller || active || main).scrollTo?.({ top: 0, behavior: "smooth" })
+    const panel = document.querySelector<HTMLElement>(`[data-gh-tab-panel="${tab}"]`)
+    const main = document.querySelector<HTMLElement>("#ghc-main-content")
+    if (!panel) {
+      main?.scrollTo?.({ top: 0, behavior: "smooth" })
+      return
+    }
+    const scrollables = Array.from(panel.querySelectorAll<HTMLElement>("*"))
+      .filter((element) => {
+        const style = window.getComputedStyle(element)
+        return element.scrollHeight > element.clientHeight + 2 &&
+          (style.overflowY === "auto" || style.overflowY === "scroll")
+      })
+    const scroller = scrollables[scrollables.length - 1] || panel
+    scroller.scrollTo({ top: 0, behavior: "smooth" })
   } catch {
-    /* */
+    /* Navigation should remain usable if a screen is mid-transition. */
   }
 }
 
@@ -328,6 +340,7 @@ export function GHConnectApp() {
   const { candidates, following, matches, swipe, followUser, reportUser, blockUser } = useGHCDiscovery()
   const { conversations } = useGHCMessaging()
   const [peerProfile, setPeerProfile] = useState<Candidate | null>(null)
+  const publicProfileRequestRef = useRef(0)
   const { onboardingStatus: piOnboardingStatus, authLifecycle } = usePiAuth()
 
   // After session is server-verified, soft-refresh primary sections once so login is not stale.
@@ -406,6 +419,18 @@ export function GHConnectApp() {
     if (!uid) return
     void flushPendingReferralAttribution(() => IdentityService.getAuthHeaders?.() || {})
   }, [profile?.id])
+
+  useEffect(() => {
+    if (!ready) return
+    const syncPreferences = (identity = IdentityService.getIdentity()) => {
+      if (identity.verificationState !== "server_verified") return
+      const userId = String(identity.userId || "").trim()
+      if (!userId || userId === "current-user" || userId === "anonymous") return
+      void hydrateAccountNotificationPreferences(userId)
+    }
+    syncPreferences()
+    return IdentityService.subscribe((identity) => syncPreferences(identity))
+  }, [ready])
 
   useEffect(() => {
     void refreshSectionAttention()
@@ -521,19 +546,23 @@ export function GHConnectApp() {
       const detail = (event as CustomEvent<{ userId?: unknown; id?: unknown }>).detail
       const userId = String(detail?.userId || detail?.id || "").trim()
       if (!userId) return
+      const requestId = ++publicProfileRequestRef.current
       if (userId === String(profile?.id || "")) {
+        setPeerProfile(null)
         startTransition(() => setTab("profile"))
         return
       }
       const local = (Array.isArray(candidates) ? candidates : []).find((item) => String(item.id) === userId)
-      if (local) {
-        setPeerProfile(local)
-        return
-      }
-      // Profiles opened from Wallet/Activity/Notifications/Messaging must not depend
-      // on the current discovery result set. Hydrate the canonical public projection.
+      // Keep a real discovery result visible immediately, then enrich it from the
+      // canonical privacy-projected profile API. Demo/sample identities remain local.
+      if (local) setPeerProfile(local)
+      if (local?.isSample) return
       void socialGetProfile(userId).then((result) => {
+        if (requestId !== publicProfileRequestRef.current) return
         if (!result.ok || !result.profile) {
+          // The canonical public projection is the privacy authority. Never leave
+          // a cached discovery card open when that authority denies the profile.
+          setPeerProfile(null)
           addToast(result.error === "PROFILE_PRIVATE" ? "This profile is private." : "This profile is not available.", "info")
           return
         }
@@ -541,13 +570,18 @@ export function GHConnectApp() {
         const photos = Array.isArray(row.photos) ? row.photos.map(String).filter(Boolean) : []
         const city = String(row.city || "").trim()
         const country = String(row.country || "").trim()
+        const professional = row.professional && typeof row.professional === "object" && !Array.isArray(row.professional)
+          ? row.professional as Candidate["professional"] : undefined
+        const business = row.business && typeof row.business === "object" && !Array.isArray(row.business)
+          ? row.business as Candidate["business"] : undefined
         const hydrated: Candidate = {
+          ...(local || {}),
           id: userId,
-          name: String(row.displayName || row.username || "Member"),
-          age: Math.max(18, Number(row.age) || 18),
-          location: [city, country].filter(Boolean).join(", ") || "Global",
+          name: String(row.displayName || row.username || local?.name || "Member"),
+          age: Math.max(18, Number(row.age) || local?.age || 18),
+          location: [city, country].filter(Boolean).join(", ") || local?.location || "Global",
           bio: String(row.bio || ""),
-          photo: photos[0] || "",
+          photo: photos[0] || local?.photo || "",
           photos,
           coverPhoto: row.coverPhoto ? String(row.coverPhoto) : null,
           interests: Array.isArray(row.interests) ? row.interests.map(String).filter(Boolean) : [],
@@ -558,39 +592,60 @@ export function GHConnectApp() {
           profession: row.profession ? String(row.profession) : undefined,
           education: row.education ? String(row.education) : undefined,
           primaryMode: row.primaryMode ? String(row.primaryMode) : undefined,
+          profileMode: row.profileMode === "professional" || row.profileMode === "business" || row.profileMode === "social" ? row.profileMode : undefined,
+          professional,
+          business,
+          skills: Array.isArray(row.skills) ? row.skills.map(String).filter(Boolean).slice(0, 40) : [],
           joinedAt: typeof row.createdAt === "number" || typeof row.createdAt === "string" ? row.createdAt : undefined,
           isSample: false,
         }
         setPeerProfile(hydrated)
-      }).catch(() => addToast("This profile could not be loaded right now.", "error"))
+      }).catch(() => {
+        if (requestId === publicProfileRequestRef.current) {
+          setPeerProfile(null)
+          addToast("This profile could not be verified right now. Please try again.", "error")
+        }
+      })
     }
     window.addEventListener("ghc:open-profile", openProfile as EventListener)
     return () => window.removeEventListener("ghc:open-profile", openProfile as EventListener)
   }, [candidates, profile?.id, setTab, addToast])
 
-  // Deep links: primary tabs and canonical overlay destinations. Keep unrelated
-  // query parameters/hash intact (e.g. referral attribution and shared content).
-  // Overlay dispatch is deferred one task so the shell's event listeners have mounted.
+  // Deep links: primary tabs, canonical overlays and shareable public profiles.
+  // Preserve unrelated query parameters/hash (e.g. referral attribution).
   useEffect(() => {
     if (!ready || typeof window === "undefined") return
-    let overlayTimer: number | undefined
+    const timers: number[] = []
     try {
       const url = new URL(window.location.href)
       const requested = url.searchParams.get("tab")
-      if (!requested) return
-      const destination = resolveDestination(requested)
-      if (destination && isPrimaryTab(destination)) {
-        startTransition(() => setTab(destination))
-      } else if (destination) {
-        overlayTimer = window.setTimeout(() => { navigateTo(destination) }, 0)
+      const hadProfileParam = url.searchParams.has("profile")
+      const requestedProfile = (url.searchParams.get("profile") || "").trim()
+      if (requested) {
+        const destination = resolveDestination(requested)
+        // Invalid destinations are discarded; malformed URLs must not interrupt app startup.
+        if (destination && isPrimaryTab(destination)) {
+          startTransition(() => setTab(destination))
+        } else if (destination) {
+          timers.push(window.setTimeout(() => { navigateTo(destination) }, 0))
+        }
+        url.searchParams.delete("tab")
       }
-      // Invalid destinations are discarded rather than left to repeatedly reopen.
-      url.searchParams.delete("tab")
-      window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`)
+      if (requestedProfile && requestedProfile.length <= 160 && !/[\u0000-\u001f\u007f]/.test(requestedProfile)) {
+        timers.push(window.setTimeout(() => {
+          window.dispatchEvent(new CustomEvent("ghc:open-profile", { detail: { userId: requestedProfile } }))
+        }, 0))
+        url.searchParams.delete("profile")
+      } else if (url.searchParams.has("profile")) {
+        url.searchParams.delete("profile")
+      }
+      if (requested || hadProfileParam) {
+        window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`)
+      }
     } catch {
       /* malformed URLs must not interrupt app startup */
     }
-    return () => { if (overlayTimer !== undefined) window.clearTimeout(overlayTimer) }
+    return () => timers.forEach((timer) => window.clearTimeout(timer))
   }, [ready, setTab])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsInitialSection, setSettingsInitialSection] = useState<
@@ -606,6 +661,7 @@ export function GHConnectApp() {
   >("main")
   /** Direct GHC Wallet overlay — not nested under Settings */
   const [walletOpen, setWalletOpen] = useState(false)
+  const [walletNotificationTarget, setWalletNotificationTarget] = useState<Record<string, unknown> | null>(null)
   const [showCreateHub, setShowCreateHub] = useState(false)
   const [showGlobalComposer, setShowGlobalComposer] = useState(false)
   const [globalComposeMode, setGlobalComposeMode] = useState<"post" | "story">("post")
@@ -640,6 +696,9 @@ export function GHConnectApp() {
   }, [])
 
   const [marketplaceListingId, setMarketplaceListingId] = useState<string | null>(null)
+  const [marketplaceOrderId, setMarketplaceOrderId] = useState<string | null>(null)
+  const [marketplaceResponseAt, setMarketplaceResponseAt] = useState<number | null>(null)
+  const [marketplaceResponseAction, setMarketplaceResponseAction] = useState<string | null>(null)
   /** Auto-hide bottom nav while scrolling down; reveal on scroll-up or tap */
   const [bottomNavHidden, setBottomNavHidden] = useState(false)
   useEffect(() => {
@@ -673,6 +732,7 @@ export function GHConnectApp() {
   }, [])
   const closeWallet = useCallback(() => {
     setWalletOpen(false)
+    setWalletNotificationTarget(null)
   }, [])
   useEffect(() => {
     const openEco = (e: Event) => {
@@ -695,15 +755,32 @@ export function GHConnectApp() {
     const openMarketplace = (e: Event) => {
       const detail = (e as CustomEvent).detail
       let listingId: string | null = null
+      let orderId: string | null = null
+      let responseAt: number | null = null
+      let responseAction: string | null = null
       if (detail && typeof detail === "object" && typeof (detail as { listingId?: unknown }).listingId === "string") {
         listingId = String((detail as { listingId: string }).listingId).trim() || null
       }
+      if (detail && typeof detail === "object" && typeof (detail as { orderId?: unknown }).orderId === "string") {
+        orderId = String((detail as { orderId: string }).orderId).trim() || null
+      }
+      if (detail && typeof detail === "object" && typeof (detail as { responseAt?: unknown }).responseAt === "number") {
+        const value = Number((detail as { responseAt: number }).responseAt)
+        responseAt = Number.isFinite(value) && value > 0 ? value : null
+      }
+      if (detail && typeof detail === "object" && typeof (detail as { responseAction?: unknown }).responseAction === "string") {
+        responseAction = String((detail as { responseAction: string }).responseAction).slice(0, 80) || null
+      }
       setSettingsOpen(false)
       setWalletOpen(false)
+      setWalletNotificationTarget(null)
       setEcosystemOpen(false)
       setShowCreateHub(false)
       setBottomNavHidden(false)
       setMarketplaceListingId(listingId)
+      setMarketplaceOrderId(orderId)
+      setMarketplaceResponseAt(responseAt)
+      setMarketplaceResponseAction(responseAction)
       setMarketplaceOpen(true)
     }
     window.addEventListener("ghc:open-marketplace", openMarketplace)
@@ -718,8 +795,29 @@ export function GHConnectApp() {
 
   // Deep-links from notifications / identity cards
   useEffect(() => {
-    const onWallet = () => openWallet()
-    const onRewards = () => openSettings("rewards")
+    const onWallet = (event: Event) => {
+      const detail = (event as CustomEvent<Record<string, unknown>>).detail
+      if (detail && typeof detail === "object") {
+        const hasTarget = ["transactionId", "paymentIntentId", "payoutRequestId", "requestId", "referenceId"].some((key) => typeof detail[key] === "string" && String(detail[key]).trim())
+        setWalletNotificationTarget(hasTarget ? { ...detail } : null)
+      } else {
+        setWalletNotificationTarget(null)
+      }
+      openWallet()
+    }
+    const onRewards = (event: Event) => {
+      const detail = (event as CustomEvent<Record<string, unknown>>).detail || {}
+      openSettings("rewards")
+      const target = {
+        tab: "history",
+        rewardId: detail.rewardId,
+        claimId: detail.claimId,
+        transactionId: detail.transactionId,
+        referenceId: detail.referenceId,
+      }
+      try { window.sessionStorage.setItem("ghc.notification.rewards-target", JSON.stringify(target)) } catch { /* one-shot event remains available */ }
+      window.setTimeout(() => window.dispatchEvent(new CustomEvent("ghc:open-rewards-tab", { detail: target })), 260)
+    }
     const onMembership = () => openSettings("membership")
     const onSettings = (e: Event) => {
       const section = (e as CustomEvent).detail?.section
@@ -883,17 +981,20 @@ export function GHConnectApp() {
   // request after the feed has mounted. This prevents lost synchronous events.
   useEffect(() => {
     const onOpenPost = (event: Event) => {
-      const detail = (event as CustomEvent<{ postId?: unknown; action?: unknown }>).detail || {}
+      const detail = (event as CustomEvent<{ postId?: unknown; commentId?: unknown; parentId?: unknown; threadRootId?: unknown; action?: unknown }>).detail || {}
       const postId = typeof detail.postId === "string" ? detail.postId.trim() : ""
       if (!postId) return
       const action = detail.action === "comment" || detail.action === "share" || detail.action === "insights" ? detail.action : undefined
+      const commentId = typeof detail.commentId === "string" ? detail.commentId.trim() : undefined
+      const parentId = typeof detail.parentId === "string" ? detail.parentId.trim() : undefined
+      const threadRootId = typeof detail.threadRootId === "string" ? detail.threadRootId.trim() : undefined
       startTransition(() => setTab("home"))
       window.setTimeout(() => {
-        window.dispatchEvent(new CustomEvent("ghc:open-post-ready", { detail: { postId, action } }))
+        window.dispatchEvent(new CustomEvent("ghc:open-post-ready", { detail: { postId, action, commentId, parentId, threadRootId } }))
       }, 180)
     }
-    window.addEventListener("ghc:open-post", onOpenPost as EventListener)
-    return () => window.removeEventListener("ghc:open-post", onOpenPost as EventListener)
+    window.addEventListener("ghc:open-post-request", onOpenPost as EventListener)
+    return () => window.removeEventListener("ghc:open-post-request", onOpenPost as EventListener)
   }, [setTab])
 
   // Browser back / page show: clear disposable overlays without wiping domain state
@@ -1116,6 +1217,7 @@ export function GHConnectApp() {
     return (
       <>
         {themeLayer}
+        <DirectCallSheet />
         <ConsentGate>
           <div className="gh-app-shell flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground max-w-[var(--gh-content-max,28rem)] mx-auto relative w-full">
             <ScreenBoundary
@@ -1125,7 +1227,7 @@ export function GHConnectApp() {
             >
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <Suspense fallback={<TabScreenFallback label="Wallet" />}>
-                  <PremiumWalletScreen key={screenResetKeys.wallet || 0} onBack={closeWallet} />
+                  <PremiumWalletScreen key={screenResetKeys.wallet || 0} onBack={closeWallet} initialNotificationTarget={walletNotificationTarget} />
                 </Suspense>
               </div>
             </ScreenBoundary>
@@ -1163,6 +1265,7 @@ export function GHConnectApp() {
     return (
       <>
         {themeLayer}
+        <DirectCallSheet />
         <ConsentGate>
           <div className="gh-app-shell flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground max-w-[var(--gh-content-max,28rem)] mx-auto relative w-full">
             <ScreenBoundary
@@ -1170,6 +1273,9 @@ export function GHConnectApp() {
               onDismiss={() => {
                 setMarketplaceOpen(false)
                 setMarketplaceListingId(null)
+                setMarketplaceOrderId(null)
+                setMarketplaceResponseAt(null)
+                setMarketplaceResponseAction(null)
               }}
             >
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -1178,8 +1284,14 @@ export function GHConnectApp() {
                     onBack={() => {
                       setMarketplaceOpen(false)
                       setMarketplaceListingId(null)
+                      setMarketplaceOrderId(null)
+                      setMarketplaceResponseAt(null)
+                      setMarketplaceResponseAction(null)
                     }}
                     initialListingId={marketplaceListingId}
+                    initialOrderId={marketplaceOrderId}
+                    initialResponseAt={marketplaceResponseAt}
+                    initialResponseAction={marketplaceResponseAction}
                   />
                 </Suspense>
               </div>
@@ -1195,6 +1307,7 @@ export function GHConnectApp() {
     return (
       <>
         {themeLayer}
+        <DirectCallSheet />
         <ConsentGate>
           <div className="gh-app-shell flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground max-w-[var(--gh-content-max,28rem)] mx-auto relative w-full">
             <ScreenBoundary
@@ -1249,7 +1362,7 @@ export function GHConnectApp() {
       >
         {/* Content fills the flex area above the nav. Modest pb only for last-item breathing room. */}
         {visitedTabs.has("home") && (
-        <div aria-hidden={activeTab !== "home"} inert={activeTab !== "home"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "home" ? 1 : 0, pointerEvents: activeTab === "home" ? "auto" : "none", contentVisibility: activeTab === "home" ? "visible" : "hidden", contain: "layout paint style" }}>
+        <div data-gh-tab-panel="home" aria-hidden={activeTab !== "home"} inert={activeTab !== "home"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "home" ? 1 : 0, pointerEvents: activeTab === "home" ? "auto" : "none", contentVisibility: activeTab === "home" ? "visible" : "hidden", contain: "layout paint style" }}>
           <div className="h-full min-h-0 overflow-hidden" onScrollCapture={onTabScrollHideNav}>
             <ScreenBoundary label="Feed" onReset={() => resetScreen("home")}>
               <Suspense fallback={<TabScreenFallback label="Feed" />}>
@@ -1260,7 +1373,7 @@ export function GHConnectApp() {
         </div>
         )}
         {visitedTabs.has("discover") && (
-        <div aria-hidden={activeTab !== "discover"} inert={activeTab !== "discover"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "discover" ? 1 : 0, pointerEvents: activeTab === "discover" ? "auto" : "none", contentVisibility: activeTab === "discover" ? "visible" : "hidden", contain: "layout paint style" }}>
+        <div data-gh-tab-panel="discover" aria-hidden={activeTab !== "discover"} inert={activeTab !== "discover"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "discover" ? 1 : 0, pointerEvents: activeTab === "discover" ? "auto" : "none", contentVisibility: activeTab === "discover" ? "visible" : "hidden", contain: "layout paint style" }}>
           <div className="h-full min-h-0 overflow-hidden">
             <ScreenBoundary label="Discover" onReset={() => resetScreen("discover")}>
               <Suspense fallback={<TabScreenFallback label="Find" />}>
@@ -1271,7 +1384,7 @@ export function GHConnectApp() {
         </div>
         )}
         {visitedTabs.has("matches") && (
-        <div aria-hidden={activeTab !== "matches"} inert={activeTab !== "matches"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "matches" ? 1 : 0, pointerEvents: activeTab === "matches" ? "auto" : "none", contentVisibility: activeTab === "matches" ? "visible" : "hidden", contain: "layout paint style" }}>
+        <div data-gh-tab-panel="matches" aria-hidden={activeTab !== "matches"} inert={activeTab !== "matches"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "matches" ? 1 : 0, pointerEvents: activeTab === "matches" ? "auto" : "none", contentVisibility: activeTab === "matches" ? "visible" : "hidden", contain: "layout paint style" }}>
           <div
             className="gh-scroll-root gh-scroll-stable h-full touch-pan-y scrollbar-hide"
             onScroll={onTabScrollHideNav}
@@ -1285,7 +1398,7 @@ export function GHConnectApp() {
         </div>
         )}
         {visitedTabs.has("communities") && (
-        <div aria-hidden={activeTab !== "communities"} inert={activeTab !== "communities"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "communities" ? 1 : 0, pointerEvents: activeTab === "communities" ? "auto" : "none", contentVisibility: activeTab === "communities" ? "visible" : "hidden", contain: "layout paint style" }}>
+        <div data-gh-tab-panel="communities" aria-hidden={activeTab !== "communities"} inert={activeTab !== "communities"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "communities" ? 1 : 0, pointerEvents: activeTab === "communities" ? "auto" : "none", contentVisibility: activeTab === "communities" ? "visible" : "hidden", contain: "layout paint style" }}>
           <div
             className="gh-scroll-root gh-scroll-stable h-full touch-pan-y scrollbar-hide"
             onScroll={onTabScrollHideNav}
@@ -1299,7 +1412,7 @@ export function GHConnectApp() {
         </div>
         )}
         {visitedTabs.has("messages") && (
-        <div aria-hidden={activeTab !== "messages"} inert={activeTab !== "messages"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "messages" ? 1 : 0, pointerEvents: activeTab === "messages" ? "auto" : "none", contentVisibility: activeTab === "messages" ? "visible" : "hidden", contain: "layout paint style" }}>
+        <div data-gh-tab-panel="messages" aria-hidden={activeTab !== "messages"} inert={activeTab !== "messages"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "messages" ? 1 : 0, pointerEvents: activeTab === "messages" ? "auto" : "none", contentVisibility: activeTab === "messages" ? "visible" : "hidden", contain: "layout paint style" }}>
           <div className="h-full min-h-0 overflow-hidden">
             <ScreenBoundary label="Messages" onReset={() => resetScreen("messages")}>
               <Suspense fallback={<TabScreenFallback label="Messages" />}>
@@ -1310,7 +1423,7 @@ export function GHConnectApp() {
         </div>
         )}
         {visitedTabs.has("profile") && (
-        <div aria-hidden={activeTab !== "profile"} inert={activeTab !== "profile"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "profile" ? 1 : 0, pointerEvents: activeTab === "profile" ? "auto" : "none", contentVisibility: activeTab === "profile" ? "visible" : "hidden", contain: "layout paint style" }}>
+        <div data-gh-tab-panel="profile" aria-hidden={activeTab !== "profile"} inert={activeTab !== "profile"} className="gh-tab-panel absolute inset-0 transition-opacity duration-200 ease-out" style={{ opacity: activeTab === "profile" ? 1 : 0, pointerEvents: activeTab === "profile" ? "auto" : "none", contentVisibility: activeTab === "profile" ? "visible" : "hidden", contain: "layout paint style" }}>
           <div
             className="gh-scroll-root gh-scroll-stable h-full min-h-0 touch-pan-y scrollbar-hide"
             onScroll={onTabScrollHideNav}
@@ -1392,7 +1505,7 @@ export function GHConnectApp() {
                         emitSectionRefresh("messages", { reason: "attention" })
                       } catch { /* */ }
                     }
-                    scrollActiveTabToTop()
+                    scrollActiveTabToTop(activeTab)
                     return
                   }
                   try {
@@ -1566,21 +1679,22 @@ export function GHConnectApp() {
           <ProfilePreviewPageLazy
             candidate={peerProfile}
             userInterests={Array.isArray(profile?.interests) ? profile.interests : []}
-            onBack={() => setPeerProfile(null)}
+            onBack={() => { publicProfileRequestRef.current += 1; setPeerProfile(null) }}
             onMessage={() => {
               const target = peerProfile
               void startConversation(target.id, target.name, target.photo).then(() => {
+                publicProfileRequestRef.current += 1
                 setPeerProfile(null)
                 startTransition(() => setTab("messages"))
               }).catch(() => addToast("Could not open this conversation. Please try again.", "error"))
             }}
             onLike={() => { void swipe(peerProfile.id, "like").catch(() => addToast("Could not send interest. Please try again.", "error")) }}
-            onPass={() => { void swipe(peerProfile.id, "pass").then(() => setPeerProfile(null)).catch(() => addToast("Could not update this preference.", "error")) }}
+            onPass={() => { void swipe(peerProfile.id, "pass").then(() => { publicProfileRequestRef.current += 1; setPeerProfile(null) }).catch(() => addToast("Could not update this preference.", "error")) }}
             onFollow={() => {
               const wasFollowing = following.includes(peerProfile.id)
               void followUser(peerProfile.id).then(() => addToast(wasFollowing ? `Unfollowed ${peerProfile.name}` : `Following ${peerProfile.name}`, "success")).catch(() => addToast("Could not update this follow.", "error"))
             }}
-            onBlock={() => { void blockUser(peerProfile.id).then(() => { setPeerProfile(null); addToast("Member blocked", "success") }).catch(() => addToast("Could not block this member.", "error")) }}
+            onBlock={() => { void blockUser(peerProfile.id).then(() => { publicProfileRequestRef.current += 1; setPeerProfile(null); addToast("Member blocked", "success") }).catch(() => addToast("Could not block this member.", "error")) }}
             onReport={(reason) => { void reportUser(peerProfile.id, reason).then(() => addToast("Report submitted", "success")).catch(() => addToast("Could not submit report.", "error")) }}
             isFollowing={following.includes(peerProfile.id)}
             isMatched={matches.some((item) => item.userId === peerProfile.id || item.id === peerProfile.id)}

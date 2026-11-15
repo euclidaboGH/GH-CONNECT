@@ -5,7 +5,7 @@
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import { isMember } from "@/lib/server/messaging/message-store"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 
@@ -20,11 +20,11 @@ export async function POST(request: Request, ctx: Ctx) {
     if (!auth) {
       return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: { "Cache-Control": "no-store" } })
     }
-    const rl = checkRateLimit(`msg-ensure-member:${auth.userId}`, 40, 60_000)
+    const rl = await checkDurableRateLimit(`msg-ensure-member:${auth.userId}`, 40, 60_000, { onUnavailable: "deny" })
     if (!rl.ok) {
       return NextResponse.json(
-        { ok: false, error: "RATE_LIMITED" },
-        { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(rl.retryAfterSec) } }
+        { ok: false, error: durableRateLimitCode(rl), retryAfterSec: rl.retryAfterSec },
+        { status: durableRateLimitStatus(rl), headers: { "Cache-Control": "no-store", "Retry-After": String(rl.retryAfterSec) } }
       )
     }
     const { conversationId } = await ctx.params

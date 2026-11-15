@@ -7,11 +7,15 @@
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit } from "@/lib/server/security/control-plane"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { emitSocialNotification } from "@/lib/server/social/notifications"
 import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+import {
+  humanizeRelationshipError,
+  sanitizeTargetUserId,
+} from "@/lib/server/social/relationship-integrity"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -90,10 +94,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
 
-  const rl = checkRateLimit(`follow:${auth.userId}`, 40, 60_000)
-  if (!rl.ok) {
-    return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429 })
-  }
+  const rl = await checkDurableRateLimit(`follow:${auth.userId}`, 40, 60_000, { onUnavailable: "deny" })
+  if (!rl.ok) return NextResponse.json({ ok: false, error: rl.unavailable ? "RATE_LIMIT_UNAVAILABLE" : "RATE_LIMITED", retryAfterSec: rl.retryAfterSec }, { status: rl.unavailable ? 503 : 429, headers: { "Cache-Control": "no-store", "Retry-After": String(rl.retryAfterSec) } })
 
   const parsedBody = await readBoundedJson(request, 4096)
   if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400, headers: { "Cache-Control": "no-store" } })
@@ -103,13 +105,14 @@ export async function POST(request: Request) {
   void body.actorId
   void body.userId
 
-  const targetUserId = (typeof body.targetUserId === "string" ? body.targetUserId : "").trim()
-  if (!targetUserId) {
-    return NextResponse.json({ ok: false, error: "TARGET_REQUIRED" }, { status: 400 })
+  const targetCheck = sanitizeTargetUserId(body.targetUserId, auth.userId)
+  if (!targetCheck.ok) {
+    return NextResponse.json(
+      { ok: false, error: targetCheck.error, message: humanizeRelationshipError(targetCheck.error) },
+      { status: 400, headers: { "Cache-Control": "no-store, private" } }
+    )
   }
-  if (targetUserId === auth.userId) {
-    return NextResponse.json({ ok: false, error: "SELF" }, { status: 400 })
-  }
+  const targetUserId = targetCheck.targetUserId
 
   const follow = body.follow !== false && body.follow !== "false"
 
@@ -127,7 +130,10 @@ export async function POST(request: Request) {
   if (!result.ok || data?.ok === false) {
     const code = String(data?.error || result.error || "FOLLOW_FAILED")
     const status = code === "BLOCKED" || code === "SELF" ? 400 : 503
-    return NextResponse.json({ ok: false, error: code }, { status })
+    return NextResponse.json(
+      { ok: false, error: code, message: humanizeRelationshipError(code) },
+      { status, headers: { "Cache-Control": "no-store, private" } }
+    )
   }
 
   // Refresh compact counts for target

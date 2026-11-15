@@ -2,11 +2,15 @@
 -- Additive only: privilege hardening for functions created in 20261022010001_ghc_economy_ledger.sql
 -- Does NOT alter function bodies, tables, indexes, RLS policies, or any protected live objects.
 --
--- Target functions (exact identities from 20260821):
+-- Target function identities are established by the canonical repository
+-- foundation 20261022010001_ghc_economy_ledger.sql. Later CREATE OR REPLACE
+-- updates preserve the function ACL; this migration intentionally precedes them.
 --   public.ghc_available_balance(text)
 --   public.ghc_execute_transfer(text, text, numeric, text, text, text)
 --
--- Apply after Group 1 economy foundation (20260821 + 20260822*) and before production smoke tests.
+-- Apply after 20261022010001_ghc_economy_ledger.sql and before production
+-- smoke tests. Historical 20260821 / 20260822 references are not required
+-- inputs to this canonical migration set.
 
 -- ---------------------------------------------------------------------------
 -- ghc_available_balance(text)

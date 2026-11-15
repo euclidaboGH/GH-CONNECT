@@ -493,7 +493,7 @@ export function DiscoverListRow({
       className="flex w-full items-center gap-3 rounded-[1.15rem] border border-border/60 bg-card px-3.5 py-3 text-left shadow-[0_2px_12px_rgba(0,0,0,0.04)] transition hover:border-emerald-400/35 hover:bg-muted/30 hover:shadow-md active:scale-[0.99]"
     >
       <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full bg-muted ring-2 ring-background">
-        <LazyImage src={photo} alt="" className="h-full w-full object-cover" online={Boolean(candidate.online)} />
+        <LazyImage src={photo} alt={candidate.name ? `${candidate.name} photo` : "Member photo"} className="h-full w-full object-cover" online={Boolean(candidate.online)} />
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">

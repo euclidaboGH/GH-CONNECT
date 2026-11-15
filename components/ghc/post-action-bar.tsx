@@ -1,5 +1,7 @@
 "use client"
 
+import { softHaptic } from "@/lib/ui/premium-interaction"
+
 /**
  * Post action bar — curation votes + respond actions.
  * Round 2 polish (ten new ideas, applied across card / action bar / curation panel):
@@ -16,7 +18,7 @@
  * Round 1 (kept):
  *  1. Fused vote pill with a live approval meter
  *  2. Spring "pop" and floating +1 / −1 burst on vote
- *  3. Friendly "Weight" chip + segmented stepper (replaces the native <select>)
+ *  3. Friendly quality chip + segmented stepper (replaces the native <select>)
  *  4. Respond actions as labeled soft pills with counts
  *  5. Light haptics on vote / save / share
  *  6. In-button spinner while a vote saves (row no longer dims)
@@ -41,9 +43,7 @@ export type RosterPressProps = {
 
 const WEIGHTS = [0, 25, 50, 75, 100] as const
 const WEIGHT_NAMES: Record<number, string> = { 0: "Signal only", 25: "Light", 50: "Balanced", 75: "Strong", 100: "Maximum" }
-const buzz = (ms = 8) => {
-  try { if (typeof navigator !== "undefined") navigator.vibrate?.(ms) } catch { /* optional */ }
-}
+const buzz = (ms = 8) => { softHaptic(ms) }
 const fmt = (n: number) => (n >= 10_000 ? `${(n / 1000).toFixed(n >= 100_000 ? 0 : 1)}k` : Number(n).toLocaleString())
 
 export function PostActionBar({
@@ -136,8 +136,8 @@ export function PostActionBar({
     "gh-pab-btn inline-flex h-11 min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-full px-3 text-[12px] font-bold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
 
   return (
-    <div className="px-3 pb-2.5 pt-2 sm:px-4" role="toolbar" aria-label="Community curation and engagement" data-pab-dock>
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+    <div className="gh-post-action-dock min-w-0 px-3 pb-3 pt-2.5 sm:px-4" role="toolbar" aria-label="Post actions and Community curation" data-pab-dock>
+      <div className="gh-post-action-primary flex min-w-0 flex-wrap items-center gap-x-2 gap-y-2">
         {/* 1 · fused vote pill + approval meter */}
         <div className="flex flex-col gap-1" role="group" aria-label="Quality votes">
           <div className="inline-flex items-stretch overflow-visible rounded-full border border-border/70 bg-card shadow-sm">
@@ -168,10 +168,10 @@ export function PostActionBar({
           aria-expanded={panel === "weight"}
           aria-controls="gh-pab-panel"
           onClick={() => setPanel((p) => (p === "weight" ? null : "weight"))}
-          className="gh-pab-btn inline-flex h-9 items-center gap-1 rounded-full border border-border/70 bg-background px-2.5 text-[11px] font-bold text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+          className="gh-pab-btn inline-flex min-h-11 items-center gap-1 rounded-full border border-border/70 bg-background px-2.5 text-[11px] font-bold text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
           title="How strongly your vote counts toward curation. Voting does not create GHC."
         >
-          Weight <span className="tabular-nums text-foreground">{weight}%</span>
+          <span className="text-[11px] font-semibold tracking-wide text-muted-foreground">Quality</span> <span className="tabular-nums text-[12px] font-bold text-foreground">{weight}%</span>
           <span className="hidden text-muted-foreground/80 sm:inline">· {WEIGHT_NAMES[weight] ?? "Custom"}</span>
         </button>
 
@@ -182,24 +182,25 @@ export function PostActionBar({
           aria-expanded={panel === "info"}
           aria-controls="gh-pab-panel"
           onClick={() => setPanel((p) => (p === "info" ? null : "info"))}
-          className="gh-pab-btn inline-flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+          className="gh-pab-btn inline-flex min-h-11 min-w-11 items-center justify-center rounded-full text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
         >
           <Info size={15} aria-hidden />
         </button>
 
         {/* 4 · respond actions */}
-        <div className="ml-auto flex items-center gap-0.5" role="group" aria-label="Respond">
-          <button type="button" aria-label="Comment" title={`${commentCount} ${commentCount === 1 ? "comment" : "comments"}`} onClick={onComment} className={soft}>
-            <MessageCircle size={18} aria-hidden />
+      </div>
+      <div className="gh-post-action-secondary mt-2 grid min-w-0 grid-cols-3 gap-1.5" role="group" aria-label="Respond to post">
+          <button type="button" aria-label={`Comment · ${commentCount} ${commentCount === 1 ? "comment" : "comments"}`} title={`${commentCount} ${commentCount === 1 ? "comment" : "comments"}`} onClick={onComment} className={`${soft} gh-post-response-action min-w-0 flex-1 justify-center rounded-xl border border-border/50 bg-background/70 px-2`}>
+            <MessageCircle size={17} aria-hidden />
             <span className="tabular-nums">{fmt(commentCount)}</span>
-            <span className="hidden sm:inline">Comment{commentCount === 1 ? "" : "s"}</span>
+            <span>Comment</span>
           </button>
           <button
             type="button"
             aria-label={isSaved ? "Unsave" : "Save"}
             aria-pressed={isSaved}
             onClick={() => { buzz(8); setSavePulse((n) => n + 1); onSave() }}
-            className={`${soft} ${isSaved ? "!bg-amber-100 !text-amber-700 dark:!bg-amber-900/40 dark:!text-amber-300" : ""}`}
+            className={`${soft} gh-post-response-action min-w-0 flex-1 justify-center rounded-xl border border-border/50 bg-background/70 px-2 ${isSaved ? "!border-amber-300/60 !bg-amber-100 !text-amber-700 dark:!bg-amber-900/40 dark:!text-amber-300" : ""}`}
           >
             <Bookmark
               key={savePulse}
@@ -208,7 +209,7 @@ export function PostActionBar({
               fill={isSaved ? "currentColor" : "none"}
               className={isSaved && savePulse > 0 ? "gh-pab-save" : ""}
             />
-            <span className="hidden sm:inline">{isSaved ? "Saved" : "Save"}</span>
+            <span>{isSaved ? "Saved" : "Save"}</span>
           </button>
           <button
             type="button"
@@ -220,14 +221,13 @@ export function PostActionBar({
               shareTimer.current = setTimeout(() => setShared(false), 1600)
               onShare()
             }}
-            className={`${soft} ${shared ? "!text-emerald-700 dark:!text-emerald-300" : ""}`}
+            className={`${soft} gh-post-response-action min-w-0 flex-1 justify-center rounded-xl border border-border/50 bg-background/70 px-2 ${shared ? "!text-emerald-700 dark:!text-emerald-300" : ""}`}
           >
             {shared ? <Check size={18} aria-hidden className="gh-pab-pop" /> : <Share2 size={18} aria-hidden />}
-            <span className="hidden sm:inline">{shared ? "Sent" : "Share"}</span>
-            <span className="sr-only" role="status">{shared ? "Share started" : ""}</span>
+            <span>Share</span>
+            <span className="sr-only" role="status">{shared ? "Share options opened" : ""}</span>
           </button>
         </div>
-      </div>
 
       {panel ? (
         <div id="gh-pab-panel" className="gh-pab-panel mt-2 rounded-2xl border border-border/60 bg-muted/40 p-2.5">
@@ -241,7 +241,7 @@ export function PostActionBar({
                     role="radio"
                     aria-checked={weight === w}
                     disabled={busy}
-                    onClick={() => { buzz(5); onWeight(w) }}
+                    onClick={() => { softHaptic(8); onWeight(w) }}
                     className={`h-12 rounded-xl text-[12px] font-extrabold tabular-nums transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
                       weight === w ? "bg-violet-700 text-white" : "bg-background text-foreground hover:bg-muted"
                     }`}

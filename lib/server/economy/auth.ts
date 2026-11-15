@@ -94,7 +94,7 @@ function verifyHs256Jwt(
  */
 export async function verifyPiAccessToken(
   accessToken: string
-): Promise<{ uid: string; username?: string } | null> {
+): Promise<{ uid: string; username?: string; walletAddress?: string } | null> {
   const env = readGhcServerEnv()
   const url = `${env.piPlatformApiUrl}/v2/me`
   try {
@@ -109,12 +109,19 @@ export async function verifyPiAccessToken(
     if (!res.ok) return null
     const data = (await res.json()) as {
       uid?: string
-      user?: { uid?: string; username?: string }
+      user?: { uid?: string; username?: string; wallet_address?: string; walletAddress?: string }
       username?: string
+      wallet_address?: string
+      walletAddress?: string
     }
     const uid = data.uid || data.user?.uid
     if (typeof uid !== "string" || !uid) return null
-    return { uid, username: data.username || data.user?.username }
+    const walletAddress = data.wallet_address || data.walletAddress || data.user?.wallet_address || data.user?.walletAddress
+    return {
+      uid,
+      username: data.username || data.user?.username,
+      ...(typeof walletAddress === "string" && walletAddress.trim() ? { walletAddress: walletAddress.trim().toUpperCase() } : {}),
+    }
   } catch {
     return null
   }
@@ -192,15 +199,28 @@ export async function resolveAuthenticatedUser(
   // Never trust client-supplied uid; only Platform /v2/me result is used.
   const piUser = await verifyPiAccessToken(token)
   if (piUser?.uid) {
-    let ghUserId = piUser.uid
+    let mapping: Awaited<ReturnType<typeof getByPiAppUid>> = null
     try {
-      const mapping = await getByPiAppUid(piUser.uid)
-      if (mapping?.ghUserId) ghUserId = mapping.ghUserId
+      mapping = await getByPiAppUid(piUser.uid)
     } catch {
-      /* mapping unavailable: production identity bridge fails closed when durable storage is unavailable */
+      // A verified Pi UID is not a canonical GreenHaven user ID. Production
+      // must fail closed when its durable identity mapping cannot be resolved.
     }
+
+    if (!mapping?.ghUserId) {
+      if (env.isProduction) return null
+      // Non-production compatibility only: legacy local/test flows may not yet
+      // have run the Pi identity bootstrap. This fallback is never production auth.
+      return {
+        userId: piUser.uid,
+        username: piUser.username,
+        source: "pi_platform",
+        rawToken: token,
+      }
+    }
+
     return {
-      userId: ghUserId,
+      userId: mapping.ghUserId,
       username: piUser.username,
       source: "pi_platform",
       rawToken: token,

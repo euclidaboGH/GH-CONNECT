@@ -5,3 +5,4 @@
 export { DailyRewardHomeExperience, DailyRewardFeedCard, DailyRewardSheet } from "@/components/ghc/daily-reward-experience"
 export { RewardsCentreScreen } from "@/components/ghc/rewards-centre-screen"
 export { RewardsJourneyHero } from "@/components/ghc/rewards-journey-hero"
+export * from "@/lib/active-upgrades/rewards"

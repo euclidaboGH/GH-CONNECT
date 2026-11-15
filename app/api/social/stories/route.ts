@@ -8,6 +8,7 @@ import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { socialDbConfigured, socialRpc, socialRest } from "@/lib/server/social/rpc"
 import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
 import { hydratePublicProfileIdentity } from "@/lib/server/identity/public-profile-hydration"
+import { getServerProfile } from "@/lib/server/identity/profile-store"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 
 export const runtime = "nodejs"
@@ -40,24 +41,17 @@ const SAFE_STORY_BACKGROUNDS = new Set([
 
 function safeStoryMediaUrl(value: unknown): string | null {
   const raw = typeof value === "string" ? value.trim() : ""
-  if (!raw || raw.length > 4000 || /[\u0000-\u001f\u007f]/.test(raw)) return null
-  // Small inline images are retained for compatibility with the existing compressed-image fallback.
+  if (!raw || raw.length > 512 * 1024 || /[\u0000-\u001f\u007f]/.test(raw)) return null
+  // Inline fallback is deliberately image-only and small enough for the bounded JSON route.
   if (/^data:image\/(?:jpeg|png|webp|gif);base64,/i.test(raw)) {
     return raw.length <= 512 * 1024 ? raw : null
   }
-  // Phase 1 trust: same-origin durable media facade paths from uploadDurableMedia.
-  // Clients publish `/api/media/{id}/content` — not only absolute https Supabase signed URLs.
-  if (/^\/api\/media\/[A-Za-z0-9_-]+\/content\/?$/i.test(raw)) {
+  // Persist only the first-party media facade. Arbitrary HTTPS and short-lived signed URLs
+  // are not durable story attachments and can bypass viewer-aware media authorization.
+  if (/^\/api\/media\/media_[a-z0-9]+_[a-z0-9]+\/content\/?$/i.test(raw)) {
     return raw.replace(/\/$/, "")
   }
-  try {
-    const parsed = new URL(raw)
-    if (parsed.protocol !== "https:" || !parsed.hostname || parsed.username || parsed.password) return null
-    // Reject blob/data via URL parser path; https only
-    return parsed.href
-  } catch {
-    return null
-  }
+  return null
 }
 
 export async function GET(request: Request) {
@@ -144,48 +138,74 @@ export async function POST(request: Request) {
     const tooLarge = parsedBody.error === "REQUEST_TOO_LARGE"
     return NextResponse.json({ ok: false, error: parsedBody.error }, { status: tooLarge ? 413 : 400, headers: { "Cache-Control": "no-store" } })
   }
-  const body = parsedBody.value as StoryRequestBody
+  const body = parsedBody.value as StoryRequestBody & { id?: unknown }
   const text = typeof body.text === "string" ? body.text.trim() : ""
-  if (text.length > 2000) {
+  if (text.length > 500) {
     return NextResponse.json({ ok: false, error: "STORY_TOO_LONG" }, { status: 400, headers: { "Cache-Control": "no-store" } })
   }
+
+  const requestedId = typeof body.id === "string" ? body.id.trim() : ""
+  if (requestedId && !/^story_[a-z0-9_-]{8,100}$/i.test(requestedId)) {
+    return NextResponse.json({ ok: false, error: "INVALID_STORY_ID" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+  }
+  const storyId = requestedId || genId()
   const mediaCandidate = body.media?.url ?? body.mediaUrl ?? null
   const mediaUrl = mediaCandidate == null || mediaCandidate === "" ? null : safeStoryMediaUrl(mediaCandidate)
   if (mediaCandidate && !mediaUrl) {
-    return NextResponse.json({ ok: false, error: "INVALID_MEDIA_URL", message: "Use a secure HTTPS media URL or a small compressed image." }, { status: 400, headers: { "Cache-Control": "no-store" } })
+    return NextResponse.json({ ok: false, error: "INVALID_MEDIA_URL", message: "Attach a photo or video through GreenHaven's secure media uploader." }, { status: 400, headers: { "Cache-Control": "no-store" } })
   }
   if (!text && !mediaUrl) {
     return NextResponse.json({ ok: false, error: "EMPTY_STORY" }, { status: 400, headers: { "Cache-Control": "no-store" } })
   }
 
-  // Authoritative expiry: max 24h from server clock — client cannot extend indefinitely
-  const MAX_STORY_MS = 24 * 60 * 60 * 1000
-  const now = Date.now()
-  const requested =
-    typeof body.expiresAt === "number" && body.expiresAt > now ? body.expiresAt : now + MAX_STORY_MS
-  const expiresAt = Math.min(requested, now + MAX_STORY_MS)
-
   const requestedMediaType = String(body.media?.type || body.mediaType || "").toLowerCase()
   if (requestedMediaType && !["image", "video"].includes(requestedMediaType)) {
     return NextResponse.json({ ok: false, error: "INVALID_MEDIA_TYPE" }, { status: 400, headers: { "Cache-Control": "no-store" } })
   }
+  let mediaType: "image" | "video" | null = mediaUrl ? (requestedMediaType === "video" ? "video" : "image") : null
+  if (mediaUrl?.startsWith("/api/media/")) {
+    const mediaId = mediaUrl.match(/^\/api\/media\/(media_[a-z0-9]+_[a-z0-9]+)\/content$/i)?.[1]
+    if (!mediaId) return NextResponse.json({ ok: false, error: "INVALID_MEDIA_URL" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+    const authorization = await socialRpc("gh_media_authorize_viewer", {
+      p_media_id: mediaId,
+      p_viewer_id: auth.userId,
+    })
+    if (!authorization.ok) return NextResponse.json({ ok: false, error: "MEDIA_AUTHORIZATION_UNAVAILABLE" }, { status: 503, headers: { "Cache-Control": "no-store" } })
+    const asset = authorization.data as { ok?: boolean; ownerId?: string; kind?: string } | null
+    if (!asset?.ok || asset.ownerId !== auth.userId || !["image", "video"].includes(String(asset.kind))) {
+      return NextResponse.json({ ok: false, error: "MEDIA_NOT_OWNED_OR_READY" }, { status: 403, headers: { "Cache-Control": "no-store" } })
+    }
+    if (requestedMediaType && requestedMediaType !== asset.kind) {
+      return NextResponse.json({ ok: false, error: "MEDIA_TYPE_MISMATCH" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+    }
+    mediaType = asset.kind as "image" | "video"
+  } else if (mediaUrl && mediaType === "video") {
+    return NextResponse.json({ ok: false, error: "VIDEO_UPLOAD_REQUIRED" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+  }
+
+  const audience = body.audience == null ? "everyone" : String(body.audience)
+  if (!["everyone", "followers", "friends", "matches-only", "private"].includes(audience)) {
+    return NextResponse.json({ ok: false, error: "INVALID_AUDIENCE" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+  }
+
+  // Authoritative expiry and identity always come from the server clock/session.
+  const MAX_STORY_MS = 24 * 60 * 60 * 1000
+  const now = Date.now()
+  const requested = typeof body.expiresAt === "number" && body.expiresAt > now ? body.expiresAt : now + MAX_STORY_MS
+  const expiresAt = Math.min(requested, now + MAX_STORY_MS)
+  const serverProfile = await getServerProfile(auth.userId).catch(() => null)
   const row = {
-    // IDs and identity labels are server-derived so clients cannot spoof an existing story.
-    id: genId(),
+    id: storyId,
     ownerId: auth.userId,
-    ownerName: String(auth.username || "Member").trim().slice(0, 120) || "Member",
-    ownerPhoto: safeStoryMediaUrl(body.photo || body.ownerPhoto) || "",
+    ownerName: String(serverProfile?.displayName || serverProfile?.username || auth.username || "Member").trim().slice(0, 120) || "Member",
+    ownerPhoto: String(serverProfile?.photos?.[0] || "").slice(0, 2000),
     text,
-    mediaType: requestedMediaType || (mediaUrl ? "image" : null),
+    mediaType,
     mediaUrl,
     background: typeof body.background === "string" && SAFE_STORY_BACKGROUNDS.has(body.background) ? body.background : null,
-    audience: ["everyone", "followers", "friends", "matches-only", "private"].includes(
-      String(body.audience || "")
-    )
-      ? String(body.audience)
-      : "everyone",
+    audience,
     expiresAt,
-    createdAt: Date.now(),
+    createdAt: now,
   }
 
   if (!socialDbConfigured()) {
@@ -200,9 +220,10 @@ export async function POST(request: Request) {
       { status: 503, headers: { "Cache-Control": "no-store" } }
     )
   }
-  const resultData = result.data as { ok?: boolean; error?: string } | null
+  const resultData = result.data as { ok?: boolean; error?: string; duplicate?: boolean; id?: string } | null
   if (resultData?.ok === false) {
-    return NextResponse.json({ ok: false, error: "STORY_CREATE_FAILED" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+    const error = String(resultData.error || "STORY_CREATE_FAILED")
+    return NextResponse.json({ ok: false, error }, { status: error === "ID_CONFLICT" ? 409 : 400, headers: { "Cache-Control": "no-store" } })
   }
-  return NextResponse.json({ ok: true, durable: true, story: row }, { headers: { "Cache-Control": "no-store" } })
+  return NextResponse.json({ ok: true, durable: true, idempotent: Boolean(resultData?.duplicate), story: row }, { headers: { "Cache-Control": "no-store" } })
 }

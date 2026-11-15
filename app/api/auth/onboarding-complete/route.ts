@@ -13,8 +13,9 @@ import {
   markOnboardingCompleted,
   findOrCreateFromVerifiedPi,
 } from "@/lib/server/identity/pi-identity-store"
-import { upsertServerProfile } from "@/lib/server/identity/profile-store"
+import { getServerProfile, getOnboardingProfileGaps, upsertServerProfile } from "@/lib/server/identity/profile-store"
 import { recordPioneerActivity } from "@/lib/server/engagement/pioneer-activity"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -28,6 +29,8 @@ export async function POST(request: Request) {
         { status: 401 }
       )
     }
+    const __rateLimited = await enforceUserMutationRateLimit(auth.userId, "auth/onboarding-complete:POST", 60, 60_000, { failClosed: false })
+    if (__rateLimited) return __rateLimited
 
     let ghUserId = auth.userId
     const byPi = await getByPiAppUid(auth.userId)
@@ -44,6 +47,22 @@ export async function POST(request: Request) {
         })
         ghUserId = record.ghUserId
       }
+    }
+
+    // Registration is complete only when every required field is durably saved.
+    // This is checked server-side so a modified client cannot skip onboarding steps.
+    const savedProfile = await getServerProfile(ghUserId)
+    const missingFields = getOnboardingProfileGaps(savedProfile)
+    if (missingFields.length > 0) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "ONBOARDING_PROFILE_INCOMPLETE",
+          missingFields,
+          detail: "Save all required profile details before completing registration.",
+        },
+        { status: 422, headers: { "Cache-Control": "no-store" } }
+      )
     }
 
     const updated = await markOnboardingCompleted(ghUserId)

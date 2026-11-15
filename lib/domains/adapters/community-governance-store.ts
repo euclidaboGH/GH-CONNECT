@@ -21,13 +21,15 @@ export function governanceServerEnabled(): boolean {
 }
 
 export function getGovernanceDurability(): GovernanceDurability {
-  if (governanceServerEnabled()) return "server"
+  // The current API mirror deliberately returns durable:false until the reviewed
+  // persistence migration and server-side insert/read path are live. A feature flag
+  // only enables an attempted mirror; it is not proof of durable storage.
   return "session"
 }
 
 export function governanceDurabilityLabel(): string {
-  return getGovernanceDurability() === "server"
-    ? "Server-backed governance log"
+  return governanceServerEnabled()
+    ? "Session-only until server persistence is confirmed"
     : "Session-only moderation log (not durable across devices)"
 }
 

@@ -17,7 +17,6 @@ export { ConfirmationDialog } from './confirmation-dialog'
 export { LazyImage } from './lazy-image'
 export { GroupCard } from './group-card'
 export { CommunitiesSection } from './communities-section'
-export { FilterPanel } from './filter-panel'
 export { SearchBar } from './search-bar'
 export { UserCard, calculateMatchScore } from './user-card'
 export {

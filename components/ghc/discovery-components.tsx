@@ -13,10 +13,6 @@ export { CommunitiesSection } from "./communities-section"
 // SearchBar lives in its own module for reliable named exports in App Studio.
 export { SearchBar } from "./search-bar"
 
-// FilterPanel lives in its own module to avoid re-export/circular issues.
-export { FilterPanel } from "./filter-panel"
-export type { FilterPanelProps } from "./filter-panel"
-
 // UserCard + match score live in user-card.tsx for reliable App Studio exports.
 export { UserCard, DiscoverListRow, calculateMatchScore } from "./user-card"
 export type { UserCardProps } from "./user-card"

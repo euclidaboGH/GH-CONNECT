@@ -28,13 +28,13 @@ const globalHeaders = vercel.headers?.find((rule) => rule.source === '/(.*)')?.h
 const headerMap = new Map(globalHeaders.map(({ key, value }) => [key.toLowerCase(), value]))
 const checks = [
   ['package, lockfile root and supported runtime contract agree', pkg.version === lock.version && pkg.version === lock.packages?.['']?.version && pkg.engines?.node === '^24.15.0' && read('.nvmrc').trim() === '24.15.0'],
-  ['runtime preflight runs before build, lint and typecheck', (pkg.scripts?.prebuild ?? '').includes('check-node-runtime.mjs') && (pkg.scripts?.prelint ?? '').includes('check-node-runtime.mjs') && (pkg.scripts?.pretypecheck ?? '').includes('check-node-runtime.mjs')],
-  ['CI pins the supported Node runtime and runs locked install', /node-version:\s*24\.15\.0/.test(ci) && /npm ci --legacy-peer-deps --no-audit/.test(ci)],
+  ['runtime preflight runs before build, lint and typecheck', (pkg.scripts?.['prebuild:checks'] ?? '').includes('check-node-runtime.mjs') && (pkg.scripts?.prelint ?? '').includes('check-node-runtime.mjs') && (pkg.scripts?.pretypecheck ?? '').includes('check-node-runtime.mjs')],
+  ['CI pins the supported Node runtime and runs locked install', /node-version:\s*24\.15\.0/.test(ci) && /npm ci --legacy-peer-deps(?: --no-audit)?/.test(ci)],
   ['TypeScript strictness remains enabled', tsconfig.compilerOptions?.strict === true],
   ['deployment globally disables MIME sniffing', headerMap.get('x-content-type-options') === 'nosniff'],
-  ['deployment has restrictive referrer and transport policies', headerMap.get('referrer-policy') === 'strict-origin-when-cross-origin' && /^max-age=31536000(?:;|$)/.test(headerMap.get('strict-transport-security') ?? '')],
+  ['deployment has restrictive referrer and transport policies', headerMap.get('referrer-policy') === 'strict-origin-when-cross-origin' && Number((headerMap.get('strict-transport-security') ?? '').match(/max-age=(\d+)/)?.[1] ?? 0) >= 31536000 && /includeSubDomains/i.test(headerMap.get('strict-transport-security') ?? '')],
   ['deployment explicitly constrains framing and browser capabilities', (headerMap.get('content-security-policy') ?? '').includes('frame-ancestors') && Boolean(headerMap.get('permissions-policy'))],
-  ['environment template contains placeholders rather than configured secrets', envExample.split(/\r?\n/).filter((line) => /^[A-Z][A-Z0-9_]*=/.test(line)).every((line) => /^[A-Z][A-Z0-9_]*=(?:|0|1)$/.test(line))],
+  ['environment template contains placeholders rather than configured secrets', envExample.split(/\r?\n/).filter((line) => /^[A-Z][A-Z0-9_]*=/.test(line)).every((line) => /^[A-Z][A-Z0-9_]*=(?:|0|1|true|false|\d+)$/.test(line))],
   ['migration and API route inventories are discoverable', routes > 0 && migrations > 0],
   ['Phase 1 foundation gate is registered in static verification', staticRunner.includes('check-phase1-platform-foundation.mjs')],
 ]

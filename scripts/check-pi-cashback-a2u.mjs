@@ -23,7 +23,7 @@ test('Provider timeout/interruption remains retryable without inventing a paid r
 test('No direct client access to cashback payout table or privileged RPCs', /ENABLE ROW LEVEL SECURITY/.test(migration) && /REVOKE ALL ON TABLE public\.gh_pi_cashback_a2u_payouts FROM PUBLIC, anon, authenticated, service_role/.test(migration) && /GRANT EXECUTE ON FUNCTION public\.gh_pi_cashback_a2u_begin.*TO service_role/s.test(migration))
 test('Rewards UI exposes claim only when server flags and positive finalized balance allow it', /payload\?\.withdrawalEnabled/.test(ui) && /Withdraw finalized cashback to Pi wallet/.test(ui) && /withdrawalEnabled/.test(api))
 test('Payout status reduces available calculated amount and appears in statement rows', /reservedAtomic/.test(api) && /payoutsByEntitlement/.test(api) && /payout_processing/.test(api))
-test('Build and static verification include this A2U contract', pkg.scripts?.prebuild?.includes('check-pi-cashback-a2u.mjs') && read('scripts/verify-phase14-static.mjs').includes('check-pi-cashback-a2u.mjs'))
+test('Build and static verification include this A2U contract', pkg.scripts?.['prebuild:checks']?.includes('check-pi-cashback-a2u.mjs') && read('scripts/verify-phase14-static.mjs').includes('check-pi-cashback-a2u.mjs'))
 
 // Phase 1 recovery regressions — unrelated incomplete must not leave processing stuck
 test('Unrelated incomplete A2U durably moves payout to attention before client error', /UNRELATED_INCOMPLETE_A2U_PAYMENT_REQUIRES_REVIEW/.test(route) && /update\("attention"[\s\S]{0,120}UNRELATED_INCOMPLETE_A2U_PAYMENT/.test(route) && /getIncompleteServerPayments\(\)/.test(route))

@@ -137,12 +137,12 @@ export async function ensurePiInitialized(): Promise<PiRuntimeSnapshot> {
           PI_NETWORK_CONFIG.SDK_URL,
           PI_NETWORK_CONFIG.SCRIPT_LOAD_TIMEOUT_MS || 12000
         )
-        await waitForPi(5000, 150)
+        await waitForPi(10000, 150)
       }
       const Pi = getWindowPi()
       if (!Pi) {
         throw new Error(
-          "Pi SDK (window.Pi) is not available. Open GreenHaven inside Pi Browser with the registered app URL."
+          "Pi SDK (window.Pi) is not available yet. If you are already in Pi Browser, wait a moment and retry; otherwise open the registered app URL from Pi → Develop."
         )
       }
       if (typeof Pi.init !== "function") {
@@ -167,6 +167,7 @@ export async function ensurePiInitialized(): Promise<PiRuntimeSnapshot> {
 export type PiAuthenticateResult = {
   uid: string
   username: string | null
+  walletAddress: string | null
   accessToken: string | null
 }
 
@@ -187,7 +188,9 @@ export async function piAuthenticateOfficial(
     scopes: string[],
     onIncomplete: (payment: unknown) => void
   ) => Promise<{
-    user?: { uid?: string | number; username?: string }
+    user?: { uid?: string | number; username?: string; wallet_address?: string; walletAddress?: string }
+    wallet_address?: string
+    walletAddress?: string
     accessToken?: string
   }>
 
@@ -210,6 +213,9 @@ export async function piAuthenticateOfficial(
   return {
     uid,
     username: authResult?.user?.username ? String(authResult.user.username) : null,
+    walletAddress: (authResult?.user?.wallet_address || authResult?.user?.walletAddress || authResult?.wallet_address || authResult?.walletAddress)
+      ? String(authResult?.user?.wallet_address || authResult?.user?.walletAddress || authResult?.wallet_address || authResult?.walletAddress).trim()
+      : null,
     accessToken: authResult?.accessToken ? String(authResult.accessToken) : null,
   }
 }

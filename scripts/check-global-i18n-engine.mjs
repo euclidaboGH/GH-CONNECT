@@ -22,7 +22,7 @@ ok('language preference is persisted and synchronized across tabs without a data
 ok('language preference reaches API regional headers', regional.includes('"X-GH-Locale": locale') && regional.includes('"X-GH-Timezone": timeZone'))
 ok('settings clearly marks untranslated choices and preserves user content', settings.includes('not translated yet') && settings.includes('getShellMessage("contentUnchanged"') && settings.includes('getShellTranslationStatus'))
 ok('country-language matrix remains available', languageSource.includes('COUNTRY_LANGUAGE_RECOMMENDATIONS'))
-ok('i18n static gate is registered', pkg.scripts['check:global-i18n-engine'] && pkg.scripts['verify:static']?.includes('check-global-i18n-engine') && pkg.scripts.prebuild?.includes('check-global-i18n-engine'))
+ok('i18n static gate is registered', pkg.scripts['check:global-i18n-engine'] && pkg.scripts['verify:static']?.includes('check-global-i18n-engine') && pkg.scripts['prebuild:checks']?.includes('check-global-i18n-engine'))
 
 if (fail.length) { console.error(`Global i18n engine: ${fail.length} failure(s)`); fail.forEach((name) => console.error(`FAIL ${name}`)); process.exit(1) }
 console.log('Global i18n engine: PASS')

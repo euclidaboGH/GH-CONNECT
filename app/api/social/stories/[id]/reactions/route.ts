@@ -18,7 +18,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   if (!limit.ok) return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(limit.retryAfterSec) } })
   const { id } = await ctx.params
   const storyId = String(id || "").trim()
-  if (!storyId || storyId.length > 160) return NextResponse.json({ ok: false, error: "INVALID_ID" }, { status: 400 })
+  if (!/^story_[a-z0-9_-]{8,100}$/i.test(storyId)) return NextResponse.json({ ok: false, error: "INVALID_ID" }, { status: 400, headers: { "Cache-Control": "no-store" } })
   const parsedBody = await readBoundedJson(request, 4096)
   if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400, headers: { "Cache-Control": "no-store" } })
   const reaction = String(parsedBody.value.reaction || "")

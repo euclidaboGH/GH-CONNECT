@@ -3,6 +3,7 @@
  * Optimistic UI remains in domain/context; these calls make server authoritative.
  */
 import { IdentityService } from "@/lib/identity/identity-service"
+import { buildSocialRequestIdentityKey } from "@/lib/social/request-identity"
 import type { Post, PostComment, StoryItem } from "@/lib/ghc-types"
 import { broadcastPostSync } from "@/lib/social/post-sync"
 import { broadcastPostEngagement } from "@/lib/engagement/post-engagement"
@@ -17,11 +18,21 @@ function headers(): HeadersInit {
 
 const inFlightGets = new Map<string, Promise<unknown>>()
 
+/**
+ * Requests are bound to the active identity snapshot. Never coalesce a read
+ * across account boundaries, and never apply a response after the identity
+ * changed while the request was pending.
+ */
+function requestIdentityKey(): string {
+  return buildSocialRequestIdentityKey(IdentityService.getIdentity())
+}
+
 async function json<T>(
   path: string,
   init?: RequestInit
 ): Promise<T & { ok?: boolean; error?: string; durable?: boolean }> {
   const method = String(init?.method || "GET").toUpperCase()
+  const identityAtStart = requestIdentityKey()
   const run = async () => {
     const controller = !init?.signal ? new AbortController() : null
     // Phase 3: marketplace order create/pay needs a longer bound than social reads.
@@ -53,7 +64,7 @@ async function json<T>(
   // No response cache is retained: the server remains authoritative on every later read.
   let pair: { res: Response; data: T & { ok?: boolean; error?: string; durable?: boolean } }
   if (method === "GET" && !init?.signal) {
-    const key = path
+    const key = `${identityAtStart}\u0000${path}`
     let pending = inFlightGets.get(key) as Promise<typeof pair> | undefined
     if (!pending) {
       pending = run().finally(() => inFlightGets.delete(key))
@@ -64,6 +75,13 @@ async function json<T>(
     pair = await run()
   }
   const { res, data } = pair
+  if (requestIdentityKey() !== identityAtStart) {
+    return {
+      ok: false,
+      durable: false,
+      error: "AUTH_CONTEXT_CHANGED",
+    } as T & { ok?: boolean; error?: string; durable?: boolean }
+  }
   if (res.status === 401) {
     return { ...data, ok: false, error: data.error || "AUTH_REQUIRED", durable: false }
   }
@@ -121,13 +139,16 @@ export async function socialListCommunityPosts(
   communityId: string,
   limit = 40,
   cursor?: { before: number; beforeId: string },
-): Promise<{ ok: boolean; durable: boolean; posts: Partial<Post>[]; error?: string }> {
+): Promise<{ ok: boolean; durable: boolean; posts: Partial<Post>[]; nextCursor?: { before: number; beforeId: string } | null; error?: string }> {
   const id = String(communityId || "").trim()
-  if (!id) return { ok: false, durable: false, posts: [], error: "COMMUNITY_REQUIRED" }
-  const query = new URLSearchParams({ limit: String(Math.min(100, Math.max(1, Math.floor(limit)))) })
+  if (!id) return { ok: false, durable: false, posts: [], nextCursor: null, error: "COMMUNITY_REQUIRED" }
+  const query = new URLSearchParams({ limit: String(Math.min(99, Math.max(1, Math.floor(limit)))) })
   if (cursor) { query.set("before", String(cursor.before)); query.set("beforeId", cursor.beforeId) }
-  const data = await json<{ posts?: Partial<Post>[]; error?: string }>(`/api/communities/${encodeURIComponent(id)}/posts?${query.toString()}`)
-  return { ok: data.ok !== false, durable: Boolean(data.durable), posts: Array.isArray(data.posts) ? data.posts : [], error: data.error }
+  const data = await json<{ posts?: Partial<Post>[]; nextCursor?: { before: number; beforeId: string } | null; error?: string }>(`/api/communities/${encodeURIComponent(id)}/posts?${query.toString()}`)
+  const cursor = data.nextCursor && Number.isSafeInteger(data.nextCursor.before) && data.nextCursor.before >= 0 && /^[a-zA-Z0-9_-]{1,180}$/.test(data.nextCursor.beforeId)
+    ? data.nextCursor
+    : null
+  return { ok: data.ok !== false, durable: Boolean(data.durable), posts: Array.isArray(data.posts) ? data.posts : [], nextCursor: cursor, error: data.error }
 }
 
 export async function socialCreatePost(
@@ -508,18 +529,25 @@ export async function socialDeleteComment(
   )
 }
 
-export async function socialListCommunities(limit = 50): Promise<{
+export async function socialListCommunities(opts: number | { limit?: number; q?: string; category?: string; offset?: number } = 50): Promise<{
   ok: boolean
   durable: boolean
   communities: unknown[]
+  pagination?: Record<string, unknown>
 }> {
-  const data = await json<{ communities?: unknown[] }>(
-    `/api/communities?limit=${limit}`
+  const options = typeof opts === "number" ? { limit: opts } : opts
+  const params = new URLSearchParams({ limit: String(options.limit ?? 50) })
+  if (options.q) params.set("q", options.q)
+  if (options.category) params.set("category", options.category)
+  if (options.offset != null) params.set("offset", String(options.offset))
+  const data = await json<{ communities?: unknown[]; pagination?: Record<string, unknown> }>(
+    `/api/communities?${params.toString()}`
   )
   return {
     ok: data.ok !== false,
     durable: Boolean(data.durable),
     communities: Array.isArray(data.communities) ? data.communities : [],
+    pagination: data.pagination,
   }
 }
 
@@ -896,16 +924,30 @@ export async function socialFetchMatchInbox(): Promise<{
 export async function socialFetchMarketplaceListings(opts?: {
   scope?: "public" | "mine"
   limit?: number
+  q?: string
+  category?: string
+  min?: number
+  max?: number
+  from?: string
+  to?: string
+  offset?: number
+  sort?: "price" | "updated_at"
+  direction?: "asc" | "desc"
+  kind?: "product" | "service" | "opportunity"
+  currency?: "GHC" | "PI"
 }): Promise<{
   ok: boolean
   durable: boolean
   listings: Array<Record<string, unknown>>
+  pagination?: { limit?: number; offset?: number; returned?: number; hasMore?: boolean; filtering?: string }
   error?: string
 }> {
   const scope = opts?.scope || "public"
-  const limit = opts?.limit ?? 50
-  const data = await json<{ listings?: unknown[] }>(
-    `/api/marketplace/listings?scope=${encodeURIComponent(scope)}&limit=${limit}`
+  const params = new URLSearchParams({ scope, limit: String(opts?.limit ?? 50) })
+  for (const key of ["q", "category", "from", "to", "sort", "direction", "kind", "currency"] as const) if (opts?.[key]) params.set(key, String(opts[key]))
+  for (const key of ["min", "max", "offset"] as const) if (opts?.[key] != null) params.set(key, String(opts[key]))
+  const data = await json<{ listings?: unknown[]; pagination?: { limit?: number; offset?: number; returned?: number; hasMore?: boolean; filtering?: string } }>(
+    `/api/marketplace/listings?${params.toString()}`
   )
   return {
     ok: data.ok !== false,
@@ -913,6 +955,7 @@ export async function socialFetchMarketplaceListings(opts?: {
     listings: Array.isArray(data.listings)
       ? (data.listings as Array<Record<string, unknown>>)
       : [],
+    pagination: data.pagination,
     error: data.error,
   }
 }
@@ -932,6 +975,8 @@ export async function socialCreateMarketplaceListing(input: {
   category?: string
   condition?: string
   tags?: string[]
+  productOptions?: Array<{ name: string; values: string[] }>
+  variants?: Array<{ id?: string; sku: string; label: string; price: number; currency: string; stockOnHand: number; active?: boolean }>
   /** Preferred listing-fee rail — server settles GHC or verifies Pi intent */
   feeCurrency?: "GHC" | "PI"
   listingFeePaymentId?: string
@@ -972,6 +1017,7 @@ export async function socialFetchMarketplaceListing(
 /** Server-first marketplace order create (idempotent). */
 export async function socialCreateMarketplaceOrder(input: {
   listingId: string
+  variantId?: string
   quantity?: number
   idempotencyKey?: string
 }): Promise<{
@@ -989,6 +1035,7 @@ export async function socialCreateMarketplaceOrder(input: {
     headers: { "Idempotency-Key": key },
     body: JSON.stringify({
       listingId: input.listingId,
+      ...(input.variantId ? { variantId: input.variantId } : {}),
       quantity: input.quantity ?? 1,
       idempotencyKey: key,
     }),

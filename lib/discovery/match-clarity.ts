@@ -13,6 +13,8 @@ export const MATCH_CLARITY = {
   passHint: "Pass — not interested for matching",
   connectLabel: "Connect",
   connectHint: "Send a connection request with your intent",
+  superlikeLabel: "Strong interest",
+  superlikeHint: "Strong interest for matching only — still not a connection request",
   emptyPeopleTitle: "No people to show yet",
   emptyPeopleBody:
     "When members appear from connected sources, they show here. Nothing is invented to fill the list.",

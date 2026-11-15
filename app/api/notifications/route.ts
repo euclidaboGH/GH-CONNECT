@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic"
 
 export async function GET(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
-  if (!auth) return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+  if (!auth) return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: { "Cache-Control": "no-store, private" } })
   const url = new URL(request.url)
   if (url.searchParams.get("countOnly") === "1") {
     const result = await unifiedUnreadCount(auth.userId)
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
-  if (!auth) return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+  if (!auth) return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: { "Cache-Control": "no-store, private" } })
   const rl = checkRateLimit(`unified-notifications:${auth.userId}`, 60, 60_000)
   if (!rl.ok) return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } })
   const parsedBody = await readBoundedJson(request, 16 * 1024)

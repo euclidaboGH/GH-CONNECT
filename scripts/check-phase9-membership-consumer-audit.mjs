@@ -14,7 +14,7 @@ const checks = [
   ["generic ledger spend blocks boosts/tools without durable effect before catalog debit", ledgerSpend.indexOf("UNCONFIGURED_PREMIUM_EFFECTS.has(purpose)") < ledgerSpend.indexOf("resolveSpendAmount(purposeRaw, clientAmount)") && ledgerSpend.includes("No GHC was charged")],
   ["utility purchase route independently blocks all unconfigured premium effects", utilitySpend.includes("effectNotConfigured") && utilitySpend.includes("no GHC has been charged")],
   ["boost and premium tool purposes are consistently blocked in both spend routes", ["boost", "boost_post", "boost_profile", "boost_listing", "feed_spotlight", "community_tools_month", "creator_studio_day"].every((name) => ledgerSpend.includes(`\"${name}\"`) && utilitySpend.includes(`\"${name}\"`))],
-  ["membership consumer audit is registered in prebuild and static verification", ["prebuild", "verify:static"].every((key) => { const pkg = JSON.parse(read("package.json")); return pkg.scripts[key].includes("check-phase9-membership-consumer-audit.mjs") })],
+  ["membership consumer audit is registered in prebuild and static verification", ["prebuild:checks", "verify:static"].every((key) => { const pkg = JSON.parse(read("package.json")); return pkg.scripts[key].includes("check-phase9-membership-consumer-audit.mjs") })],
 ]
 let failed = 0
 for (const [label, ok] of checks) { console.log(`${ok ? "PASS" : "FAIL"} ${label}`); if (!ok) failed++ }

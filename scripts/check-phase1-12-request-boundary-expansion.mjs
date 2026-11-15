@@ -30,7 +30,7 @@ const checks = [
     return [`${label} uses streaming body limit (${limit} bytes)`, source.includes('readBoundedJson') && normalized.includes(parserCall) && /REQUEST_TOO_LARGE/.test(source) && /parsedBody\.error|boundedBody\.error/.test(source)]
   }),
   ['payout amount rejects booleans and malformed coercible values', /typeof amountInput === "number"/.test(read('app/api/marketplace/payouts/route.ts')) && /Number\.NaN/.test(read('app/api/marketplace/payouts/route.ts'))],
-  ['social follow target identifier requires a string', /typeof body\.targetUserId === "string"/.test(read('app/api/social/follows/route.ts'))],
+  ['social follow target identifier is string-validated by the shared sanitizer', /sanitizeTargetUserId\(body\.targetUserId, auth\.userId\)/.test(read('app/api/social/follows/route.ts')) && /typeof raw === "string"/.test(read('lib/server/social/relationship-integrity.ts'))],
   ['step-up token body is bounded before token verification', read('app/api/auth/step-up/route.ts').indexOf('readBoundedJson(request, 8 * 1024)') < read('app/api/auth/step-up/route.ts').indexOf('verifyPiAccessToken(accessToken)')],
   ['payment recovery body is bounded before provider lookup', read('app/api/payments/intents/[intentId]/recover/route.ts').indexOf('readBoundedJson(request, 4 * 1024)') < read('app/api/payments/intents/[intentId]/recover/route.ts').indexOf('piGetPayment(paymentId)')],
   ['new request-boundary suite is registered in static verification', read('scripts/verify-phase14-static.mjs').includes('check-phase1-12-request-boundary-expansion.mjs')],

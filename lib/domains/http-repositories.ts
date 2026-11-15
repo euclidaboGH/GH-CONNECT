@@ -127,12 +127,12 @@ export function createHttpMessageRepository(cfg: HttpRepoConfig): MessageReposit
   return {
     listByConversation: (conversationId) => byConv.get(conversationId) || [],
     append: (conversationId, message) => {
+      // MessagingDomain owns the single durable POST via apiSendMessageWithRetry.
+      // This repository is only the optimistic/hydrated cache: sending a second
+      // POST here duplicated every successful online message and also competed
+      // with offline-message-flush for messages queued while disconnected.
       const list = [...(byConv.get(conversationId) || []), message]
       byConv.set(conversationId, list)
-      fireWrite(cfg, `/messaging/conversations/${conversationId}/messages`, {
-        method: "POST",
-        body: JSON.stringify(message),
-      })
     },
     update: (conversationId, messageId, patch) => {
       const list = (byConv.get(conversationId) || []).map((m) =>

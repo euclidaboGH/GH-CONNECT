@@ -25,11 +25,13 @@ function genId(): string {
   return `post_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
 }
 
+const MEDIA_FACADE_PATH = /^\/api\/media\/(media_[a-z0-9]+_[a-z0-9]+)\/content\/?$/i
+
 function isSafeImageRef(ref: string): boolean {
   const s = String(ref || "").trim()
-  if (!s || s.length > MAX_DATA_URL_CHARS) return false
-  if (s.startsWith("blob:")) return false
+  if (!s || s.length > MAX_DATA_URL_CHARS || s.startsWith("blob:")) return false
   if (s.startsWith("data:image/")) return s.length <= MAX_DATA_URL_CHARS
+  if (MEDIA_FACADE_PATH.test(s)) return true
   if (s.startsWith("https://")) return s.length <= MAX_HTTPS_URL
   return false
 }
@@ -37,9 +39,19 @@ function isSafeImageRef(ref: string): boolean {
 function isSafeVideoRef(ref: string | null): boolean {
   if (!ref) return true
   const s = String(ref).trim()
-  if (!s) return true
-  if (s.startsWith("blob:")) return false
+  if (!s || s.startsWith("blob:")) return !s
   if (s.startsWith("data:video/")) return s.length <= 2_500_000
+  if (MEDIA_FACADE_PATH.test(s)) return true
+  if (s.startsWith("https://")) return s.length <= MAX_HTTPS_URL
+  return false
+}
+
+function isSafePdfRef(ref: string | null): boolean {
+  if (!ref) return true
+  const s = String(ref).trim()
+  if (!s || s.startsWith("blob:")) return !s
+  if (MEDIA_FACADE_PATH.test(s)) return true
+  if (s.startsWith("data:application/pdf;base64,")) return s.length <= 600_000
   if (s.startsWith("https://")) return s.length <= MAX_HTTPS_URL
   return false
 }
@@ -86,24 +98,34 @@ export async function POST(request: Request) {
   if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400, headers: { "Cache-Control": "no-store" } })
   const body = parsedBody.value
   const content = String(body.content || "").trim()
-  const rawImages = Array.isArray(body.images) ? body.images.map(String).slice(0, 10) : []
+  const suppliedImages = Array.isArray(body.images) ? body.images : []
+  if (suppliedImages.length > 10) return NextResponse.json({ ok: false, error: "TOO_MANY_IMAGES" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+  const rawImages = suppliedImages.map(String)
   const images = rawImages.filter(isSafeImageRef)
-  if (rawImages.length > 0 && images.length === 0) {
+  if (images.length !== rawImages.length) {
     return NextResponse.json(
       {
         ok: false,
         error: "INVALID_MEDIA",
         message:
-          "Images must be optimized data:image or https URLs. Blob URLs are not durable.",
+          "Images must be optimized data URLs, HTTPS URLs, or owned GreenHaven media references. Blob URLs are not durable.",
       },
       { status: 400 }
     )
   }
 
+  const pdf = body.pdf ? String(body.pdf) : null
+  if (pdf && !isSafePdfRef(pdf)) {
+    return NextResponse.json({ ok: false, error: "INVALID_ATTACHMENT" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+  }
+
   // Optional durable media IDs (session must own or public_url available)
   let videoFromMedia: string | null = null
+  if (Array.isArray(body.mediaIds) && body.mediaIds.length > 20) {
+    return NextResponse.json({ ok: false, error: "TOO_MANY_MEDIA_IDS" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+  }
   const mediaIds = Array.isArray(body.mediaIds)
-    ? [...new Set(body.mediaIds.map(String).map((s) => s.trim()).filter(Boolean))].slice(0, 10)
+    ? [...new Set(body.mediaIds.map(String).map((s) => s.trim()).filter(Boolean))]
     : []
   if (mediaIds.length > 0) {
     const resolved = await resolveMediaAssets(auth.userId, mediaIds)
@@ -122,14 +144,20 @@ export async function POST(request: Request) {
       else if (String(asset.kind) === "image" && images.length < 10) images.push(url)
     }
   }
+  // De-duplicate before the row snapshot and attachment RPC so a repeated URL cannot
+  // consume the attachment cap or create inconsistent display metadata.
+  const uniqueImages = [...new Set(images)].slice(0, 10)
+  images.splice(0, images.length, ...uniqueImages)
   // Older composer versions only send the stable delivery URL. Recover the opaque media ID
   // from that first-party URL so the post gets a durable media relation as well.
-  const mediaIdsFromUrls = [...images, ...(videoFromMedia ? [videoFromMedia] : [])]
+  const mediaReferenceUrls = [...images, ...(videoFromMedia ? [videoFromMedia] : []), ...(body.video ? [String(body.video)] : []), ...(pdf ? [pdf] : [])]
+  const mediaIdsFromUrls = mediaReferenceUrls
     .map((value) => {
       try {
-        const parsed = new URL(value, new URL(request.url).origin)
-        const match = parsed.pathname.match(/^\/api\/media\/(media_[a-z0-9]+_[a-z0-9]+)\/content$/i)
-        return parsed.origin === new URL(request.url).origin ? match?.[1] || "" : ""
+        const origin = new URL(request.url).origin
+        const parsed = new URL(value, origin)
+        const match = parsed.pathname.match(/^\/api\/media\/(media_[a-z0-9]+_[a-z0-9]+)\/content\/?$/i)
+        return parsed.origin === origin ? match?.[1] || "" : ""
       } catch { return "" }
     }).filter(Boolean)
   const durableMediaIds = [...new Set([...mediaIds, ...mediaIdsFromUrls])].slice(0, 20)
@@ -140,15 +168,10 @@ export async function POST(request: Request) {
       {
         ok: false,
         error: "INVALID_VIDEO",
-        message: "Video must be https or a bounded data:video URL. Blob URLs are not durable.",
+        message: "Video must be an HTTPS URL, a bounded data:video URL, or a GreenHaven media reference. Blob URLs are not durable.",
       },
       { status: 400 }
     )
-  }
-
-  const pdf = body.pdf ? String(body.pdf) : null
-  if (pdf && (pdf.startsWith("blob:") || pdf.length > 2_500_000)) {
-    return NextResponse.json({ ok: false, error: "INVALID_ATTACHMENT" }, { status: 400 })
   }
 
   const hasMedia = images.length > 0 || Boolean(video) || Boolean(pdf)
@@ -273,9 +296,10 @@ export async function POST(request: Request) {
     if (err.toLowerCase().includes("duplicate") || err.toLowerCase().includes("unique")) {
       return NextResponse.json({ ok: true, durable: true, post: row, duplicate: true })
     }
+    const error = String(data.error || "CREATE_REJECTED")
     return NextResponse.json(
-      { ok: false, error: data.error || "CREATE_REJECTED" },
-      { status: 400 }
+      { ok: false, error },
+      { status: error === "ID_CONFLICT" || error === "ID_RETIRED" ? 409 : 400, headers: { "Cache-Control": "no-store" } }
     )
   }
 

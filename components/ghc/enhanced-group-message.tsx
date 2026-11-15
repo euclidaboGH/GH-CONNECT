@@ -81,8 +81,7 @@ function MediaAttachment({
               el.addEventListener("pointercancel", clear, { once: true })
             }}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <DurableImage
+                        <DurableImage
               src={attachment.url}
               alt={attachment.fileName || "Attachment"}
               loading="lazy"

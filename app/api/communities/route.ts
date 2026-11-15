@@ -7,7 +7,7 @@ import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
 import { nonDurableReadResponse, nonDurableWriteResponse } from "@/lib/server/production-guard"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
 import { feesRequireSettlement, quoteCommunityCreateFee } from "@/lib/server/fees/pilot-fee-policy"
 import { settlePilotFee } from "@/lib/server/fees/settle-pilot-fee"
 import { ensureCommunityConversation } from "@/lib/server/messaging/message-store"
@@ -32,12 +32,25 @@ export async function GET(request: Request) {
     })
   }
 
-  const limit = Math.min(
-    Math.max(Number(new URL(request.url).searchParams.get("limit") || 50), 1),
-    100
-  )
-  const result = await socialRpc("gh_community_list_public", { p_limit: limit })
-  const data = result.data as { communities?: unknown[] }
+  const url = new URL(request.url)
+  const rawLimit = url.searchParams.get("limit") || "50"
+  const rawOffset = url.searchParams.get("offset") || "0"
+  const query = (url.searchParams.get("q") || "").normalize("NFKC").trim().slice(0, 160)
+  const category = (url.searchParams.get("category") || "").trim().slice(0, 64)
+  if (!/^\d{1,3}$/.test(rawLimit) || !/^\d{1,6}$/.test(rawOffset) || Number(rawOffset) > 100000 || (category && !/^[\p{L}\p{N}][\p{L}\p{N} &+/_.-]{0,63}$/u.test(category))) {
+    return NextResponse.json({ ok: false, error: "INVALID_FILTER_QUERY" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+  }
+  const limit = Math.min(Math.max(Number(rawLimit), 1), 100)
+  const offset = Number(rawOffset)
+  const filtered = Boolean(query || category || offset)
+  const result = filtered
+    ? await socialRpc("gh_community_search_public", { p_query: query, p_category: category || null, p_limit: limit, p_offset: offset })
+    : await socialRpc("gh_community_list_public", { p_limit: limit })
+  if (!result.ok && filtered) {
+    return NextResponse.json({ ok: false, error: "FILTER_SEARCH_UNAVAILABLE", requiresMigration: "20261108120001_gh_community_server_filter_search.sql" }, { status: 503, headers: { "Cache-Control": "no-store" } })
+  }
+  if (!result.ok) return NextResponse.json({ ok: false, error: "COMMUNITY_DIRECTORY_UNAVAILABLE" }, { status: 503, headers: { "Cache-Control": "no-store" } })
+  const data = result.data as { communities?: unknown[]; pagination?: Record<string, unknown> }
   let communities: unknown[] = Array.isArray(data?.communities) ? data.communities : []
 
   // Phase 3: when authenticated, mark viewer membership so "My communities" is truthful.
@@ -101,6 +114,7 @@ export async function GET(request: Request) {
       ok: true,
       durable: result.ok,
       communities,
+      ...(data?.pagination ? { pagination: data.pagination } : filtered ? { pagination: { limit, offset, returned: communities.length, filtering: "server-side" } } : {}),
     },
     { headers: { "Cache-Control": "no-store" } }
   )
@@ -112,10 +126,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
 
-  const rl = checkRateLimit(`community-create:${auth.userId}`, 5, 60_000)
-  if (!rl.ok) {
-    return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429 })
-  }
+  const rateLimited = await enforceUserMutationRateLimit(auth.userId, "communities:POST", 5, 60_000, { failClosed: true })
+  if (rateLimited) return rateLimited
 
   const parsedBody = await readBoundedJson(request, 16 * 1024)
   if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400, headers: { "Cache-Control": "no-store" } })

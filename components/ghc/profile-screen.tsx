@@ -36,6 +36,7 @@ import { LazyImage } from "./lazy-image"
 import type { Post, Profile } from "@/lib/ghc-types"
 import { isOwnProfilePost } from "@/lib/ownership"
 import { IdentityService } from "@/lib/identity/identity-service"
+import { normalizeEngagementMetrics } from "@/lib/engagement/post-engagement"
 import {
   formatGreenHavenIdDisplay,
   getOrCreateGreenHavenId,
@@ -95,13 +96,7 @@ export function ProfileScreen({
 }) {
   const regional = useRegionalContext()
   const msg = useCallback((key: Parameters<typeof getProductMessage>[0]) => getProductMessage(key, regional.locale), [regional.locale])
-  const ghc = useGHCProfile() as {
-    profile?: Profile
-    friends?: unknown[]
-    following?: unknown[]
-    updateProfile?: (updates: Partial<Profile>) => Promise<void>
-    addToast?: (m: string, t?: "success" | "error" | "info") => void
-  }
+  const ghc = useGHCProfile()
   const messaging = useGHCMessaging() as { conversations?: unknown[] }
   const feed = useGHCFeed()
   const p = useMemo(() => ghc.profile || ({} as Profile), [ghc.profile])
@@ -111,10 +106,16 @@ export function ProfileScreen({
   const cover = p.coverPhoto || ""
   const interests = Array.isArray(p.interests) ? p.interests.filter(Boolean) : []
   const intents = Array.isArray(p.connectionIntents) ? p.connectionIntents.filter(Boolean) : []
-  const meId = IdentityService.getCurrentUserId()
+  const [sessionIdentityId, setSessionIdentityId] = useState(() => {
+    const identityId = IdentityService.getCurrentUserId()
+    return identityId && identityId !== "current-user" && identityId !== "preview-user" ? identityId : String(ghc.profile?.id || "")
+  })
+  useEffect(() => IdentityService.subscribe((identity) => setSessionIdentityId(identity.userId || "")), [])
+  const meId = String(sessionIdentityId || "").trim()
   // The profile timeline is loaded from its own durable, viewer-authorized API;
   // the feed is only a temporary visual fallback while that request is in flight.
   const [timelinePosts, setTimelinePosts] = useState<Post[] | null>(null)
+  const [timelineOwnerId, setTimelineOwnerId] = useState<string | null>(null)
   const [timelineCursor, setTimelineCursor] = useState<{ before: number; beforeId: string } | null>(null)
   const [timelineHasMore, setTimelineHasMore] = useState(false)
   const [timelineLoading, setTimelineLoading] = useState(false)
@@ -122,13 +123,52 @@ export function ProfileScreen({
   const [timelineError, setTimelineError] = useState<string | null>(null)
   const [timelineRetry, setTimelineRetry] = useState(0)
   const timelineLoadMoreAbortRef = useRef<AbortController | null>(null)
+  const timelineLoadMoreLockRef = useRef(false)
   const fallbackPosts = useMemo(
     () => (Array.isArray(feed.posts) ? feed.posts.filter((post) => isOwnProfilePost(post.authorId, post.authorName, meId, p)) : []),
     [feed.posts, meId, p],
   )
-  const posts = timelinePosts ?? fallbackPosts
+  // Never render a prior account's cached timeline during an identity switch.
+  const posts = meId ? (timelineOwnerId === meId ? timelinePosts ?? fallbackPosts : fallbackPosts) : []
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [authoritativeFollowCounts, setAuthoritativeFollowCounts] = useState<{ followers: number; following: number } | null>(null)
+
+  // The profile timeline is fetched independently from Home. Reconcile only
+  // authoritative engagement events so Feed/Profile counters do not drift.
+  useEffect(() => {
+    const onEngagement = (event: Event) => {
+      const detail = (event as CustomEvent<{
+        postId?: string; likeCount?: number; reactionCounts?: Record<string, number>;
+        viewerReactions?: string[]; shareCount?: number; commentCount?: number; savedByMe?: boolean;
+      }>).detail
+      const postId = String(detail?.postId || "").trim()
+      if (!postId) return
+      setTimelinePosts((current) => {
+        if (!current) return current
+        return current.map((post) => {
+          if (post.id !== postId) return post
+          const next: Post = { ...post }
+          if (typeof detail.likeCount === "number" && Number.isFinite(detail.likeCount)) {
+            next.likes = Math.max(0, detail.likeCount)
+          }
+          if (detail.reactionCounts && typeof detail.reactionCounts === "object") next.reactionCounts = detail.reactionCounts
+          if (Array.isArray(detail.viewerReactions)) next.viewerReactions = detail.viewerReactions
+          if (typeof detail.shareCount === "number" && Number.isFinite(detail.shareCount)) next.shares = Math.max(0, detail.shareCount)
+          if (typeof detail.savedByMe === "boolean") next.savedByMe = detail.savedByMe
+          if (typeof detail.likeCount === "number" || typeof detail.shareCount === "number" || typeof detail.commentCount === "number") {
+            next.engagement = normalizeEngagementMetrics(post.engagement, {
+              ...(typeof detail.likeCount === "number" && Number.isFinite(detail.likeCount) ? { likes: Math.max(0, detail.likeCount) } : {}),
+              ...(typeof detail.shareCount === "number" && Number.isFinite(detail.shareCount) ? { shares: Math.max(0, detail.shareCount) } : {}),
+              ...(typeof detail.commentCount === "number" && Number.isFinite(detail.commentCount) ? { comments: Math.max(0, detail.commentCount) } : {}),
+            })
+          }
+          return next
+        })
+      })
+    }
+    window.addEventListener("ghc:post-engagement", onEngagement as EventListener)
+    return () => window.removeEventListener("ghc:post-engagement", onEngagement as EventListener)
+  }, [])
 
   const [profileSoftTick, setProfileSoftTick] = useState(0)
   useSectionRefresh("profile", () => {
@@ -138,11 +178,20 @@ export function ProfileScreen({
 
 
   useEffect(() => {
-    if (!meId) return
+    if (!meId) {
+      setTimelineOwnerId(null)
+      setTimelinePosts(null)
+      setTimelineCursor(null)
+      setTimelineHasMore(false)
+      setTimelineLoading(false)
+      setTimelineError(null)
+      return
+    }
     const controller = new AbortController()
+    setTimelineOwnerId(meId)
+    setTimelinePosts(null)
     setTimelineLoading(true)
     setTimelineError(null)
-    setTimelinePosts(null)
     setTimelineCursor(null)
     setTimelineHasMore(false)
     void (async () => {
@@ -154,7 +203,7 @@ export function ProfileScreen({
           ok?: boolean; posts?: Array<Record<string, unknown>>; hasMore?: boolean;
           nextBefore?: number | null; nextBeforeId?: string | null; error?: string; message?: string
         }
-        if (!response.ok || !data.ok) throw new Error(data.message || data.error || `Timeline unavailable (${response.status})`)
+        if (!response.ok || !data.ok) throw new Error(`Timeline request failed (${response.status})`)
         const mapped = (Array.isArray(data.posts) ? data.posts : []).map((row): Post => {
           const likes = Math.max(0, Number(row.likes) || 0)
           const commentCount = Math.max(0, Number(row.commentCount) || 0)
@@ -187,7 +236,8 @@ export function ProfileScreen({
           ? { before: data.nextBefore, beforeId: data.nextBeforeId } : null)
       } catch (error) {
         if (controller.signal.aborted) return
-        setTimelineError(error instanceof Error ? error.message : "Your complete timeline could not be loaded")
+        console.error("[Profile Timeline] initial load failed", error)
+        setTimelineError("Your posts could not be loaded. Please try again.")
       } finally {
         if (!controller.signal.aborted) setTimelineLoading(false)
       }
@@ -207,7 +257,8 @@ export function ProfileScreen({
   }, [meId])
 
   const loadMoreTimeline = useCallback(async () => {
-    if (!meId || !timelineCursor || !timelineHasMore || timelineLoadingMore) return
+    if (!meId || !timelineCursor || !timelineHasMore || timelineLoadingMore || timelineLoadMoreLockRef.current) return
+    timelineLoadMoreLockRef.current = true
     setTimelineLoadingMore(true)
     setTimelineError(null)
     const controller = new AbortController()
@@ -256,9 +307,13 @@ export function ProfileScreen({
       setTimelineCursor(typeof data.nextBefore === "number" && typeof data.nextBeforeId === "string"
         ? { before: data.nextBefore, beforeId: data.nextBeforeId } : null)
     } catch (error) {
-      if (!controller.signal.aborted) setTimelineError(error instanceof Error ? error.message : "More posts could not be loaded")
+      if (!controller.signal.aborted) {
+        console.error("[Profile Timeline] pagination failed", error)
+        setTimelineError("More posts could not be loaded. Please try again.")
+      }
     } finally {
       if (timelineLoadMoreAbortRef.current === controller) timelineLoadMoreAbortRef.current = null
+      timelineLoadMoreLockRef.current = false
       if (!controller.signal.aborted) setTimelineLoadingMore(false)
     }
   }, [meId, timelineCursor, timelineHasMore, timelineLoadingMore])
@@ -527,6 +582,11 @@ export function ProfileScreen({
         input.onchange = () => {
           const file = input.files?.[0]
           if (!file) return
+          const updateProfile = ghc.updateProfile
+          if (!updateProfile) {
+            ghc.addToast?.("Profile updates are temporarily unavailable. Please try again later.", "error")
+            return
+          }
           if (!file.type.startsWith("image/")) {
             ghc.addToast?.("Choose a valid image file", "error")
             return
@@ -598,7 +658,7 @@ export function ProfileScreen({
                 ? [{ url: previous, changedAt, caption: "Previous profile photo" }, ...oldHistory.filter((item) => item.url !== previous)].slice(0, 24)
                 : oldHistory.slice(0, 24)
               const next = [imageUrl, ...photos.filter((x) => x !== imageUrl)].slice(0, 6)
-              await ghc.updateProfile?.({
+              await updateProfile({
                 photos: next,
                 profilePhotoHistory: history,
                 profilePayload: { ...(p.profilePayload || {}), profilePhotoHistory: history, coverPhotoHistory: p.coverPhotoHistory || [] },
@@ -617,7 +677,7 @@ export function ProfileScreen({
               const history = previous && previous !== imageUrl && (previous.startsWith("http") || previous.includes("/api/media/"))
                 ? [{ url: previous, changedAt, caption: "Previous cover photo" }, ...oldHistory.filter((item) => item.url !== previous)].slice(0, 24)
                 : oldHistory.slice(0, 24)
-              await ghc.updateProfile?.({
+              await updateProfile({
                 coverPhoto: imageUrl,
                 coverPhotoHistory: history,
                 profilePayload: { ...(p.profilePayload || {}), profilePhotoHistory: p.profilePhotoHistory || [], coverPhotoHistory: history },
@@ -644,27 +704,32 @@ export function ProfileScreen({
   )
 
   const removeImage = useCallback(
-    (kind: "photo" | "cover") => {
+    async (kind: "photo" | "cover") => {
       setPhotoSheet(null)
-      if (kind === "photo") {
-        ghc.updateProfile?.({ photos: photos.slice(1) })
-        ghc.addToast?.("Profile photo removed", "info")
-      } else {
-        ghc.updateProfile?.({ coverPhoto: null })
-        ghc.addToast?.("Cover removed", "info")
+      try {
+        if (!ghc.updateProfile) throw new Error("Profile updates are unavailable")
+        if (kind === "photo") {
+          await ghc.updateProfile({ photos: photos.slice(1) })
+          ghc.addToast?.("Profile photo removed", "success")
+        } else {
+          await ghc.updateProfile({ coverPhoto: null })
+          ghc.addToast?.("Cover removed", "success")
+        }
+      } catch {
+        ghc.addToast?.("Could not remove this image. Please try again.", "error")
       }
     },
     [ghc, photos]
   )
 
   const shareProfile = async () => {
-    const text = `${name} · ${ghDisplay} on GreenHaven — connect on Pi Browser`
-    const origin =
-      getPublicSiteOrigin()
+    const text = `${name} · ${ghDisplay} on GreenHaven. Find my profile in GreenHaven using my GH ID.`
+    const origin = getPublicSiteOrigin()
+    const profileUrl = meId ? `${origin}/?profile=${encodeURIComponent(meId)}` : `${origin}/`
     const result = await shareText({
       title: "GreenHaven Profile",
       message: text,
-      url: `${origin}/`,
+      url: profileUrl,
     })
     if (result.ok) {
       if (result.method === "clipboard") {
@@ -684,7 +749,7 @@ export function ProfileScreen({
   return (
     <div className="gh-profile-shell gh-world-profile flex h-full min-h-0 w-full flex-col bg-background text-foreground contain-content" role="region" aria-label={msg("profileTitle")}>
       <header className="gh-page-header-slim gh-world-profile-header flex w-full shrink-0 items-center justify-between border-b border-border/50 bg-card/95 px-3 pb-1 pt-[max(0.25rem,env(safe-area-inset-top))] backdrop-blur-md">
-        <h1 className="text-[15px] font-bold tracking-tight text-foreground">{msg("profileTitle")}</h1>
+        <h1 className="gh-type-title font-bold tracking-tight text-foreground">{msg("profileTitle")}</h1>
         <div className="flex items-center gap-0">
           <PremiumSurfaceActions />
           <button
@@ -843,10 +908,10 @@ export function ProfileScreen({
             {/* Stats — real counts only */}
             <div className="gh-premium-profile-stats mt-4 grid grid-cols-4 gap-1 rounded-[1.25rem] border border-border/50 bg-card p-1.5 shadow-[var(--gh-card-shadow)]">
               {[
-                { label: "Posts" as const, value: posts.length },
-                { label: "Friends" as const, value: Array.isArray(ghc.friends) ? ghc.friends.length : 0 },
-                { label: "Following" as const, value: authoritativeFollowCounts?.following ?? (Array.isArray(ghc.following) ? ghc.following.length : 0) },
-                { label: "Followers" as const, value: authoritativeFollowCounts?.followers ?? (Array.isArray((ghc as { followers?: unknown[] }).followers) ? (ghc as { followers?: unknown[] }).followers!.length : 0) },
+                { label: "Posts" as const, value: timelinePosts === null ? "—" : `${timelinePosts.length}${timelineHasMore ? "+" : ""}` },
+                { label: "Friends" as const, value: Array.isArray(ghc.friends) ? ghc.friends.length : "—" },
+                { label: "Following" as const, value: authoritativeFollowCounts?.following ?? "—" },
+                { label: "Followers" as const, value: authoritativeFollowCounts?.followers ?? "—" },
               ].map((s) => (
                 <button key={s.label} type="button" onClick={() => setSocialList(s.label)} className="flex min-w-0 flex-col items-center rounded-xl py-2.5 text-center transition hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label={`Open ${s.label.toLowerCase()} list`}>
                   <span className="text-[15px] font-bold tabular-nums text-foreground">{s.value}</span>
@@ -861,7 +926,8 @@ export function ProfileScreen({
               </div>
             ) : null}
 
-            {/* Professional identity, achievements and account tools live in Personal Dashboard. */}
+            {/* The compact identity snapshot supplies authoritative follow counts and durable reputation. */}
+            <ProfileIdentityOverview onCounts={setAuthoritativeFollowCounts} />
 
           </div>
         </div>
@@ -874,6 +940,13 @@ export function ProfileScreen({
             media: posts.filter((post) => (Array.isArray((post as any).images) && (post as any).images.length > 0) || Boolean((post as any).video) || Boolean((post as any).pdf)).length,
           }}
         />
+        <div
+          id={`gh-profile-panel-${profileSectionTab}`}
+          role="tabpanel"
+          aria-labelledby={`gh-profile-tab-${profileSectionTab}`}
+          tabIndex={0}
+          className="outline-none"
+        >
 
         {/* Compact tools — Dashboard only (wallet/rewards live here, not on public-looking chrome) */}
         <section id="gh-profile-tools" className="mt-2 w-full px-4" aria-label="Profile dashboard">
@@ -906,6 +979,15 @@ export function ProfileScreen({
               </dl>
               <button type="button" onClick={openEdit} className="mt-3 text-[12px] font-bold text-emerald-700 dark:text-emerald-300">Edit profile</button>
             </div>
+            <ProfileProfessionalShowcase
+              profile={p}
+              onEdit={openEdit}
+              onSave={async (patch) => {
+                if (!ghc.updateProfile) throw new Error("Profile updates are unavailable")
+                await ghc.updateProfile(patch)
+              }}
+            />
+            <ProfileAchievementShowcase />
           </section>
         ) : null}
 
@@ -1152,6 +1234,7 @@ export function ProfileScreen({
           </div>
         </section>
         ) : null}
+        </div>
       </div>
 
       {dashboardPageOpen ? (
@@ -1204,9 +1287,15 @@ export function ProfileScreen({
                 </div>
               </section>
             ) : null}
-            <ProfileIdentityOverview onCounts={setAuthoritativeFollowCounts} />
-            <ProfileProfessionalShowcase profile={p} onEdit={openEdit} onSave={async (patch) => { await ghc.updateProfile?.(patch) }} />
-            <ProfileAchievementShowcase />
+            <section className="mt-3 rounded-[1.25rem] border border-border/60 bg-card px-3 py-3" aria-label="Public profile presentation">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-bold text-foreground">Your public identity & portfolio</p>
+                  <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">Your professional or business presentation, selected work and earned achievements are available in the About section of your profile.</p>
+                </div>
+                <button type="button" onClick={() => { setDashboardPageOpen(false); setProfileSectionTab("about") }} className="min-h-10 shrink-0 rounded-full border border-border px-3 text-[10px] font-bold hover:bg-muted">View About</button>
+              </div>
+            </section>
             <div className="mt-2"><PioneerIdentityStrip hideGreenHavenId /></div>
             {profileCompletion.percentage < 100 && profileCompletion.missing.length > 0 ? (
               <button
@@ -1313,7 +1402,7 @@ export function ProfileScreen({
               {(photoSheet === "photo" ? photo : cover) ? (
                 <button
                   type="button"
-                  onClick={() => removeImage(photoSheet)}
+                  onClick={() => void removeImage(photoSheet)}
                   className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-[14px] font-semibold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
                 >
                   <span className="flex h-9 w-9 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-950">

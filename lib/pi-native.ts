@@ -19,9 +19,27 @@ function getPi(): Record<string, unknown> | null {
   return w.Pi && typeof w.Pi === "object" ? w.Pi : null
 }
 
-/** True when window.Pi is injected (typical Pi Browser). */
+/**
+ * Best-effort host detection for choosing the Pi SDK sign-in path. This is
+ * only a UX hint; it never authenticates a user or grants payment authority.
+ * Pi Browser can expose its user-agent before the SDK bridge is initialized.
+ */
 export function isPiBrowserRuntime(): boolean {
-  return Boolean(getPi())
+  if (getPi()) return true
+  if (typeof window === "undefined") return false
+  // Common Pi webview / bridge globals (vary by SDK generation)
+  const w = window as unknown as Record<string, unknown>
+  if (w.PiApp || w.PiNetwork || w.__PI_BROWSER__ || w.piNetwork) return true
+  if (typeof navigator === "undefined") return false
+  const ua = String(navigator.userAgent || "")
+  if (/PiBrowser|Pi\s*Network|minepi|Pi\s*Browser|PiWebView|Pi\/|\bPiOS\b/i.test(ua)) return true
+  // Android WebView packaging sometimes omits "PiBrowser" but includes host app markers
+  if (/wv\)/i.test(ua) && /pi\.network|minepi\.com/i.test(ua)) return true
+  try {
+    const ref = String(document.referrer || "")
+    if (/minepi\.com|pi\.app|pinet\.com/i.test(ref)) return true
+  } catch { /* */ }
+  return false
 }
 
 export function canOpenShareDialog(): boolean {

@@ -8,7 +8,7 @@
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser, verifyPiAccessToken } from "@/lib/server/economy/auth"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import { getByGhUserId, getByPiAppUid } from "@/lib/server/identity/pi-identity-store"
 import {
   verifyWalletConsentProof,
@@ -33,20 +33,18 @@ function reply(body: unknown, status = 200) {
 export async function GET(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return reply({ ok: false, error: "AUTH_REQUIRED" }, 401)
-  const limit = checkRateLimit(`wallet-auth-get:${auth.userId}`, 60, 60_000)
-  if (!limit.ok) return reply({ ok: false, error: "RATE_LIMITED" }, 429)
+  const limit = await checkDurableRateLimit(`wallet-auth-get:${auth.userId}`, 60, 60_000, { onUnavailable: "deny" })
+  if (!limit.ok) return reply({ ok: false, error: durableRateLimitCode(limit) }, durableRateLimitStatus(limit))
   const status = await getWalletAuthorization(auth.userId)
-  if (!status.ok && status.error === "WALLET_AUTHORIZATION_UNAVAILABLE") {
-    return reply({ ok: false, error: "WALLET_AUTHORIZATION_UNAVAILABLE" }, 503)
-  }
+  if (!status.ok) return reply({ ok: false, error: status.error || "WALLET_AUTHORIZATION_UNAVAILABLE" }, status.error === "INVALID_INPUT" ? 400 : 503)
   return reply({ ...status, ok: true })
 }
 
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return reply({ ok: false, error: "AUTH_REQUIRED" }, 401)
-  const limit = checkRateLimit(`wallet-auth-grant:${auth.userId}`, 10, 60_000)
-  if (!limit.ok) return reply({ ok: false, error: "RATE_LIMITED" }, 429)
+  const limit = await checkDurableRateLimit(`wallet-auth-grant:${auth.userId}`, 10, 60_000, { onUnavailable: "deny" })
+  if (!limit.ok) return reply({ ok: false, error: durableRateLimitCode(limit) }, durableRateLimitStatus(limit))
 
   const parsedBody = await readBoundedJson(request, 8 * 1024)
   if (!parsedBody.ok) {
@@ -63,11 +61,13 @@ export async function POST(request: Request) {
       ghUserId: auth.userId,
       accessToken: parsedBody.value.accessToken,
       consent: parsedBody.value.consent,
+      walletAddress: parsedBody.value.walletAddress,
     },
     { verifyPiAccessToken, getByGhUserId, getByPiAppUid },
   )
   if (!proof.ok) {
-    console.info("[wallet-authorization] consent rejected", { reason: proof.error })
+    const requestId = String(request.headers.get("x-vercel-id") || request.headers.get("x-request-id") || "").slice(0, 128)
+    console.info("[wallet-authorization] consent rejected", { stage: "PI_PROOF", reason: proof.error, requestId: requestId || undefined })
     return reply({
       ok: false,
       error: proof.error,
@@ -75,20 +75,42 @@ export async function POST(request: Request) {
       retryable: proof.error !== "IDENTITY_MISMATCH" && proof.error !== "IDENTITY_MAPPING_REQUIRED",
     }, walletConsentFailureStatus(proof.error))
   }
-  const mapping = { piAppUid: proof.piAppUid }
+  const mapping = { piAppUid: proof.piAppUid, piWalletAddress: proof.piWalletAddress, walletAddressSource: proof.walletAddressSource }
 
   const granted = await grantWalletAuthorization({
     ghUserId: auth.userId,
     piAppUid: mapping.piAppUid,
+    piWalletAddress: mapping.piWalletAddress,
+    walletAddressSource: mapping.walletAddressSource,
     source: "user_explicit",
   })
   if (!granted.ok) {
-    const status = granted.error === "WALLET_AUTHORIZATION_UNAVAILABLE" ? 503 : 409
+    const knownGrantErrors = new Set([
+      "WALLET_AUTHORIZATION_UNAVAILABLE", "INVALID_INPUT", "INVALID_SOURCE",
+      "IDENTITY_MAPPING_REQUIRED", "IDENTITY_MAPPING_MISMATCH", "PI_WALLET_ADDRESS_REQUIRED",
+      "PI_WALLET_ADDRESS_PROOF_REQUIRED", "PI_WALLET_ADDRESS_UNVERIFIED", "GRANT_RESPONSE_MISMATCH",
+    ])
+    const publicError = knownGrantErrors.has(String(granted.error)) ? String(granted.error) : "AUTHORIZATION_SAVE_FAILED"
+    const status = publicError === "WALLET_AUTHORIZATION_UNAVAILABLE" ? 503 : publicError === "INVALID_INPUT" ? 400 : publicError === "IDENTITY_MAPPING_MISMATCH" ? 403 : 409
+    const requestId = String(request.headers.get("x-vercel-id") || request.headers.get("x-request-id") || "").slice(0, 128)
+    console.error("[wallet-authorization] grant failed", {
+      stage: "GRANT_RPC", diagnosticCode: publicError,
+      upstreamStatus: typeof granted.httpStatus === "number" ? granted.httpStatus : undefined,
+      requestId: requestId || undefined,
+    })
+    const grantMessages: Record<string, string> = {
+      PI_WALLET_ADDRESS_REQUIRED: WALLET_CONSENT_MESSAGES.PI_WALLET_ADDRESS_REQUIRED,
+      PI_WALLET_ADDRESS_UNVERIFIED: WALLET_CONSENT_MESSAGES.PI_WALLET_ADDRESS_UNVERIFIED,
+      IDENTITY_MAPPING_REQUIRED: WALLET_CONSENT_MESSAGES.IDENTITY_MAPPING_REQUIRED,
+      IDENTITY_MAPPING_MISMATCH: WALLET_CONSENT_MESSAGES.IDENTITY_MISMATCH,
+      INVALID_INPUT: "The authorization request was incomplete. Please restart Pi authorization.",
+      GRANT_RESPONSE_MISMATCH: "Pi authorization could not be independently confirmed. Withdrawals remain blocked; please retry.",
+    }
     return reply({
       ok: false,
-      error: granted.error === "WALLET_AUTHORIZATION_UNAVAILABLE" ? "WALLET_AUTHORIZATION_UNAVAILABLE" : "AUTHORIZATION_SAVE_FAILED",
-      message: "Wallet authorization could not be saved. Please retry Pi authentication.",
-      ...(granted.diagnosticCode ? { diagnosticCode: granted.diagnosticCode } : {}),
+      error: publicError,
+      message: grantMessages[publicError] || "Wallet authorization could not be saved. Please retry Pi authentication.",
+      diagnosticCode: publicError,
       ...(typeof granted.httpStatus === "number" ? { upstreamStatus: granted.httpStatus } : {}),
     }, status)
   }
@@ -101,19 +123,47 @@ export async function POST(request: Request) {
     !verified.ok ||
     verified.authorizationActive !== true ||
     verified.uidMatchesAuthorization !== true ||
-    verified.authorizedPiAppUid !== mapping.piAppUid
+    verified.authorizedPiAppUid !== mapping.piAppUid ||
+    verified.piWalletAddress !== mapping.piWalletAddress ||
+    verified.walletAddressSource !== mapping.walletAddressSource ||
+    verified.walletAddressSource !== "platform_api" ||
+    !verified.walletAddressVerifiedAt
   ) {
+    const readbackCode = verified.error || (
+      verified.uidMatchesAuthorization !== true || verified.authorizedPiAppUid !== mapping.piAppUid
+        ? "IDENTITY_MISMATCH"
+        : verified.piWalletAddress !== mapping.piWalletAddress
+          ? "PI_WALLET_ADDRESS_MISMATCH"
+          : verified.walletAddressSource !== "platform_api" || !verified.walletAddressVerifiedAt
+            ? "PI_WALLET_ADDRESS_UNVERIFIED"
+            : verified.authorizationReason || "AUTHORIZATION_NOT_CONFIRMED"
+    )
+    const knownReadbackErrors = new Set([
+      "WALLET_AUTHORIZATION_UNAVAILABLE", "IDENTITY_MAPPING_REQUIRED", "IDENTITY_MISMATCH",
+      "PI_WALLET_ADDRESS_REQUIRED", "PI_WALLET_ADDRESS_UNVERIFIED", "PI_WALLET_ADDRESS_MISMATCH",
+      "AUTHORIZATION_NOT_CONFIRMED",
+    ])
+    const diagnosticCode = knownReadbackErrors.has(readbackCode) ? readbackCode : "AUTHORIZATION_NOT_CONFIRMED"
+    const requestId = String(request.headers.get("x-vercel-id") || request.headers.get("x-request-id") || "").slice(0, 128)
+    console.error("[wallet-authorization] independent read-back failed", {
+      stage: "READ_BACK", diagnosticCode, requestId: requestId || undefined,
+    })
+    const status = diagnosticCode === "WALLET_AUTHORIZATION_UNAVAILABLE" ? 503 : diagnosticCode === "IDENTITY_MISMATCH" ? 403 : 409
     return reply({
       ok: false,
-      error: verified.error || "AUTHORIZATION_NOT_CONFIRMED",
+      error: diagnosticCode,
+      diagnosticCode,
       message: "Consent was submitted but the active authorization could not be independently verified. Withdrawals remain blocked.",
-    }, verified.error === "WALLET_AUTHORIZATION_UNAVAILABLE" ? 503 : 409)
+    }, status)
   }
 
   return reply({
     ok: true,
     authorizationId: verified.authorizationId || granted.authorizationId,
     piAppUid: verified.authorizedPiAppUid,
+    piWalletAddress: verified.piWalletAddress,
+    walletAddressSource: verified.walletAddressSource,
+    walletAddressVerifiedAt: verified.walletAddressVerifiedAt,
     status: "active",
     authorizationActive: true,
     uidMatchesAuthorization: true,
@@ -124,8 +174,8 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return reply({ ok: false, error: "AUTH_REQUIRED" }, 401)
-  const limit = checkRateLimit(`wallet-auth-revoke:${auth.userId}`, 10, 60_000)
-  if (!limit.ok) return reply({ ok: false, error: "RATE_LIMITED" }, 429)
+  const limit = await checkDurableRateLimit(`wallet-auth-revoke:${auth.userId}`, 10, 60_000, { onUnavailable: "deny" })
+  if (!limit.ok) return reply({ ok: false, error: durableRateLimitCode(limit) }, durableRateLimitStatus(limit))
 
   let reason = "user_revoked"
   const parsedBody = await readBoundedJson(request, 4 * 1024)

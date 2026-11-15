@@ -86,7 +86,7 @@ export interface MembershipStatus {
   expiresAt?: number
   billingPeriod?: "monthly" | "four_months" | "eight_months" | "yearly" | "lifetime" | "comp"
   lastPurchaseTxId?: string
-  source?: "ghc" | "external" | "admin" | "default" | "trial"
+  source?: "ghc" | "pi" | "external" | "admin" | "default" | "trial"
   /**
    * Account/trial anchor (ms). Trial tiers are derived from this timestamp
    * so refresh/login/device cannot reset the 24h VVIP → 24h VIP window.
@@ -181,6 +181,35 @@ export const MEMBERSHIP_PLANS: Record<MembershipTierId, MembershipPlan> = {
 const STORAGE_KEY = "ghc_membership_v1"
 
 const ACCOUNT_CACHE_KEY = "ghc_account_created_at_v1"
+// Separate namespace: only a successful server response may populate this cache.
+// The legacy cache may also contain profile hints and is never used to skip server hydration.
+const SERVER_ACCOUNT_CACHE_KEY = "ghc_account_created_at_server_v1"
+
+function readServerConfirmedAccountCreatedAt(userId: string): number | undefined {
+  try {
+    if (typeof localStorage === "undefined") return undefined
+    const raw = localStorage.getItem(SERVER_ACCOUNT_CACHE_KEY)
+    if (!raw) return undefined
+    const all = JSON.parse(raw) as Record<string, number>
+    const value = all[userId]
+    return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function writeServerConfirmedAccountCreatedAt(userId: string, ts: number) {
+  try {
+    if (typeof localStorage === "undefined") return
+    const raw = localStorage.getItem(SERVER_ACCOUNT_CACHE_KEY)
+    const all = raw ? JSON.parse(raw) as Record<string, number> : {}
+    all[userId] = ts
+    const entries = Object.entries(all).filter(([, value]) => typeof value === "number" && Number.isFinite(value) && value > 0)
+    localStorage.setItem(SERVER_ACCOUNT_CACHE_KEY, JSON.stringify(Object.fromEntries(entries.slice(-128))))
+  } catch {
+    /* storage is an optional UX optimization; the server remains authoritative */
+  }
+}
 
 function readCachedAccountCreatedAt(userId: string): number | undefined {
   try {
@@ -189,7 +218,7 @@ function readCachedAccountCreatedAt(userId: string): number | undefined {
     if (!raw) return undefined
     const all = JSON.parse(raw) as Record<string, number>
     const v = all[userId]
-    return typeof v === "number" && Number.isFinite(v) ? v : undefined
+    return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : undefined
   } catch {
     return undefined
   }
@@ -209,33 +238,89 @@ function writeCachedAccountCreatedAt(userId: string, ts: number) {
   }
 }
 
-/** Best-effort hydrate from GET /api/economy/account when available */
+/**
+ * Best-effort account-anchor hydration. The server endpoint intentionally uses
+ * POST because it idempotently establishes the canonical account anchor. Domain
+ * reconstruction must not fan out repeated mutations: successful values are
+ * memoized per tab, concurrent callers share one request, and failures receive
+ * a short negative cache to avoid retry storms against the durable rate limiter.
+ */
+const ACCOUNT_ANCHOR_NEGATIVE_TTL_MS = 30_000
+const ACCOUNT_ANCHOR_REQUEST_TIMEOUT_MS = 8_000
+const accountAnchorMemory = new Map<string, { value: number | undefined; expiresAt: number }>()
+const accountAnchorInFlight = new Map<string, Promise<number | undefined>>()
+
+function rememberAccountAnchor(userId: string, value: number | undefined, ttlMs = Number.POSITIVE_INFINITY) {
+  // Keep this per-tab cache bounded if an operator switches between many accounts.
+  if (!accountAnchorMemory.has(userId) && accountAnchorMemory.size >= 128) {
+    const oldest = accountAnchorMemory.keys().next().value
+    if (oldest) accountAnchorMemory.delete(oldest)
+  }
+  accountAnchorMemory.set(userId, { value, expiresAt: Date.now() + ttlMs })
+}
+
 export async function hydrateAccountCreatedAtFromServer(
   userId: string,
   authHeaders?: HeadersInit
 ): Promise<number | undefined> {
-  const cached = readCachedAccountCreatedAt(userId)
-  try {
-    const res = await fetch("/api/economy/account", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(authHeaders || {}),
-      },
-      body: JSON.stringify(cached != null ? {} : {}),
-    })
-    if (!res.ok) return cached
-    const data = (await res.json()) as { accountCreatedAt?: number }
-    if (data.accountCreatedAt != null && Number.isFinite(Number(data.accountCreatedAt))) {
-      writeCachedAccountCreatedAt(userId, Number(data.accountCreatedAt))
-      return Number(data.accountCreatedAt)
-    }
-  } catch {
-    /* offline / studio */
-  }
-  return cached
-}
+  const now = Date.now()
+  const remembered = accountAnchorMemory.get(userId)
+  if (remembered && remembered.expiresAt > now) return remembered.value
+  if (remembered) accountAnchorMemory.delete(userId)
 
+  const pending = accountAnchorInFlight.get(userId)
+  if (pending) return pending
+
+  // Account creation time is immutable. A prior server-confirmed value can safely
+  // satisfy repeat domain construction without another rate-limited mutation.
+  // This cache is a display/hydration optimization only; server entitlements never trust it.
+  const serverConfirmed = readServerConfirmedAccountCreatedAt(userId)
+  if (serverConfirmed) {
+    rememberAccountAnchor(userId, serverConfirmed)
+    return serverConfirmed
+  }
+
+  const cached = readCachedAccountCreatedAt(userId)
+  const request = (async (): Promise<number | undefined> => {
+    try {
+      const res = await fetch("/api/economy/account", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          ...(authHeaders || {}),
+        },
+        body: JSON.stringify({}),
+        cache: "no-store",
+        signal: AbortSignal.timeout(ACCOUNT_ANCHOR_REQUEST_TIMEOUT_MS),
+      })
+      if (!res.ok) {
+        rememberAccountAnchor(userId, cached, ACCOUNT_ANCHOR_NEGATIVE_TTL_MS)
+        return cached
+      }
+      const data = (await res.json()) as { accountCreatedAt?: number | string | null }
+      const anchor = Number(data.accountCreatedAt)
+      if (data.accountCreatedAt != null && Number.isFinite(anchor) && anchor > 0) {
+        writeServerConfirmedAccountCreatedAt(userId, anchor)
+        writeCachedAccountCreatedAt(userId, anchor)
+        rememberAccountAnchor(userId, anchor)
+        return anchor
+      }
+    } catch {
+      // Offline / Studio / timed-out requests use the last server-confirmed local value.
+    }
+    rememberAccountAnchor(userId, cached, ACCOUNT_ANCHOR_NEGATIVE_TTL_MS)
+    return cached
+  })()
+
+  accountAnchorInFlight.set(userId, request)
+  try {
+    return await request
+  } finally {
+    if (accountAnchorInFlight.get(userId) === request) accountAnchorInFlight.delete(userId)
+  }
+}
 
 /** New accounts: VVIP 24h → VIP 24h → Free. Derived from trialAnchorAt only. */
 export const TRIAL_VVIP_MS = 24 * 60 * 60 * 1000
@@ -370,8 +455,10 @@ export function createMembershipDomain(deps: {
       if (all[userId]) return // already has a record — never reset
 
       const fromDeps = deps.getAccountCreatedAt?.()
+      const fromServerCache = readServerConfirmedAccountCreatedAt(userId)
       const fromCache = readCachedAccountCreatedAt(userId)
       const createdAt =
+        (typeof fromServerCache === "number" && fromServerCache > 0 ? fromServerCache : undefined) ??
         (typeof fromCache === "number" && fromCache > 0 ? fromCache : undefined) ??
         (typeof fromDeps === "number" && fromDeps > 0 ? fromDeps : undefined)
       if (typeof fromDeps === "number" && fromDeps > 0) {

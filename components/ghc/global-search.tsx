@@ -428,7 +428,7 @@ export function GlobalSearchModal({
   return (
     <div className="fixed inset-0 z-[80] flex flex-col bg-black/40" role="dialog" aria-modal="true" aria-label="Search">
       <button type="button" className="absolute inset-0 cursor-default" aria-label="Close search" onClick={onClose} />
-      <div className="relative z-10 flex max-h-[90dvh] flex-col rounded-b-[1.75rem] bg-card text-foreground shadow-2xl sm:mx-auto sm:mt-8 sm:w-full sm:max-w-lg sm:rounded-[1.75rem]">
+      <div className="relative z-10 flex max-h-[82dvh] min-h-0 flex-col overflow-hidden rounded-b-[1.25rem] bg-card text-foreground shadow-2xl sm:mx-auto sm:mt-8 sm:max-h-[85dvh] sm:w-full sm:max-w-lg sm:rounded-[1.5rem]">
         <div className="flex items-center gap-2 border-b border-border px-3 py-3">
           <Search size={18} className="shrink-0 text-muted-foreground" />
           <input
@@ -476,7 +476,7 @@ export function GlobalSearchModal({
           {tabBtn("services", "Services")}
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3" aria-busy={query !== debouncedQuery}>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3" aria-busy={query !== debouncedQuery}>
           {!q && (
             <div className="space-y-3">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">

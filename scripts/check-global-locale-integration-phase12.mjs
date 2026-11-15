@@ -22,7 +22,7 @@ const checks = [
   ['unit formatting fails safely when runtime locale or unit data is unsupported', formatting.includes('catch {\n    try { return new Intl.NumberFormat(DEFAULT_LOCALE, formatOptions).format(value) }') && formatting.includes('String(unit)')],
   ['plural count formatting has an independent English fallback', formatting.includes('let formattedCount = String(count)') && formatting.includes('formattedCount = new Intl.NumberFormat(DEFAULT_LOCALE).format(count)')],
   ['release metadata is synchronized', pkg.version === JSON.parse(read('package-lock.json')).version && read('lib/app-release.ts').includes(`APP_RELEASE_VERSION = "${pkg.version}"`) && JSON.parse(read('package-lock.json')).version === pkg.version && JSON.parse(read('package-lock.json')).packages[''].version === pkg.version],
-  ['integration gate is registered in prebuild and static verification', pkg.scripts['check:global-locale-integration-phase12'] && pkg.scripts.prebuild.includes('check-global-locale-integration-phase12') && pkg.scripts['verify:static'].includes('check-global-locale-integration-phase12')],
+  ['integration gate is registered in prebuild and static verification', pkg.scripts['check:global-locale-integration-phase12'] && pkg.scripts['prebuild:checks'].includes('check-global-locale-integration-phase12') && pkg.scripts['verify:static'].includes('check-global-locale-integration-phase12')],
 ]
 for (const [name, passed] of checks) { assert.equal(passed, true, name); console.log(`PASS ${name}`) }
 console.log(`Global locale integration Phase 12: ${checks.length}/${checks.length} passed`)

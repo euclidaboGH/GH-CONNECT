@@ -54,7 +54,23 @@ export interface CommunityParticipationHubModel {
 }
 
 function eventTime(e: any): number {
-  return Number(e?.startsAt || e?.startAt || e?.date || e?.starts_at || 0) || 0
+  const raw = e?.startsAt ?? e?.startAt ?? e?.date ?? e?.starts_at
+  if (raw instanceof Date) {
+    const timestamp = raw.getTime()
+    return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : 0
+  }
+  if (typeof raw === "number" || (typeof raw === "string" && /^\d+(?:\.\d+)?$/.test(raw.trim()))) {
+    const numeric = Number(raw)
+    if (!Number.isFinite(numeric) || numeric <= 0) return 0
+    // Accept Unix seconds as well as JavaScript milliseconds.
+    const timestamp = numeric < 100_000_000_000 ? numeric * 1000 : numeric
+    return timestamp <= 8_640_000_000_000_000 ? timestamp : 0
+  }
+  if (typeof raw === "string" && raw.trim()) {
+    const timestamp = Date.parse(raw.trim())
+    return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : 0
+  }
+  return 0
 }
 
 function classifyEvent(e: any, now: number): ParticipationEventItem["status"] {
@@ -66,31 +82,57 @@ function classifyEvent(e: any, now: number): ParticipationEventItem["status"] {
   return "past"
 }
 
-export function normalizeEventItem(e: any): ParticipationEventItem {
+export function normalizeEventItem(e: any, index = 0): ParticipationEventItem {
+  const source = e && typeof e === "object" ? e : {}
   const now = Date.now()
-  const status = classifyEvent(e, now)
+  const status = classifyEvent(source, now)
+  const title = String(source.title || source.name || "Community event").trim().slice(0, 160) || "Community event"
+  const startsAt = eventTime(source)
+  const location = source.location ? String(source.location).trim().slice(0, 180) : ""
+  const virtualLink = safeCommunityResourceUrl(source.virtualLink || source.link)
+  const rawAttendeeCount = Array.isArray(source.attendees) ? source.attendees.length : Number(source.attendeeCount)
+  const attendeeCount = Number.isFinite(rawAttendeeCount) ? Math.max(0, rawAttendeeCount) : 0
+  // Legacy rows without a provider ID still need stable React keys; rendering
+  // must not manufacture a new event identity.
+  const fallbackId = `evt_${index}_${startsAt}_${title.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 48)}`
   return {
     kind: "event",
-    id: String(e.id || e.eventId || `evt_${Math.random().toString(36).slice(2, 8)}`),
-    title: String(e.title || e.name || "Community event"),
-    description: e.description ? String(e.description) : undefined,
-    startsAt: eventTime(e) || null,
-    location: e.location ? String(e.location) : undefined,
-    virtualLink: e.virtualLink || e.link || undefined,
-    attendeeCount: Array.isArray(e.attendees) ? e.attendees.length : Number(e.attendeeCount) || 0,
+    id: String(source.id || source.eventId || fallbackId),
+    title,
+    description: source.description ? String(source.description).slice(0, 1000) : undefined,
+    startsAt: startsAt || null,
+    location: location || undefined,
+    virtualLink,
+    attendeeCount,
     status,
   }
 }
 
+export function safeCommunityResourceUrl(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined
+  const value = raw.trim()
+  if (!value || value.length > 2048 || /[\u0000-\u001f\\]/.test(value) || value.startsWith("//")) return undefined
+  try {
+    const parsed = new URL(value, "https://greenhaven.invalid")
+    if (parsed.protocol !== "https:") return undefined
+    if (parsed.username || parsed.password) return undefined
+    if (parsed.origin !== "https://greenhaven.invalid" && !/^https:\/\//i.test(value)) return undefined
+    return value
+  } catch {
+    return undefined
+  }
+}
+
 export function normalizeResourceItem(r: any, index: number): ParticipationResourceItem {
+  const source = r && typeof r === "object" ? r : {}
   return {
     kind: "resource",
-    id: String(r.id || r.url || `res_${index}`),
-    title: String(r.title || r.name || "Resource"),
-    description: r.description ? String(r.description) : undefined,
-    url: r.url ? String(r.url) : undefined,
-    resourceType: String(r.resourceType || r.type || "link"),
-    order: Number(r.order) >= 0 ? Number(r.order) : index,
+    id: String(source.id || source.url || `res_${index}`),
+    title: String(source.title || source.name || "Resource").slice(0, 160),
+    description: source.description ? String(source.description).slice(0, 1000) : undefined,
+    url: safeCommunityResourceUrl(source.url),
+    resourceType: String(source.resourceType || source.type || "link").slice(0, 32),
+    order: Number.isFinite(Number(source.order)) && Number(source.order) >= 0 ? Number(source.order) : index,
   }
 }
 
@@ -102,7 +144,7 @@ export function buildCommunityParticipationHub(input: {
   boardPosts?: any[]
 }): CommunityParticipationHubModel {
   const now = Date.now()
-  const events = (input.events || []).map(normalizeEventItem)
+  const events = (input.events || []).map((event, index) => normalizeEventItem(event, index))
   const upcomingEvents = events
     .filter((e) => e.status === "upcoming" || e.status === "live")
     .sort((a, b) => (a.startsAt || 0) - (b.startsAt || 0))

@@ -55,6 +55,8 @@ import { WalletBalanceCard } from "./wallet-balance"
 import { WithdrawGhcPanel } from "./withdraw-ghc-panel"
 import { WalletPrimaryActions } from "./wallet-actions"
 import { WalletToolsGrid } from "./wallet-tools"
+import { summarizeGhcMonthlyMovement, summarizeGhcStatement } from "./wallet-statement"
+import { walletCsvRow } from "./wallet-csv"
 import { AddGhcSheet } from "./add-ghc-sheet"
 import { GhcUtilityPanel } from "@/components/ghc/ghc-utility-panel"
 import { ASSET_POLICY } from "@/lib/asset-separation"
@@ -67,6 +69,10 @@ import { PiPaymentUtilityStatus } from "@/components/ghc/pi-payment-utility-stat
 import { PiCashbackSummary } from "@/components/ghc/pi-cashback-summary"
 import { UnifiedEarningsDashboard } from "@/components/ghc/unified-earnings-dashboard"
 import { PiWithdrawSheet } from "@/components/ghc/pi-withdraw-sheet"
+import { FilterSummary } from "@/components/ghc/filtering/filter-summary"
+import { FilterPanel } from "@/components/ghc/filtering/filter-panel"
+import { matchesFilterQuery } from "@/lib/filtering/filter-utils"
+import { WalletWithdrawalPinCard } from "@/components/ghc/wallet-withdrawal-pin-card"
 import { normalizePiTransactionIntent, paymentPurposeLabel, type PiTransactionProjection } from "@/lib/domains/pi-transaction-normalizer"
 import { EconomyOutcomeCentre } from "@/components/ghc/economy-outcome-centre"
 
@@ -196,7 +202,7 @@ function navigateSettingsSection(section: string) {
   }
 }
 
-export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
+export function PremiumWalletScreen({ onBack, initialNotificationTarget }: { onBack: () => void; initialNotificationTarget?: Record<string, unknown> | null }) {
   const { addToast } = useGHCShell()
   const regional = useRegionalContext()
   const workflowText = (key: Parameters<typeof getWorkflowMessage>[0]) => getWorkflowMessage(key, regional.locale)
@@ -210,7 +216,21 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   const [economyPolicyRetry, setEconomyPolicyRetry] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
   const [p2pMode, setP2pMode] = useState<"send" | "request" | "receive" | null>(null)
-  const [balanceVisible, setBalanceVisible] = useState(true)
+  const [balanceVisible, setBalanceVisible] = useState(() => {
+    // Keep the privacy choice for this browser session only; never persist a
+    // visible/hidden balance preference across accounts or devices.
+    try { return window.sessionStorage.getItem("ghc.wallet.balance-hidden") !== "1" } catch { return true }
+  })
+  const toggleBalanceVisibility = useCallback(() => {
+    setBalanceVisible((visible) => {
+      const next = !visible
+      try {
+        if (next) window.sessionStorage.removeItem("ghc.wallet.balance-hidden")
+        else window.sessionStorage.setItem("ghc.wallet.balance-hidden", "1")
+      } catch { /* privacy toggle still works for this mounted session */ }
+      return next
+    })
+  }, [])
   const [p2pName, setP2pName] = useState("")
   const [p2pId, setP2pId] = useState("")
   const [p2pAmount, setP2pAmount] = useState("")
@@ -219,7 +239,9 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   const [p2pError, setP2pError] = useState<string | null>(null)
   const [p2pSuccess, setP2pSuccess] = useState<string | null>(null)
   const [refreshFailed, setRefreshFailed] = useState(false)
+  const manualRefreshInFlight = useRef(false)
   const [socialEconomy, setSocialEconomy] = useState<Awaited<ReturnType<typeof socialEconomyStatus>> | null>(null)
+  const walletAuthorityRefreshInFlight = useRef(false)
   const [lastSynced, setLastSynced] = useState<number | null>(null)
   const [offline, setOffline] = useState(
     typeof navigator !== "undefined" ? !navigator.onLine : false
@@ -228,9 +250,17 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   const [txFilter, setTxFilter] = useState<TxFilter>("all")
   /** GHC ledger vs Pi payment intents — never mixed in one list */
   const [assetRail, setAssetRail] = useState<"ghc" | "pi">("ghc")
+  const [showMoreInsights, setShowMoreInsights] = useState(false)
   const [piWithdrawOpen, setPiWithdrawOpen] = useState(false)
   const [piWithdrawAvailable, setPiWithdrawAvailable] = useState<number | null>(null)
   const [piWithdrawUser, setPiWithdrawUser] = useState<string | null>(null)
+  // Never carry a prior account's cached withdrawable snapshot into a new sheet session.
+  // The child sheet keeps only values hydrated during its current open session.
+  const openPiWithdraw = useCallback(() => {
+    setPiWithdrawAvailable(null)
+    setPiWithdrawUser(null)
+    setPiWithdrawOpen(true)
+  }, [])
 
   useEffect(() => {
     if (!piWithdrawOpen) return
@@ -238,12 +268,8 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
     const controller = new AbortController()
     const timeout = window.setTimeout(() => controller.abort(), 8_000)
 
-    // Never carry a previous sheet's withdrawable snapshot into a new session.
-    // This endpoint is read-only; the quote and withdrawal APIs remain authoritative.
-    // Sheet form state is independently guarded (wasOpenRef / amountTouchedRef).
-    setPiWithdrawAvailable(null)
-    setPiWithdrawUser(null)
-
+    // A fresh server snapshot is required for each open session. The sheet handles
+    // temporary null hydration without showing a stale value from a previous session.
     ;(async () => {
       try {
         const res = await fetch("/api/economy/earnings/withdrawable", {
@@ -256,16 +282,23 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
           ok?: boolean
           available?: number
           withdrawable?: number
+          availableAtomic?: number
+          withdrawableAtomic?: number
           linkedPiUsername?: string | null
           walletAuthorization?: { mappedUsername?: string | null }
         } | null
         if (cancelled || controller.signal.aborted || !res.ok || body?.ok !== true) return
-        const avail =
-          typeof body.withdrawable === "number" && Number.isFinite(body.withdrawable) && body.withdrawable >= 0
-            ? body.withdrawable
-            : typeof body.available === "number" && Number.isFinite(body.available) && body.available >= 0
-              ? body.available
-              : null
+        const scale = 10_000_000
+        let avail: number | null = null
+        if (typeof body.withdrawable === "number" && Number.isFinite(body.withdrawable) && body.withdrawable >= 0) {
+          avail = body.withdrawable
+        } else if (typeof body.available === "number" && Number.isFinite(body.available) && body.available >= 0) {
+          avail = body.available
+        } else if (typeof body.withdrawableAtomic === "number" && Number.isFinite(body.withdrawableAtomic) && body.withdrawableAtomic >= 0) {
+          avail = body.withdrawableAtomic / scale
+        } else if (typeof body.availableAtomic === "number" && Number.isFinite(body.availableAtomic) && body.availableAtomic >= 0) {
+          avail = body.availableAtomic / scale
+        }
         if (avail !== null) setPiWithdrawAvailable(avail)
         const un =
           typeof body.linkedPiUsername === "string" && body.linkedPiUsername.trim()
@@ -288,10 +321,9 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   }, [piWithdrawOpen])
 
   useEffect(() => {
-    const open = () => setPiWithdrawOpen(true)
-    window.addEventListener("ghc:open-pi-withdraw", open)
-    return () => window.removeEventListener("ghc:open-pi-withdraw", open)
-  }, [])
+    window.addEventListener("ghc:open-pi-withdraw", openPiWithdraw)
+    return () => window.removeEventListener("ghc:open-pi-withdraw", openPiWithdraw)
+  }, [openPiWithdraw])
 
 
 
@@ -345,6 +377,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
     paymentId?: string
   }
   const [piIntents, setPiIntents] = useState<PiIntentRow[]>([])
+  const [piStatusFilter, setPiStatusFilter] = useState<"all" | "pending" | "completed" | "failed">("all")
   const [selectedPiIntent, setSelectedPiIntent] = useState<PiIntentRow | null>(null)
   const [piIntentsLoading, setPiIntentsLoading] = useState(false)
   const [piIntentsError, setPiIntentsError] = useState<string | null>(null)
@@ -368,18 +401,34 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
 
   useEffect(() => {
     let cancelled = false
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), 8_000)
     setEconomyPolicyLoading(true)
-    void fetch("/api/economy/policy", { cache: "no-store" })
+    void fetch("/api/economy/policy", { cache: "no-store", credentials: "include", signal: controller.signal, headers: { Accept: "application/json" } })
       .then(async (response) => {
         if (!response.ok) throw new Error("ECONOMY_POLICY_UNAVAILABLE")
         return response.json()
       })
       .then((payload) => {
-        if (!cancelled && payload?.ok && payload?.policy) setEconomyPolicy(payload.policy as PublicEconomyPolicy)
+        const policy = payload?.policy
+        const valid = payload?.ok === true && policy && typeof policy === "object" &&
+          typeof policy.version === "string" && policy.asset && typeof policy.asset === "object" &&
+          Array.isArray(policy.fixedSpendCatalog) &&
+          policy.fixedSpendCatalog.every((entry: unknown) => {
+            if (!entry || typeof entry !== "object") return false
+            const item = entry as Record<string, unknown>
+            return typeof item.purpose === "string" && Number.isFinite(item.amountGhc) && Number(item.amountGhc) >= 0 &&
+              typeof item.description === "string"
+          })
+        if (!cancelled && valid) setEconomyPolicy(policy as PublicEconomyPolicy)
+        else if (!cancelled) setEconomyPolicy(null)
       })
       .catch(() => { if (!cancelled) setEconomyPolicy(null) })
-      .finally(() => { if (!cancelled) setEconomyPolicyLoading(false) })
-    return () => { cancelled = true }
+      .finally(() => {
+        window.clearTimeout(timeout)
+        if (!cancelled) setEconomyPolicyLoading(false)
+      })
+    return () => { cancelled = true; window.clearTimeout(timeout); controller.abort() }
   }, [economyPolicyRetry])
 
   useEffect(() => {
@@ -389,6 +438,8 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
       if (!cancelled && status.ok) setSocialEconomy(status)
     }
     const refreshAuthoritativeWallet = async () => {
+      if (cancelled || walletAuthorityRefreshInFlight.current) return
+      walletAuthorityRefreshInFlight.current = true
       void refreshSocialEconomy()
       try {
         // Mature Daily Claim holds server-side before taking the wallet snapshot.
@@ -399,9 +450,16 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
             const { IdentityService } = await import("@/lib/identity/identity-service")
             Object.assign(headers, IdentityService.getAuthHeaders?.() || {})
           } catch { /* session cookie remains available */ }
-          await fetch("/api/economy/rewards/claim-matured", {
-            method: "POST", credentials: "include", cache: "no-store", headers, body: JSON.stringify({}),
-          }).catch(() => null)
+          const maturedController = new AbortController()
+          const maturedTimeout = window.setTimeout(() => maturedController.abort(), 8_000)
+          try {
+            await fetch("/api/economy/rewards/claim-matured", {
+              method: "POST", credentials: "include", cache: "no-store", headers,
+              body: JSON.stringify({}), signal: maturedController.signal,
+            }).catch(() => null)
+          } finally {
+            window.clearTimeout(maturedTimeout)
+          }
         }
       } catch { /* the wallet read still proceeds; no local credit is fabricated */ }
       try {
@@ -411,6 +469,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
       } catch {
         // The wallet remains fail-closed; the existing verified snapshot is retained.
       } finally {
+        walletAuthorityRefreshInFlight.current = false
         if (!cancelled) setTick((x) => x + 1)
       }
     }
@@ -426,8 +485,9 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
     // Reconcile the authoritative ledger periodically so matured 48-hour holds
     // become visible and can be retried without logout or manual navigation.
     const refreshInterval = window.setInterval(() => {
-      if (document.visibilityState === "visible" && navigator.onLine) void refreshAuthoritativeWallet()
-    }, 60_000)
+      // Pause background polling to cut battery/network load; still event-driven via ghc:wallet-refresh.
+      if (document.visibilityState === "visible" && navigator.onLine !== false) void refreshAuthoritativeWallet()
+    }, 90_000)
     return () => {
       cancelled = true
       window.clearInterval(refreshInterval)
@@ -442,9 +502,12 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     if (assetRail !== "pi") return
     let cancelled = false
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), 12_000)
     ;(async () => {
       setPiIntentsLoading(true)
       setPiIntentsError(null)
+      setServerReconciliation(null)
       try {
         const headers: Record<string, string> = {}
         try {
@@ -455,8 +518,9 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
           headers,
           cache: "no-store",
           credentials: "include",
+          signal: controller.signal,
         })
-        if (cancelled) return
+        if (cancelled || controller.signal.aborted) return
         if (!res.ok) {
           setPiIntentsError(res.status === 401 ? "Sign in again to view your π payment history." : "Payment history could not be loaded from the server. Your records have not been changed.")
           return
@@ -491,28 +555,52 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
           headers,
           cache: "no-store",
           credentials: "include",
+          signal: controller.signal,
         })
+        if (cancelled || controller.signal.aborted) return
         const reconciliationData = await reconciliationRes.json().catch(() => ({}))
-        if (!cancelled && reconciliationRes.ok && reconciliationData?.ok === true
-          && reconciliationData.counts && Array.isArray(reconciliationData.findings)) {
-          setServerReconciliation({ generatedAt: typeof reconciliationData.generatedAt === "string" ? reconciliationData.generatedAt : undefined, coverage: reconciliationData.coverage && typeof reconciliationData.coverage.potentiallyTruncated === "boolean" && Number.isSafeInteger(reconciliationData.coverage.recordLimit) ? reconciliationData.coverage : undefined, counts: reconciliationData.counts, findings: reconciliationData.findings })
-        } else if (!cancelled) {
-          setServerReconciliation(null)
+        const counts = reconciliationData?.counts
+        const validCounts = counts && ["matched", "attention_required", "unverified", "not_applicable"].every((key) =>
+          Number.isSafeInteger(counts[key]) && counts[key] >= 0
+        )
+        const validFindings = Array.isArray(reconciliationData?.findings) && reconciliationData.findings.every((finding: unknown) =>
+          Boolean(finding) && typeof finding === "object" && !Array.isArray(finding) &&
+          typeof (finding as Record<string, unknown>).intentId === "string" &&
+          typeof (finding as Record<string, unknown>).code === "string" &&
+          typeof (finding as Record<string, unknown>).message === "string"
+        )
+        if (!cancelled && reconciliationRes.ok && reconciliationData?.ok === true && validCounts && validFindings) {
+          setServerReconciliation({
+            generatedAt: typeof reconciliationData.generatedAt === "string" ? reconciliationData.generatedAt : undefined,
+            coverage: reconciliationData.coverage && typeof reconciliationData.coverage.potentiallyTruncated === "boolean" && Number.isSafeInteger(reconciliationData.coverage.recordLimit) ? reconciliationData.coverage : undefined,
+            counts: reconciliationData.counts,
+            findings: reconciliationData.findings,
+          })
         }
       } catch {
         if (!cancelled) setPiIntentsError("Could not connect to payment history. Check your connection and retry.")
       } finally {
+        window.clearTimeout(timeout)
         if (!cancelled) setPiIntentsLoading(false)
       }
     })()
     return () => {
       cancelled = true
+      window.clearTimeout(timeout)
+      controller.abort()
     }
   }, [assetRail, tick])
 
   // Read-only reconciliation signals derived from the durable intent records.
   // These flags never change provider or fulfilment state and never imply that
   // a separate marketplace/order/entitlement record has been verified.
+  useEffect(() => {
+    if (!selectedPiIntent) return
+    const current = piIntents.find((intent) => intent.id === selectedPiIntent.id)
+    if (current) setSelectedPiIntent(current)
+    else if (assetRail !== "pi") setSelectedPiIntent(null)
+  }, [piIntents, selectedPiIntent, assetRail])
+
   const piReconciliation = useMemo(() => {
     const normalize = (status?: string) => String(status || "").trim().toUpperCase()
     const awaitingFulfilment = piIntents.filter((i) => normalize(i.status) === "COMPLETED")
@@ -525,15 +613,13 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   }, [piIntents])
 
   const filteredPiIntents = useMemo(() => {
-    const q = query.trim().toLowerCase()
+    const q = query.trim()
     const searchable = piIntents.filter((i) => {
-      const hay = `${i.purpose || ""} ${i.productId || ""} ${i.productLabel || ""} ${i.referenceId || ""} ${i.id} ${i.paymentId || ""} ${i.status || ""}`.toLowerCase()
-      if (q && !hay.includes(q)) return false
+      if (q && !matchesFilterQuery(q, i.purpose, i.productId, i.productLabel, i.referenceId, i.id, i.paymentId, i.status)) return false
       const status = String(i.status || "").toLowerCase()
-      if (txFilter === "pending" && !["created", "approval_pending", "approved", "user_submitted", "completion_pending", "incomplete"].includes(status)) return false
-      if (txFilter === "earned" && !["creator_earning", "reward_payout", "refund"].includes(String(i.purpose || "").toLowerCase())) return false
-      if (txFilter === "spent" && ["failed", "cancelled", "refunded"].includes(status)) return false
-      if (txFilter === "sent" || txFilter === "received") return false
+      if (piStatusFilter === "pending" && !["created", "approval_pending", "approved", "user_submitted", "completion_pending", "incomplete"].includes(status)) return false
+      if (piStatusFilter === "completed" && !["completed", "fulfilled"].includes(status)) return false
+      if (piStatusFilter === "failed" && !["failed", "cancelled", "rejected"].includes(status)) return false
       return true
     })
     const now = Date.now()
@@ -547,11 +633,35 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
             : 0
     if (startMs <= 0) return searchable
     return searchable.filter((i) => (i.createdAt || 0) >= startMs)
-  }, [piIntents, txDateRange, query, txFilter])
+  }, [piIntents, txDateRange, query, piStatusFilter])
 
   const [showRequestsPanel, setShowRequestsPanel] = useState(false)
   const [showFullHistory, setShowFullHistory] = useState(false)
   const [historyRail, setHistoryRail] = useState<"ghc" | "pi">("ghc")
+  useEffect(() => {
+    const applyWalletTarget = (detail: Record<string, unknown>) => {
+      const paymentIntentId = String(detail.paymentIntentId || "").trim()
+      const target = paymentIntentId || String(detail.transactionId || detail.referenceId || detail.payoutRequestId || detail.requestId || "").trim()
+      setTab("activity")
+      setShowFullHistory(true)
+      setTxFilter("all")
+      setTxDateRange("all")
+      setAssetRail(paymentIntentId ? "pi" : "ghc")
+      setHistoryRail(paymentIntentId ? "pi" : "ghc")
+      setQuery(target)
+      if (detail.openRequests || detail.section === "transfer-request") setShowRequestsPanel(true)
+      window.setTimeout(() => {
+        document.getElementById("ghc-wallet-activity")?.scrollIntoView({ behavior: "smooth", block: "start" })
+      }, 180)
+    }
+    if (initialNotificationTarget) applyWalletTarget(initialNotificationTarget)
+    const onOpenWalletTarget = (event: Event) => {
+      const detail = (event as CustomEvent<Record<string, unknown>>).detail || {}
+      applyWalletTarget(detail)
+    }
+    window.addEventListener("ghc:open-wallet-transaction", onOpenWalletTarget as EventListener)
+    return () => window.removeEventListener("ghc:open-wallet-transaction", onOpenWalletTarget as EventListener)
+  }, [initialNotificationTarget])
   // Phase 5: deep-link from Rewards "Open Wallet · Withdraw Pi" (and similar).
   useEffect(() => {
     let focus: string | null = null
@@ -726,10 +836,8 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
       return
     }
     setClaimingHoldId(holdId)
-    // Safety: never leave primary wallet actions locked if claim hangs
-    window.setTimeout(() => {
-      setClaimingHoldId((cur) => (cur === holdId ? null : cur))
-    }, 45000)
+    // Keep the action locked for the lifetime of the request. Each request is
+    // bounded below; a detached timer must never re-enable a still-running claim.
     setClaimFeedback(null)
     try {
       const hold = pendingHolds.find((h) => h.id === holdId)
@@ -744,15 +852,22 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
           const claimHeaders: Record<string, string> = { "Content-Type": "application/json", Accept: "application/json" }
           const { IdentityService } = await import("@/lib/identity/identity-service")
           Object.assign(claimHeaders, IdentityService.getAuthHeaders?.() || {})
-          const serverRes = await fetch("/api/economy/rewards/claim", {
-            method: "POST", credentials: "include", cache: "no-store", headers: claimHeaders,
-            body: JSON.stringify({ holdId: id }),
-          })
+          const claimController = new AbortController()
+          const claimTimeout = window.setTimeout(() => claimController.abort(), 30_000)
+          let serverRes: Response
+          try {
+            serverRes = await fetch("/api/economy/rewards/claim", {
+              method: "POST", credentials: "include", cache: "no-store", headers: claimHeaders,
+              body: JSON.stringify({ holdId: id }), signal: claimController.signal,
+            })
+          } finally {
+            window.clearTimeout(claimTimeout)
+          }
           const body = await serverRes.json().catch(() => ({})) as { ok?: boolean; error?: string; message?: string; code?: string }
           if (serverRes.ok && body.ok) claimed += 1
           else lastErr = body.message || body.error || body.code || `Claim failed (${serverRes.status}). Please retry.`
         } catch {
-          lastErr = "Could not reach the secure claims service. Your reward was not changed; retry when connected."
+          lastErr = "The secure claims service did not confirm the outcome. Refresh your wallet before retrying; the server protects repeated claims from duplicate credit."
         }
       }
       if (claimed === 0) {
@@ -849,21 +964,15 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   const displayPending = pending > 0 ? pending : pendingSum
 
   const monthInsight = useMemo(() => {
-    const start = new Date()
-    start.setDate(1)
-    start.setHours(0, 0, 0, 0)
-    const t0 = start.getTime()
-    let monthEarned = 0
-    let monthSpent = 0
-    for (const tx of txs) {
-      if (tx.createdAt < t0) continue
-      if (tx.status === "reversed" || tx.status === "failed") continue
-      if (tx.amount > 0 && (tx.kind === "earned" || tx.status === "posted")) {
-        if (tx.status === "posted" || tx.status === "pending") monthEarned += tx.amount
-      }
-      if (tx.amount < 0) monthSpent += Math.abs(tx.amount)
+    const movement = summarizeGhcMonthlyMovement(txs)
+    return {
+      monthEarned: movement.incoming,
+      monthSpent: movement.outgoing,
+      monthPending: movement.pending,
+      settledCount: movement.settledCount,
+      pendingCount: movement.pendingCount,
+      loadedCount: movement.loadedCount,
     }
-    return { monthEarned, monthSpent }
   }, [txs])
 
   const dailyEarnProgress = useMemo(() => {
@@ -882,7 +991,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   }, [txs])
 
   const filteredTxs = useMemo(() => {
-    const q = query.trim().toLowerCase()
+    const q = query.trim()
     return txs.filter((tx) => {
       if (txFilter === "earned") {
         if (
@@ -899,8 +1008,7 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
       if (txFilter === "received" && tx.kind !== "transfer_in") return false
       if (txFilter === "pending" && tx.status !== "pending" && tx.kind !== "pending" && tx.kind !== "transfer_request") return false
       if (q) {
-        const hay = `${tx.id} ${tx.referenceId || ""} ${tx.reason} ${tx.sourceEvent} ${tx.kind} ${tx.status} ${statusLabel(tx.status).text}`.toLowerCase()
-        if (!hay.includes(q)) return false
+        if (!matchesFilterQuery(q, tx.id, tx.referenceId, tx.reason, tx.sourceEvent, tx.kind, tx.status, statusLabel(tx.status).text)) return false
       }
       const now = Date.now()
       const startMs =
@@ -916,6 +1024,10 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
     })
   }, [txs, txFilter, query, txDateRange])
 
+  // Statement totals cover only the currently loaded GHC rows; pending and
+  // non-settled records are explicitly excluded from settled movement.
+  const filteredStatementSummary = useMemo(() => summarizeGhcStatement(filteredTxs), [filteredTxs])
+
   /** Bank-style statement: group by calendar day, newest first */
   const dayGroups = useMemo(() => {
     const map = new Map<string, GhcTransaction[]>()
@@ -929,6 +1041,8 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
   }, [filteredTxs])
 
   const refresh = useCallback(async () => {
+    if (manualRefreshInFlight.current) return
+    manualRefreshInFlight.current = true
     setRefreshing(true)
     setRefreshFailed(false)
     try {
@@ -949,14 +1063,17 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
           await new Promise((r) => setTimeout(r, 300))
         }
       }
+      const serverConfirmed = await refreshWalletAuthority()
       setTick((t) => t + 1)
-      setLastSynced(Date.now())
+      if (serverConfirmed) setLastSynced(Date.now())
+      else setRefreshFailed(true)
     } catch {
       setRefreshFailed(true)
     } finally {
+      manualRefreshInFlight.current = false
       setRefreshing(false)
     }
-  }, [])
+  }, [refreshWalletAuthority])
 
   useEffect(() => {
     const unsub = domainEvents.on("*", (ev) => {
@@ -1034,36 +1151,27 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
     if (assetRail === "pi") {
       const header = "id,status,amount_pi,purpose,product_id,payment_id,created_at"
       const rows = piIntents.map((i) =>
-        [
-          i.id,
-          i.status || "",
-          i.amountPi ?? "",
-          (i.purpose || "").replace(/,/g, " "),
-          (i.productId || "").replace(/,/g, " "),
-          i.paymentId || "",
+        walletCsvRow([
+          i.id, i.status || "", i.amountPi ?? "",
+          i.purpose || "", i.productId || "", i.paymentId || "",
           i.createdAt ? new Date(i.createdAt).toISOString() : "",
-        ].join(",")
+        ])
       )
       return [header, ...rows].join("\n")
     }
     const header =
       "id,kind,amount_ghc,status,reason,counterparty,created_at"
     const rows = filteredTxs.map((tx) =>
-      [
-        tx.id,
-        tx.kind || "",
-        tx.amount,
-        tx.status || "",
-        (tx.reason || "").replace(/,/g, " "),
+      walletCsvRow([
+        tx.id, tx.kind || "", tx.amount, tx.status || "", tx.reason || "",
         String(
           (tx as { counterpartyName?: string; toUserName?: string; fromUserName?: string })
             .counterpartyName ||
             (tx as { toUserName?: string }).toUserName ||
-            (tx as { fromUserName?: string }).fromUserName ||
-            ""
-        ).replace(/,/g, " "),
+            (tx as { fromUserName?: string }).fromUserName || ""
+        ),
         tx.createdAt ? new Date(tx.createdAt).toISOString() : "",
-      ].join(",")
+      ])
     )
     return [header, ...rows].join("\n")
   }, [assetRail, piIntents, filteredTxs])
@@ -1083,7 +1191,8 @@ export function PremiumWalletScreen({ onBack }: { onBack: () => void }) {
       document.body.appendChild(a)
       a.click()
       a.remove()
-      URL.revokeObjectURL(url)
+      // Defer revocation so mobile browsers finish consuming the download URL.
+      window.setTimeout(() => URL.revokeObjectURL(url), 1_000)
       setShareMsg("CSV downloaded")
     } catch {
       setShareMsg("CSV download failed")
@@ -1290,11 +1399,12 @@ const lowBalance = balance === 0 && displayPending === 0
           <WalletBalanceCard
             balance={balance}
             balanceVisible={balanceVisible}
-            onToggleVisible={() => setBalanceVisible((v) => !v)}
+            onToggleVisible={toggleBalanceVisibility}
             refreshing={refreshing}
             lastSynced={lastSynced}
             pending={displayPending}
             locked={locked}
+            escrowLocked={escrowLocked}
             monthEarned={monthInsight.monthEarned}
             monthSpent={monthInsight.monthSpent}
             onOpenPending={() => setShowPendingSheet(true)}
@@ -1309,7 +1419,7 @@ const lowBalance = balance === 0 && displayPending === 0
                 onSend={() => {
                   if (assetRail === "pi") {
                     setSendEducate(null)
-                    setPiWithdrawOpen(true)
+                    openPiWithdraw()
                     try {
                       window.dispatchEvent(new CustomEvent("ghc:wallet-pi-focus", { detail: { action: "withdraw" } }))
                     } catch { /* */ }
@@ -1368,6 +1478,18 @@ const lowBalance = balance === 0 && displayPending === 0
           </div>
           <PaymentRecoveryBanner />
 
+          {/* Declutter: secondary insights stay one tap away instead of crowding the balance. */}
+          <button
+            type="button"
+            onClick={() => setShowMoreInsights((v) => !v)}
+            aria-expanded={showMoreInsights}
+            className="mx-3 mt-3 flex w-[calc(100%-1.5rem)] items-center justify-between rounded-2xl border border-border/60 bg-card px-4 py-3 text-left text-[12px] font-bold text-foreground shadow-sm transition active:scale-[0.99]"
+          >
+            <span>{showMoreInsights ? "Hide insights & benefits" : "Insights & benefits"}</span>
+            <span aria-hidden className={`text-muted-foreground transition ${showMoreInsights ? "rotate-180" : ""}`}>⌄</span>
+          </button>
+          {showMoreInsights ? (
+            <>
           <EconomyOutcomeCentre
             availableGhc={balance}
             pendingGhc={displayPending}
@@ -1402,6 +1524,8 @@ const lowBalance = balance === 0 && displayPending === 0
               </button>
             </div>
           </section>
+            </>
+          ) : null}
 
           {/* Single PI earnings surface — source of truth for withdraw / auth / eligibility (no duplicate CTAs) */}
           {assetRail === "pi" ? (
@@ -1478,6 +1602,10 @@ const lowBalance = balance === 0 && displayPending === 0
                 −{formatGhc(monthInsight.monthSpent)}
               </span>
             </p>
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              {monthInsight.settledCount} settled entries · {formatGhc(monthInsight.monthPending)} pending, separate
+            </p>
+            <p className="mt-0.5 text-[9px] text-muted-foreground">Based on currently loaded GHC ledger records, not a lifetime statement</p>
           </div>
           <div className="rounded-2xl border border-border/60 bg-card px-3.5 py-3 shadow-[var(--gh-card-shadow)]">
             <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
@@ -1697,6 +1825,38 @@ const lowBalance = balance === 0 && displayPending === 0
               </div>
               {assetRail === "ghc" && (
               <>
+              <FilterPanel
+                title="Filter GHC activity"
+                description="Refine server-confirmed GHC utility records by direction, status, date and reference."
+                resultCount={filteredTxs.length}
+                activeCount={Number(txFilter !== "all") + Number(txDateRange !== "all") + Number(Boolean(query.trim()))}
+                persistentContent={<label className="relative block">
+                  <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                  <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search description, reference or transaction ID…" className="min-h-10 w-full rounded-xl border border-border bg-card py-2 pl-9 pr-3 text-sm outline-none ring-emerald-500/30 focus-visible:ring-2" aria-label="Search GHC transactions by description or reference" />
+                </label>}
+              >
+              <section className="grid grid-cols-3 gap-2 rounded-2xl border border-border/70 bg-card p-3 shadow-sm" aria-label="Filtered GHC statement summary">
+                <div className="min-w-0">
+                  <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Money in</p>
+                  <p className="mt-1 truncate text-sm font-extrabold tabular-nums text-emerald-700 dark:text-emerald-400">+{formatGhc(filteredStatementSummary.incoming)}</p>
+                </div>
+                <div className="min-w-0 border-l border-border pl-2">
+                  <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Money out</p>
+                  <p className="mt-1 truncate text-sm font-extrabold tabular-nums text-foreground">−{formatGhc(filteredStatementSummary.outgoing)}</p>
+                </div>
+                <div className="min-w-0 border-l border-border pl-2">
+                  <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Pending</p>
+                  <p className="mt-1 truncate text-sm font-extrabold tabular-nums text-amber-700 dark:text-amber-300">{formatGhc(filteredStatementSummary.pending)}</p>
+                </div>
+                <p className="col-span-3 border-t border-border/70 pt-2 text-[10px] text-muted-foreground">
+                  {filteredStatementSummary.settledCount} settled record{filteredStatementSummary.settledCount === 1 ? "" : "s"} in the loaded results · excludes failed, cancelled and reversed entries
+                </p>
+              </section>
+              {txs.length >= 80 && (
+                <p role="note" className="rounded-xl border border-sky-200/70 bg-sky-50/70 px-3 py-2 text-[10px] leading-relaxed text-sky-900 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-100">
+                  Showing the latest {txs.length} locally hydrated GHC records. This view does not claim to be a complete lifetime statement; older-record pagination is not available in this release.
+                </p>
+              )}
               <div className="flex flex-wrap items-center gap-1.5">
                 {(
                   [
@@ -1726,35 +1886,21 @@ const lowBalance = balance === 0 && displayPending === 0
                   </button>
                 ))}
               </div>
-              <div className="relative">
-                <Search
-                  size={14}
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                  aria-hidden="true"
-                />
-                <input
-                  type="search"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search description or reference…"
-                  className="min-h-11 w-full rounded-2xl border border-border bg-card py-2.5 pl-9 pr-3 text-sm outline-none ring-emerald-500/30 focus-visible:ring-2"
-                  aria-label="Search GHC transactions by description or reference"
-                />
-              </div>
+              <FilterSummary
+                items={[
+                  ...(txFilter !== "all" ? [{ id: "type", label: `Type: ${txFilter}`, onRemove: () => setTxFilter("all") }] : []),
+                  ...(txDateRange !== "all" ? [{ id: "date", label: `Date: ${txDateRange === "today" ? "Today" : txDateRange === "7d" ? "Last 7 days" : "Last 30 days"}`, onRemove: () => setTxDateRange("all") }] : []),
+                  ...(query.trim() ? [{ id: "query", label: `Search: ${query.trim()}`, onRemove: () => setQuery("") }] : []),
+                ]}
+                onClearAll={() => { setQuery(""); setTxFilter("all"); setTxDateRange("all") }}
+                ariaLabel="Active wallet transaction filters"
+              />
               <div className="flex min-h-8 items-center justify-between gap-3" aria-live="polite" aria-atomic="true">
                 <p className="text-[11px] text-muted-foreground">
                   {filteredTxs.length} {filteredTxs.length === 1 ? "transaction" : "transactions"} shown
                 </p>
-                {(query.trim() || txFilter !== "all" || txDateRange !== "all") && (
-                  <button
-                    type="button"
-                    onClick={() => { setQuery(""); setTxFilter("all"); setTxDateRange("all") }}
-                    className="min-h-9 rounded-lg px-3 text-xs font-semibold text-emerald-700 underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 dark:text-emerald-300"
-                  >
-                    Clear filters
-                  </button>
-                )}
               </div>
+              </FilterPanel>
 
               {refreshing && filteredTxs.length === 0 ? (
                 <div className="space-y-2 rounded-2xl border border-border bg-card p-3" role="status" aria-label="Loading transactions">
@@ -1811,6 +1957,33 @@ const lowBalance = balance === 0 && displayPending === 0
                       </button>
                     </div>
                   </div>
+                  <FilterPanel
+                    title="Filter Pi payment records"
+                    description="Search provider references and filter by payment lifecycle. This view reads stored intents; it never retries or submits a payment."
+                    resultCount={filteredPiIntents.length}
+                    activeCount={Number(piStatusFilter !== "all") + Number(txDateRange !== "all") + Number(Boolean(query.trim()))}
+                    persistentContent={<label className="relative block">
+                      <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                      <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search purpose, product or provider reference…" aria-label="Search Pi payment records" className="min-h-10 w-full rounded-xl border border-border bg-background pl-9 pr-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-violet-500/40" />
+                    </label>}
+                  >
+                    <div className="flex flex-wrap gap-1.5" role="group" aria-label="Pi payment status filter">
+                      {(["all", "pending", "completed", "failed"] as const).map((status) => (
+                        <button key={status} type="button" aria-pressed={piStatusFilter === status} onClick={() => setPiStatusFilter(status)} className={`min-h-9 rounded-full px-3 text-[10px] font-bold capitalize transition ${piStatusFilter === status ? "bg-violet-700 text-white" : "border border-border bg-background text-muted-foreground hover:text-foreground"}`}>
+                          {status === "all" ? "All statuses" : status}
+                        </button>
+                      ))}
+                    </div>
+                    <FilterSummary
+                      items={[
+                        ...(piStatusFilter !== "all" ? [{ id: "status", label: `Status: ${piStatusFilter}`, onRemove: () => setPiStatusFilter("all") }] : []),
+                        ...(txDateRange !== "all" ? [{ id: "date", label: `Date: ${txDateRange}`, onRemove: () => setTxDateRange("all") }] : []),
+                        ...(query.trim() ? [{ id: "query", label: `Search: ${query.trim()}`, onRemove: () => setQuery("") }] : []),
+                      ]}
+                      onClearAll={() => { setPiStatusFilter("all"); setTxDateRange("all"); setQuery("") }}
+                      ariaLabel="Active Pi payment filters"
+                    />
+                  </FilterPanel>
                   {!piIntentsLoading && !piIntentsError && serverReconciliation && (
                     <div className="rounded-2xl border border-border bg-card p-3" aria-label="Server payment reconciliation">
                       <div className="flex items-center justify-between gap-2">
@@ -2076,6 +2249,7 @@ const lowBalance = balance === 0 && displayPending === 0
 
           {tab === "about" && (
             <div id="ghc-wallet-security" className="space-y-3 rounded-2xl border border-border bg-card p-4 scroll-mt-6">
+              <WalletWithdrawalPinCard />
               <div className="flex gap-2">
                 <Shield size={16} className="text-emerald-600" />
                 <div>
@@ -2460,13 +2634,18 @@ const lowBalance = balance === 0 && displayPending === 0
             </button>
             <div className="min-w-0 flex-1">
               <h2 className="text-base font-bold">{workflowText("transactionHistory")}</h2>
-              <p className="text-[11px] text-muted-foreground">GHC ledger and π payments are kept on separate rails</p>
+              <p className="text-[11px] text-muted-foreground">GHC ledger and π payments are kept on separate rails. Search is shared across rails; records are never combined.</p>
             </div>
           </header>
-          <div className="flex gap-2 border-b border-border px-3 py-2">
-            <div className="flex w-full rounded-full bg-muted p-1" role="tablist" aria-label="Transaction asset">
+          <div className="border-b border-border px-3 py-2">
+            <label className="relative block">
+              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+              <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search both histories by ID or reference…" aria-label="Search transaction histories across GHC and Pi" className="min-h-11 w-full rounded-xl border border-border bg-card py-2 pl-9 pr-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+            </label>
+            <p className="mt-1 text-[10px] text-muted-foreground">The same search term is applied independently to whichever asset rail you select. Amounts are never combined.</p>
+            <div className="mt-2 flex w-full rounded-full bg-muted p-1" role="tablist" aria-label="Transaction asset">
               <button type="button" role="tab" aria-selected={historyRail === "ghc"} onClick={() => setHistoryRail("ghc")} className={`flex-1 rounded-full px-3 py-2 text-xs font-bold transition ${historyRail === "ghc" ? "bg-emerald-600 text-white shadow-sm" : "text-muted-foreground"}`}>GHC</button>
-              <button type="button" role="tab" aria-selected={historyRail === "pi"} onClick={() => setHistoryRail("pi")} className={`flex-1 rounded-full px-3 py-2 text-xs font-bold transition ${historyRail === "pi" ? "bg-violet-600 text-white shadow-sm" : "text-muted-foreground"}`}>PI</button>
+              <button type="button" role="tab" aria-selected={historyRail === "pi"} onClick={() => { setHistoryRail("pi"); setAssetRail("pi") }} className={`flex-1 rounded-full px-3 py-2 text-xs font-bold transition ${historyRail === "pi" ? "bg-violet-600 text-white shadow-sm" : "text-muted-foreground"}`}>PI</button>
             </div>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
@@ -2475,7 +2654,7 @@ const lowBalance = balance === 0 && displayPending === 0
                 {(txs || []).length === 0 ? (
                   <p className="py-10 text-center text-sm text-muted-foreground">No GHC transactions yet.</p>
                 ) : (
-                  (txs || []).map((tx: any) => (
+                  (txs || []).filter((tx) => `${tx.id} ${tx.referenceId || ""} ${tx.reason || ""} ${tx.sourceEvent || ""} ${tx.kind} ${tx.status}`.toLowerCase().includes(query.trim().toLowerCase())).map((tx: any) => (
                     <TxRow key={tx.id || `${tx.createdAt}-${tx.amount}`} tx={tx} onOpen={() => setSelectedTx?.(tx)} />
                   ))
                 )}
@@ -2485,7 +2664,7 @@ const lowBalance = balance === 0 && displayPending === 0
                 {(piIntents || []).length === 0 ? (
                   <p className="py-10 text-center text-sm text-muted-foreground">No π payment intents for this account.</p>
                 ) : (
-                  (piIntents || []).map((intent: any) => (
+                  (piIntents || []).filter((intent: any) => !query.trim() || `${intent.id || ""} ${intent.referenceId || ""} ${intent.paymentId || ""} ${intent.purpose || ""} ${intent.status || ""}`.toLowerCase().includes(query.trim().toLowerCase())).map((intent: any) => (
                     <button
                       key={intent.id}
                       type="button"
@@ -2521,6 +2700,13 @@ const lowBalance = balance === 0 && displayPending === 0
         onClose={() => setPiWithdrawOpen(false)}
         availablePi={piWithdrawAvailable}
         linkedUsername={piWithdrawUser}
+        onSetupPin={() => {
+          setPiWithdrawOpen(false)
+          setTab("about")
+          window.setTimeout(() => {
+            document.getElementById("ghc-wallet-security")?.scrollIntoView({ behavior: "smooth", block: "start" })
+          }, 50)
+        }}
         onCompleted={() => {
           setPiWithdrawOpen(false)
           try {

@@ -24,7 +24,7 @@ export async function POST(
   }
   const { id } = await ctx.params
   const storyId = String(id || "").trim()
-  if (!storyId) {
+  if (!/^story_[a-z0-9_-]{8,100}$/i.test(storyId)) {
     return NextResponse.json({ ok: false, error: "INVALID_ID" }, { status: 400 })
   }
   if (!socialDbConfigured()) {

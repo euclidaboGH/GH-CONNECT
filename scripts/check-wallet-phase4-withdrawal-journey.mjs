@@ -15,7 +15,7 @@ const checks = [
   ["settings retains authorization card for revoke/manage", /PiPayoutAuthorizationCard/.test(settings)],
   ["wallet dashboard posts wallet-authorization", /\/api\/identity\/wallet-authorization/.test(dash)],
   ["dashboard never records authorization itself (consent lives in the sheet)", !/onAuthorizeWallet/.test(dash) && /openWithdrawSheet/.test(dash)],
-  ["runWithdraw hands off to the sheet before any quote when authorization is missing", /walletAuthActive !== true\) \{\s*openWithdrawSheet\(\)\s*return/.test(dash)],
+  ["runWithdraw always uses the single sheet path (no PIN-proof bypass)", /const runWithdraw = useCallback\(\(\) => \{[\s\S]*?openWithdrawSheet\(\)/.test(dash) && !dash.includes("\"/api/economy/earnings/withdrawals\"")],
   ["primary control is a single Withdraw CTA that opens the sheet", /data-testid="wallet-withdraw-cta"/.test(dash) && /ghc:open-pi-withdraw/.test(dash)],
   ["fee quote still server-side", /\/api\/economy\/earnings\/quote/.test(dash)],
   ["roadmap documents phase 4 boundaries", /Single primary control/.test(roadmap) && /Does not weaken/.test(roadmap)],
