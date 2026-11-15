@@ -11,6 +11,7 @@ const required = new Set([
   'docs/UPGRADE-WORKLOG-0.338.82.md',
   'docs/UPGRADE-WORKLOG-0.338.83.md',
   'docs/UPGRADE-WORKLOG-0.338.84.md',
+  'docs/UPGRADE-WORKLOG-0.338.85.md',
   'docs/UPGRADE-WORKLOG-0.338.79.md',
   'docs/UPGRADE-WORKLOG-0.338.78.md',
   'docs/UPGRADE-WORKLOG-0.157.12.md',
