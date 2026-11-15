@@ -3947,3 +3947,30 @@ header img[alt="GreenHaven"],
   border-color: var(--gh-fb-hairline) !important;
 }
 
+
+/* ============================================================
+   0.338.83 — post action keys layout (feed / profile / community)
+   ============================================================ */
+.gh-post-card[data-post-surface] .gh-post-action-dock {
+  border-top: 1px solid var(--gh-fb-hairline) !important;
+  padding-top: 0.5rem !important;
+  padding-bottom: 0.5rem !important;
+}
+.gh-post-card[data-post-surface] .gh-post-action-secondary {
+  border-top: 1px solid var(--gh-fb-hairline) !important;
+  margin-top: 0.5rem !important;
+  padding-top: 0.35rem !important;
+}
+.gh-post-card[data-post-surface] .gh-post-response-action {
+  color: var(--gh-fb-action) !important;
+  font-weight: 600 !important;
+  font-size: 0.8125rem !important;
+}
+.gh-post-card[data-post-surface] .gh-post-response-action:hover {
+  background: color-mix(in srgb, var(--muted) 70%, transparent) !important;
+  color: var(--gh-fb-name) !important;
+}
+.gh-post-card[data-post-surface] .gh-pab-tray {
+  border-color: var(--gh-fb-hairline) !important;
+  box-shadow: none !important;
+}

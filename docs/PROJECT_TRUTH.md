@@ -1,11 +1,11 @@
 **Production status:** NOT APPROVED
 
-# Current source increment — 0.338.82 (2026-11-15)
+# Current source increment — 0.338.83 (2026-11-15)
 
 Current status:** **NOT APPROVED**
 
-**Current source version:** `0.338.82`  
-**Package identity:** `gh-connect@0.338.82`  
+**Current source version:** `0.338.83`  
+**Package identity:** `gh-connect@0.338.83`  
 **Prior baseline:** `0.338.81` (FB-reference feed visual 3-phase) + `0.338.80` (community cursor strictNullChecks).
 
 This increment enables and solidifies gated upgrades from the past 48 hours: Pi Browser runtime detection and auth honesty, reserved-π incomplete-withdrawal return path UX, release identity parity across package/lock/APP_RELEASE/VERIFIED_MANIFEST/PROJECT_TRUTH/SOURCE_OF_TRUTH, and retention of Phase 4 pagination, Pass 40 navigation, and Run 299/300/301 contracts. No new financial migrations. CALLS_PRODUCTION_ENABLED and REMOTE_PUSH_PRODUCTION_ENABLED remain fail-closed (require infrastructure + operator review).

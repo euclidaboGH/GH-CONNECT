@@ -1,8 +1,8 @@
-# Current source authority — 0.338.82 (2026-11-15)
+# Current source authority — 0.338.83 (2026-11-15)
 
-**Current working candidate:** `0.338.82`
-**Current source version:** `0.338.82`
-**Package identity:** `gh-connect@0.338.82` (the user-facing brand remains GREENHAVEN).
+**Current working candidate:** `0.338.83`
+**Current source version:** `0.338.83`
+**Package identity:** `gh-connect@0.338.83` (the user-facing brand remains GREENHAVEN).
 **Prior package:** `GREENHAVEN-0.338.81-FB-REFERENCE-FEED-VISUAL-3PHASE.zip` and `GREENHAVEN-0.338.80-CURSOR-UNDEFINED-TS-FIX.zip`.
 
 This release enables gated upgrades delivered across the past 48 hours without flipping production-dangerous flags:
@@ -16,6 +16,6 @@ This release enables gated upgrades delivered across the past 48 hours without f
 
 No new migration was added or applied. No Supabase schema/data, wallet, GHC or Pi financial state was changed. Production remains **NOT APPROVED**.
 
-Historical documents remain for audit context; they do not override this current source authority. See `docs/UPGRADE-WORKLOG-0.338.82.md`.
+Historical documents remain for audit context; they do not override this current source authority. See `docs/UPGRADE-WORKLOG-0.338.83.md`.
 
 Historical and legacy documents remain preserved for audit context; they do not override this current source authority.

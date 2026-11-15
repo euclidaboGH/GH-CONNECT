@@ -500,7 +500,7 @@ function EnhancedPostCardInner({
       tabIndex={onOpenPost ? 0 : undefined}
       aria-busy={curationBusy || undefined}
       aria-label={post.authorName ? `Post by ${displayAuthor}` : "Post"}
-      className={`gh-post-card gh-card-interactive group/post relative max-w-full overflow-x-hidden overflow-hidden rounded-[1.25rem] border border-border/60 bg-card text-card-foreground shadow-[var(--gh-card-shadow)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 ${onOpenPost ? "cursor-pointer" : "cursor-default"}`}
+      className={`gh-post-card gh-card-interactive group/post relative max-w-full overflow-x-hidden overflow-hidden rounded-[var(--gh-fb-card-radius,0.75rem)] border border-border/60 bg-card text-card-foreground shadow-[var(--gh-card-shadow)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 ${onOpenPost ? "cursor-pointer" : "cursor-default"}`}
       onClick={(event) => {
         const target = event.target as HTMLElement | null
         if (target?.closest("button, a, input, textarea, select, video, [role=button], [data-post-no-open]")) return
