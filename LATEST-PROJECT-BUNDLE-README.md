@@ -1,25 +1,25 @@
 # GreenHaven — Current Project Bundle
 
-**Current candidate:** `gh-connect@0.338.73` — Run #310, 2026-11-15  
-**Authoritative uploaded baseline:** `GREENHAVEN-0.338.72-PHASE6-PERFORMANCE-ACCESSIBILITY-2026-11-14.zip`  
-**Baseline SHA-256:** `d8271fb74d1440e6397346e5b8e346de538923d3938470eac5f46feb2ec71f3c`
+**Authoritative uploaded baseline:** `GREENHAVEN-0.338.85-CI-NODE-ASSERT-HYGIENE.zip`
+**Package:** `gh-connect@0.338.85`
+**Date:** 2026-11-15
+**SHA-256:** `ede88266a095c3904044134270ed56b5bdd5c07a4a08ea9a363b756cabb2d36a`
 
-## Latest delivery
+## Latest delivery — 0.338.85 / CI Node assertion hygiene
 
-- Phase 6 performance hardening runs independent feed visibility, durable preference and mute reads concurrently, and runs bounded post/comment profile hydration batches concurrently without weakening privacy or identity constraints.
-- Phase 6 source gate: 23/23 PASS. CLS tracking now uses constant memory; bounded INP samples preserve later slow interactions.
-- Targeted Core Web Vitals regression tests: 16/16 PASS; privacy-safe RUM contract: 17/17 PASS. Full `npm run verify:static`: 4,072 PASS / 0 FAIL. Playwright coverage added for reduced motion, responsive overflow (320–1440px), keyboard focus and offline/reconnect announcements.
-- Phase 5 durable account-owned feed preferences, Phase 4 community completion and Phase 3 creator-media source closeout remain included.
-- See `docs/UPGRADE-WORKLOG-0.338.73.md` for implementation, evidence and blockers.
-
-## Candidate archive
-
-`GREENHAVEN-0.338.73-PHASE6-PERFORMANCE-ACCESSIBILITY-2026-11-15.zip`
+- Adds explicit exact-Node.js-24.15.0 assertions to both the static-verification and build jobs in GitHub Actions.
+- Retains the 0.338.84 feed, home, profile, community and post-card density improvements.
+- Synchronizes the release identity and keeps production deployment authority fail-closed.
+- No database migration was applied; no wallet, GHC, Pi, provider or production state was changed.
 
 ## Required release gates
 
-The working environment has Node 22.16.0, while the project requires Node 24.15.0, and dependencies are not installed here. TypeScript, ESLint, Next.js production build, authenticated browser/device and two-account acceptance remain outstanding.
+The current audit workspace runs Node.js 22.16.0; `.nvmrc` and the package engine require Node.js 24.15.0. Dependencies are not installed in the audit workspace. Therefore dependency-backed TypeScript, ESLint and Next.js production build results must be obtained under Node.js 24.15.0.
 
-Supabase inspection was read-only. Testnet contains the canonical community RPCs/tables and service-role-only function grants, but its 40-entry migration ledger must be reconciled with 223 repository migration sources. Mainnet migration history returned zero entries and canonical community RPCs were absent; `public.rls_auto_enable()` SECURITY DEFINER execution grants require separate review. No database changes were made.
+Authenticated browser/device and two-account acceptance, live provider checks, and independent Testnet/Mainnet migration-history reconciliation remain outstanding. The repository contains 223 canonical migration sources, including 101 REVIEW_REQUIRED, 2 PROPOSAL and 1 REQUIRES_APPROVAL classifications. The manifest is source inventory, not proof of remote application.
 
-No GitHub push, pull request, Vercel deployment or production approval was performed. Production remains **NOT APPROVED**.
+Do not run `supabase db push` or replay migrations while histories and held classifications remain unresolved. No GitHub push, pull request, Vercel deployment or production approval is implied by this archive.
+
+**Production remains NOT APPROVED.**
+
+See `docs/SOURCE_OF_TRUTH.md`, `docs/UPGRADE-WORKLOG-0.338.85.md` and `docs/PROJECT_TRUTH.md`.

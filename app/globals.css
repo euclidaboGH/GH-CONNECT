@@ -4166,3 +4166,41 @@ nav[aria-label="Primary"] [aria-current="page"] {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
+
+
+/* PREMIUM POST SECTIONS — shared editorial rhythm across Feed, Profile and Communities. */
+.gh-premium-feed-list {
+  row-gap: 1rem;
+}
+.gh-feed-post-slot,
+.gh-profile-post-section,
+.gh-profile-post-list,
+.gh-community-post-list,
+.gh-community-post-item {
+  min-width: 0;
+}
+.gh-profile-post-list,
+.gh-community-post-list {
+  display: grid;
+  align-items: start;
+}
+.gh-profile-post-list .gh-post-card[data-post-surface],
+.gh-community-post-list .gh-post-card[data-post-surface],
+.gh-premium-feed-list .gh-post-card[data-post-surface] {
+  width: 100%;
+  max-width: 100%;
+  border: 1px solid var(--gh-ref-line, var(--border)) !important;
+  border-radius: 1.25rem !important;
+  background: var(--card) !important;
+  box-shadow: var(--gh-ref-shadow, 0 8px 26px rgba(15, 45, 35, .055)) !important;
+}
+@media (max-width: 639px) {
+  .gh-premium-feed-list { row-gap: .875rem; }
+  .gh-profile-post-list,
+  .gh-community-post-list { gap: .875rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gh-profile-post-list .gh-post-card[data-post-surface],
+  .gh-community-post-list .gh-post-card[data-post-surface],
+  .gh-premium-feed-list .gh-post-card[data-post-surface] { transition: none !important; }
+}

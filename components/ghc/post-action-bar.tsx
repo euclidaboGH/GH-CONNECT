@@ -137,7 +137,7 @@ export function PostActionBar({
 
   return (
     <div className="gh-post-action-dock min-w-0 border-t border-border/60 px-3 pb-2.5 pt-2 sm:px-4" role="toolbar" aria-label="Post actions and Community curation" data-pab-dock>
-      <div className="gh-post-action-primary flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5">
+      <div className="gh-post-action-primary flex min-w-0 flex-wrap items-center gap-x-2 gap-y-2">
         {/* 1 · fused vote pill + approval meter */}
         <div className="flex flex-col gap-1" role="group" aria-label="Quality votes">
           <div className="inline-flex items-stretch overflow-visible rounded-full border border-border/70 bg-card shadow-sm">

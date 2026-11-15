@@ -1392,9 +1392,15 @@ export function PremiumCommunityHub({
 
         {tab === "discussion" && (
           <div className="space-y-3">
-            <p className="text-[11px] text-muted-foreground">
-              Discussions are board posts — not the same as realtime chat.
-            </p>
+            <div className="flex items-end justify-between gap-3 px-1 pt-1">
+              <div className="min-w-0">
+                <h2 className="text-sm font-bold tracking-tight text-foreground">Community discussions</h2>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">Board posts and replies, separate from realtime community chat.</p>
+              </div>
+              <span className="shrink-0 rounded-full border border-border/70 bg-card px-2.5 py-1 text-[10px] font-semibold tabular-nums text-muted-foreground">
+                {renderedBoardPosts.filter((post: any) => !post.hidden).length} posts
+              </span>
+            </div>
             {community.isJoined && onPost ? (
               <div className="rounded-2xl border border-border bg-card p-3">
                 <label htmlFor="community-discussion-compose" className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
@@ -1441,7 +1447,7 @@ export function PremiumCommunityHub({
             {renderedBoardPosts.length === 0 ? (
               <p className="py-6 text-center text-xs text-muted-foreground">No discussions yet.</p>
             ) : (
-              <ul className="space-y-2" aria-label="Community discussions">
+              <ul className="gh-community-post-list grid min-w-0 gap-4" aria-label="Community discussions">
                 {[...renderedBoardPosts]
                   .filter((p: any) => !p.hidden)
                   .sort((a: any, b: any) => (Number(!!b.pinned) - Number(!!a.pinned)) || ((b.createdAt || 0) - (a.createdAt || 0)))
@@ -1450,7 +1456,7 @@ export function PremiumCommunityHub({
                     const open = !!expandedReplies[p.id]
                     const canonical = p.durable === true || canonicalBoardPosts.some((row) => String(row.id || "") === String(p.id))
                     if (canonical) return (
-                      <li key={p.id} className="list-none">
+                      <li key={p.id} className="gh-community-post-item min-w-0 list-none">
                         <CommunityCanonicalPostCard
                           communityId={community.id}
                           post={toCanonicalCommunityPost(p)}
@@ -1461,7 +1467,7 @@ export function PremiumCommunityHub({
                       </li>
                     )
                     return (
-                      <li key={p.id} className="list-none">
+                      <li key={p.id} className="gh-community-post-item min-w-0 list-none">
                         <CommunityReadOnlyPostCard
                           post={toCanonicalCommunityPost(p)}
                           statusLabel={p.pinned ? "Archived · pinned · read-only" : "Archived · read-only"}

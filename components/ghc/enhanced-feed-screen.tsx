@@ -1305,7 +1305,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
               }
             />
           ) : (
-            <div className="gh-premium-feed-list gh-feed-column gh-section-stack space-y-2 px-0 py-1.5 sm:space-y-3 sm:px-3 sm:py-3">
+            <div className="gh-premium-feed-list gh-feed-column gh-section-stack space-y-3 px-0 py-2 sm:space-y-4 sm:px-3 sm:py-3">
               {displayPosts.map(({ post, reason }, index) => (
                 <div key={post.id}>
                   {index > 0 && !focusMode && activeFilter === "for-you" && interstitialKindAt(index) ? (
@@ -1321,7 +1321,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
                     />
                   ) : null}
                   <PostErrorBoundary>
-                    <div className="gh-feed-post-slot cv-auto"><EnhancedPostCard
+                    <div className="gh-feed-post-slot cv-auto min-w-0"><EnhancedPostCard
                       surface="feed"
                       post={post}
                       priority={index === 0}

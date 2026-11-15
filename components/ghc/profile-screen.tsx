@@ -1154,18 +1154,18 @@ export function ProfileScreen({
 
         {profileSectionTab === "posts" ? (
         <section id="gh-profile-posts" className="mt-3 w-full px-4 scroll-mt-14" aria-label="Your posts timeline">
-          <div className="overflow-hidden rounded-[1.25rem] border border-border/50 bg-card shadow-sm">
-            <div className="flex min-h-11 items-center justify-between gap-2 border-b border-border/60 px-3.5">
+          <div className="gh-profile-post-section space-y-3">
+            <div className="flex min-h-12 items-center justify-between gap-3 rounded-2xl border border-border/60 bg-card px-3.5 py-2.5 shadow-sm">
               <div className="min-w-0"><h3 className="text-[13px] font-bold text-foreground">{msg("posts")}</h3><span className="text-[11px] font-medium text-muted-foreground">{posts.length} in your timeline</span></div>
               <button type="button" onClick={() => setLibraryOpen(true)} className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-border px-3 text-[11px] font-bold hover:bg-muted" aria-label="Open your posts, photos, videos and documents"><ImagePlus size={14} /> Content library</button>
             </div>
             {timelineLoading && timelinePosts === null ? (
-              <div className="m-3 rounded-xl border border-border/60 bg-muted/20 px-3 py-7 text-center" role="status">
+              <div className="rounded-2xl border border-border/60 bg-card px-4 py-8 text-center" role="status">
                 <p className="text-[13px] font-semibold text-foreground">Loading your full timeline…</p>
                 <p className="mt-1 text-[11px] text-muted-foreground">Your profile timeline loads independently from the home feed.</p>
               </div>
             ) : posts.length === 0 ? (
-              <div className="m-3 rounded-xl border border-dashed border-border/80 bg-muted/20 px-3 py-7 text-center">
+              <div className="rounded-2xl border border-dashed border-border/80 bg-card/70 px-4 py-8 text-center">
                 <p className="text-[13px] font-semibold text-foreground">Your timeline starts here</p>
                 <p className="mt-1 text-[11px] text-muted-foreground">Share a thought, photo, video or update — it appears here and on the home feed.</p>
                 <button
@@ -1183,9 +1183,9 @@ export function ProfileScreen({
                 </button>
               </div>
             ) : (
-              <ul className="space-y-3 p-3" role="list" aria-label="Your posts timeline">
+              <ul className="gh-profile-post-list grid min-w-0 gap-4" role="list" aria-label="Your posts timeline">
                 {posts.map((post) => (
-                  <li key={post.id}>
+                  <li key={post.id} className="min-w-0">
                     <OwnPostCard
                       post={post}
                       isLiked={feed.likedPostIds.includes(post.id)}
@@ -1218,14 +1218,14 @@ export function ProfileScreen({
               </ul>
             )}
             {timelineError ? (
-              <div className="mx-3 mb-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3" role="status">
+              <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-3" role="status">
                 <p className="text-[12px] font-semibold text-foreground">Complete timeline could not be verified</p>
                 <p className="mt-1 break-words text-[11px] text-muted-foreground">{timelineError}. The posts shown may only be the currently loaded home-feed subset.</p>
                 <button type="button" onClick={() => setTimelineRetry((value) => value + 1)} className="mt-2 rounded-full border border-border px-3 py-1.5 text-[11px] font-bold hover:bg-muted">Retry timeline</button>
               </div>
             ) : null}
             {timelineHasMore && timelinePosts !== null ? (
-              <div className="px-3 pb-3">
+              <div className="pt-1">
                 <button type="button" disabled={timelineLoadingMore} onClick={() => void loadMoreTimeline()} className="min-h-10 w-full rounded-full border border-border px-4 py-2 text-[12px] font-bold hover:bg-muted disabled:opacity-50">
                   {timelineLoadingMore ? "Loading more posts…" : "Load older posts"}
                 </button>

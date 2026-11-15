@@ -3,7 +3,7 @@
 **Current working candidate:** `0.338.85`
 **Current source version:** `0.338.85`
 **Package identity:** `gh-connect@0.338.85` (the user-facing brand remains GREENHAVEN).
-**Prior package:** `GREENHAVEN-0.338.81-FB-REFERENCE-FEED-VISUAL-3PHASE.zip` and `GREENHAVEN-0.338.80-CURSOR-UNDEFINED-TS-FIX.zip`.
+**Prior implementation:** `0.338.84` feed / home / profile / community / post-card density improvements, retained in this release.
 
 This release enables gated upgrades delivered across the past 48 hours without flipping production-dangerous flags:
 
