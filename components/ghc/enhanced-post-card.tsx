@@ -500,7 +500,7 @@ function EnhancedPostCardInner({
       tabIndex={onOpenPost ? 0 : undefined}
       aria-busy={curationBusy || undefined}
       aria-label={post.authorName ? `Post by ${displayAuthor}` : "Post"}
-      className={`gh-post-card gh-card-interactive group/post relative max-w-full overflow-x-hidden overflow-hidden rounded-[1.25rem] border border-border/60 bg-card text-card-foreground shadow-[var(--gh-card-shadow)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 ${onOpenPost ? "cursor-pointer" : "cursor-default"}`}
+      className={`gh-post-card gh-card-interactive group/post relative max-w-full overflow-x-hidden overflow-hidden rounded-[var(--gh-fb-card-radius,0.75rem)] border border-border/60 bg-card text-card-foreground shadow-[var(--gh-card-shadow)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 ${onOpenPost ? "cursor-pointer" : "cursor-default"}`}
       onClick={(event) => {
         const target = event.target as HTMLElement | null
         if (target?.closest("button, a, input, textarea, select, video, [role=button], [data-post-no-open]")) return
@@ -527,16 +527,16 @@ function EnhancedPostCardInner({
             <LazyImage
               src={resolveAvatarUrl(post.authorPhoto, { seed: post.authorId || post.authorName || "member", size: 96 })}
               alt={displayAuthor}
-              className="h-11 w-11 rounded-full object-cover bg-muted ring-2 ring-background shadow-sm"
+              className="h-10 w-10 sm:h-11 sm:w-11 rounded-full object-cover bg-muted ring-1 ring-border/40 shadow-sm"
             />
             {(post as Post & { authorOnline?: boolean }).authorOnline && <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-background bg-emerald-500" title="Online now" aria-label="Online now" />}
             {(post as Post & { authorVerified?: boolean }).authorVerified && <span className="absolute -right-1 -top-1 rounded-full bg-card p-0.5 text-sky-600 shadow-sm ring-1 ring-border/40" title="Verified profile" aria-label="Verified profile"><ShieldCheck size={11} /></span>}
           </button>
           <div className="min-w-0 flex-1 pt-0.5">
             {onOpenProfile && !readOnly ? (
-              <button type="button" onClick={() => onOpenProfile(post.authorId)} className="block max-w-full truncate text-left text-[14px] font-bold leading-5 text-foreground decoration-emerald-600/50 underline-offset-2 hover:text-primary hover:underline focus-visible:outline-none focus-visible:underline">{displayAuthor}</button>
+              <button type="button" onClick={() => onOpenProfile(post.authorId)} className="gh-fb-author-name block max-w-full truncate text-left leading-5 decoration-emerald-600/50 underline-offset-2 hover:text-primary hover:underline focus-visible:outline-none focus-visible:underline">{displayAuthor}</button>
             ) : (
-              <p className="block max-w-full truncate text-[14px] font-bold leading-5 text-foreground">{displayAuthor}</p>
+              <p className="gh-fb-author-name block max-w-full truncate leading-5">{displayAuthor}</p>
             )}
             <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
               <AuthorRepChip data={authorReputationFromPost(post as never)} />
@@ -546,7 +546,7 @@ function EnhancedPostCardInner({
                 return ctx ? <span className="truncate text-[10px] font-medium text-muted-foreground">{ctx}</span> : null
               })()}
               {!(readOnly && !(Number(post.createdAt) > 0)) ? (
-                <p className="text-[11px] leading-4 text-muted-foreground">
+                <p className="gh-fb-meta-line text-[11px] leading-4">
                   {timeAgo(post.createdAt)}
                   {(post.isEdited || post.editedAt) && (
                     <span className="ml-1 text-[10px] font-semibold">· Edited</span>
@@ -970,15 +970,18 @@ function EnhancedPostCardInner({
 
       {/* Reaction summary only. Comment/share totals live beside their single action controls below. */}
       {visibleReactionEntries.length > 0 ? (
-        <section className="mx-4 mb-2 px-1 py-1" aria-label="Reaction counts">
-          <div className="flex flex-wrap gap-1">
-            {visibleReactionEntries.slice(0, 5).map(([type, count]) => (
-              <span key={type} className="inline-flex items-center gap-1 rounded-full border border-border/50 bg-card/70 px-1.5 py-0.5 text-[10px] font-semibold text-foreground">
-                <span>{reactionEmoji[type] || "✨"}</span>
-                <span className="tabular-nums">{Number(count).toLocaleString()}</span>
-              </span>
+        <section className="gh-fb-reaction-summary" aria-label="Reaction counts">
+          <div className="gh-fb-emoji-stack" aria-hidden="true">
+            {visibleReactionEntries.slice(0, 3).map(([type]) => (
+              <span key={type}>{reactionEmoji[type] || "✨"}</span>
             ))}
           </div>
+          <span className="min-w-0 truncate tabular-nums">
+            {(() => {
+              const total = visibleReactionEntries.reduce((sum, [, c]) => sum + Number(c || 0), 0)
+              return total > 0 ? total.toLocaleString() : null
+            })()}
+          </span>
         </section>
       ) : null}
 

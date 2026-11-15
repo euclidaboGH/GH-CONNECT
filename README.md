@@ -1,6 +1,6 @@
 # GreenHaven
 
-**Current source version:** `0.338.73`
+**Current source version:** `0.338.84`
 
 Production status: **NOT APPROVED** — supported Node 24.15.0 dependency-backed typecheck/lint/build, browser/device, live database/provider and operator acceptance remain outstanding.
 

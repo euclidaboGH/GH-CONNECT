@@ -65,8 +65,8 @@ export function ProfileSectionTabs({
             onClick={() => onChange(tab.id)}
             className={
               selected
-                ? "shrink-0 rounded-full bg-emerald-600 px-3.5 py-2 text-[12px] font-bold text-white shadow-sm shadow-emerald-600/25 transition"
-                : "shrink-0 rounded-full px-3.5 py-2 text-[12px] font-bold text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                ? "shrink-0 min-h-11 rounded-full bg-emerald-600 px-3.5 py-2 text-[12px] font-bold text-white shadow-sm shadow-emerald-600/25 transition"
+                : "shrink-0 min-h-11 rounded-full px-3.5 py-2 text-[12px] font-bold text-muted-foreground transition hover:bg-muted hover:text-foreground"
             }
           >
             {tab.label}

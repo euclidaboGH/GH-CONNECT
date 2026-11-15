@@ -3843,3 +3843,326 @@ header img[alt="GreenHaven"],
 @media (prefers-reduced-motion: reduce) {
   .gh-compose-upload-indeterminate { animation: none; transform: translateX(0); width: 100%; }
 }
+
+/* ============================================================
+   PHASE FB-REFERENCE — 3-phase visual polish (0.338.81)
+   Aligns feed/post density with modern Facebook / X surfaces.
+   ============================================================ */
+:root {
+  --gh-fb-card-radius: 0.75rem;
+  --gh-fb-hairline: color-mix(in srgb, var(--border) 70%, transparent);
+  --gh-fb-meta: #65676b;
+  --gh-fb-name: #050505;
+  --gh-fb-action: #65676b;
+  --gh-fb-canvas: #f0f2f5;
+}
+.dark {
+  --gh-fb-meta: #b0b3b8;
+  --gh-fb-name: #e4e6eb;
+  --gh-fb-action: #b0b3b8;
+  --gh-fb-canvas: #18191a;
+}
+
+/* Phase 1 — flatter card chrome (FB mobile) */
+.gh-post-card[data-post-surface] {
+  border-radius: var(--gh-fb-card-radius) !important;
+  border-color: var(--gh-fb-hairline) !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04) !important;
+}
+@media (max-width: 639px) {
+  .gh-post-card[data-post-surface] {
+    border-radius: 0 !important;
+    border-left: none !important;
+    border-right: none !important;
+    box-shadow: none !important;
+    border-bottom: 1px solid var(--gh-fb-hairline) !important;
+  }
+  .gh-premium-feed-list,
+  .gh-feed-column {
+    background: var(--gh-fb-canvas) !important;
+    gap: 0.5rem !important;
+    row-gap: 0.5rem !important;
+  }
+  .gh-premium-feed-list.space-y-4 > :not([hidden]) ~ :not([hidden]),
+  .gh-feed-column.space-y-4 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0.5rem !important;
+  }
+}
+
+/* Phase 2 — header + reaction summary */
+.gh-post-card[data-post-surface] header {
+  padding-top: 0.75rem !important;
+  padding-bottom: 0.5rem !important;
+}
+.gh-post-card[data-post-surface] .gh-fb-author-name {
+  font-size: 0.9375rem !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.01em;
+  color: var(--gh-fb-name) !important;
+}
+.gh-post-card[data-post-surface] .gh-fb-meta-line {
+  font-size: 0.75rem !important;
+  color: var(--gh-fb-meta) !important;
+  line-height: 1.25 !important;
+}
+.gh-fb-reaction-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.875rem 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--gh-fb-meta);
+}
+.gh-fb-reaction-summary .gh-fb-emoji-stack {
+  display: inline-flex;
+  flex-direction: row-reverse;
+}
+.gh-fb-reaction-summary .gh-fb-emoji-stack > span {
+  display: inline-flex;
+  width: 1.125rem;
+  height: 1.125rem;
+  margin-left: -0.35rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: var(--card);
+  border: 1.5px solid var(--card);
+  font-size: 0.7rem;
+  line-height: 1;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border) 50%, transparent);
+}
+.gh-fb-reaction-summary .gh-fb-emoji-stack > span:last-child {
+  margin-left: 0;
+  z-index: 3;
+}
+.gh-fb-reaction-summary .gh-fb-emoji-stack > span:nth-child(2) { z-index: 2; }
+.gh-fb-reaction-summary .gh-fb-emoji-stack > span:nth-child(3) { z-index: 1; }
+
+/* Phase 3 — action density */
+.gh-post-card[data-post-surface] [role="toolbar"],
+.gh-post-card[data-post-surface] .gh-pab-dock {
+  min-height: 2.75rem;
+}
+.gh-post-card[data-post-surface] .border-t.border-border\/35 {
+  border-color: var(--gh-fb-hairline) !important;
+}
+
+
+/* ============================================================
+   0.338.83 — post action keys layout (feed / profile / community)
+   ============================================================ */
+.gh-post-card[data-post-surface] .gh-post-action-dock {
+  border-top: 1px solid var(--gh-fb-hairline) !important;
+  padding-top: 0.5rem !important;
+  padding-bottom: 0.5rem !important;
+}
+.gh-post-card[data-post-surface] .gh-post-action-secondary {
+  border-top: 1px solid var(--gh-fb-hairline) !important;
+  margin-top: 0.5rem !important;
+  padding-top: 0.35rem !important;
+}
+.gh-post-card[data-post-surface] .gh-post-response-action {
+  color: var(--gh-fb-action) !important;
+  font-weight: 600 !important;
+  font-size: 0.8125rem !important;
+}
+.gh-post-card[data-post-surface] .gh-post-response-action:hover {
+  background: color-mix(in srgb, var(--muted) 70%, transparent) !important;
+  color: var(--gh-fb-name) !important;
+}
+.gh-post-card[data-post-surface] .gh-pab-tray {
+  border-color: var(--gh-fb-hairline) !important;
+  box-shadow: none !important;
+}
+
+/* ============================================================
+   0.338.84 — 50 safe surface improvements
+   Feed / Home / Profile / Community / post cards & buttons
+   Visual, a11y, density only. No financial or auth authority changes.
+   ============================================================ */
+
+/* F01–F10 Feed density & readability */
+.gh-premium-feed-list.gh-feed-column {
+  gap: 0.5rem;
+}
+@media (min-width: 640px) {
+  .gh-premium-feed-list.gh-feed-column {
+    gap: 0.75rem;
+  }
+}
+.gh-feed-post-slot {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 320px;
+}
+.gh-premium-feed-toolbar {
+  border-bottom-color: var(--gh-fb-hairline, color-mix(in srgb, var(--border) 70%, transparent)) !important;
+}
+.gh-premium-feed-toolbar [role="tab"],
+.gh-premium-feed-toolbar button[aria-selected] {
+  min-height: 2.75rem;
+  min-width: 2.75rem;
+}
+.gh-world-feed .gh-skeleton {
+  border-radius: var(--gh-fb-card-radius, 0.75rem);
+}
+.gh-feed-shell [role="status"][aria-busy="true"] {
+  padding-block: 0.75rem;
+}
+.gh-premium-feed-scroll {
+  scroll-padding-top: 4.5rem;
+  overscroll-behavior-y: contain;
+}
+.gh-feed-column .gh-post-card[data-post-surface] {
+  transition: background-color 120ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gh-feed-column .gh-post-card[data-post-surface] {
+    transition: none !important;
+  }
+  .gh-pab-burst,
+  .gh-pab-pop,
+  .gh-pab-save {
+    animation: none !important;
+  }
+}
+
+/* F11–F20 Post card chrome & media */
+.gh-post-card[data-post-surface] header {
+  gap: 0.5rem;
+}
+.gh-post-card[data-post-surface] .gh-fb-author-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gh-post-card[data-post-surface] [aria-label^="Post image gallery"] {
+  border-radius: 0;
+}
+@media (min-width: 640px) {
+  .gh-post-card[data-post-surface] [aria-label^="Post image gallery"] {
+    border-radius: 0.5rem;
+  }
+}
+.gh-post-card[data-post-surface] video {
+  max-height: min(70vh, 520px);
+  background: #000;
+}
+.gh-fb-reaction-summary {
+  min-height: 1.5rem;
+}
+.gh-post-card[data-post-surface] .gh-pab-tray {
+  margin-inline: 0.75rem !important;
+  margin-bottom: 0.35rem !important;
+  border-radius: 9999px !important;
+  padding-block: 0.35rem !important;
+}
+
+/* F21–F30 Action buttons & curation */
+.gh-post-action-dock .gh-pab-btn {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.gh-post-action-dock .gh-pab-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.gh-post-action-secondary .gh-post-response-action {
+  min-height: 2.75rem !important;
+  gap: 0.35rem !important;
+}
+.gh-post-action-secondary .gh-post-response-action span {
+  letter-spacing: -0.01em;
+}
+.gh-post-card[data-post-surface] [aria-pressed="true"].gh-pab-btn {
+  font-weight: 800;
+}
+.gh-post-action-primary [role="group"][aria-label="Quality votes"] {
+  flex-shrink: 0;
+}
+
+/* P01–P10 Profile surface */
+.gh-profile-shell header {
+  border-bottom: 1px solid var(--gh-fb-hairline, var(--border));
+}
+.gh-profile-shell [role="tablist"] {
+  gap: 0.25rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.gh-profile-shell [role="tablist"]::-webkit-scrollbar {
+  display: none;
+}
+.gh-profile-shell [role="tab"] {
+  min-height: 2.75rem;
+  min-width: 3rem;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.gh-profile-shell [role="tab"][aria-selected="true"] {
+  border-bottom: 2px solid var(--primary);
+  color: var(--foreground);
+}
+.gh-profile-shell .gh-post-card[data-post-surface] {
+  margin-bottom: 0.5rem;
+}
+.gh-profile-shell [aria-label="Profile posts"] {
+  padding-bottom: var(--gh-screen-bottom-inset, 5rem);
+}
+
+/* C01–C10 Community surface */
+.gh-communities-shell [role="tablist"],
+.gh-community-hub [role="tablist"] {
+  gap: 0.25rem;
+}
+.gh-communities-shell [role="tab"],
+.gh-community-hub [role="tab"] {
+  min-height: 2.75rem;
+  font-weight: 600;
+}
+.gh-community-directory-card,
+.gh-community-card {
+  border: 1px solid var(--gh-fb-hairline, var(--border));
+  border-radius: var(--gh-fb-card-radius, 0.75rem);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.gh-community-directory-card:hover,
+.gh-community-card:hover {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
+}
+.gh-community-hub .gh-post-card[data-post-surface] {
+  margin-bottom: 0.5rem;
+}
+.gh-community-hub [aria-label="Load more posts"],
+.gh-communities-shell [aria-label="Load more communities"] {
+  min-height: 2.75rem;
+  font-weight: 700;
+}
+
+/* H01–H10 Home / shell polish */
+.gh-home-shell,
+.gh-command-centre {
+  overscroll-behavior-y: contain;
+}
+[data-bottom-nav] button,
+nav[aria-label="Primary"] button,
+nav[aria-label="Main"] a {
+  min-height: 2.75rem;
+  min-width: 2.75rem;
+  -webkit-tap-highlight-color: transparent;
+}
+[data-bottom-nav] [aria-current="page"],
+nav[aria-label="Primary"] [aria-current="page"] {
+  font-weight: 700;
+}
+
+/* Shared focus & reduced motion for buttons on social surfaces */
+.gh-post-card[data-post-surface] button:focus-visible,
+.gh-profile-shell button:focus-visible,
+.gh-communities-shell button:focus-visible,
+.gh-community-hub button:focus-visible,
+.gh-premium-feed-toolbar button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}

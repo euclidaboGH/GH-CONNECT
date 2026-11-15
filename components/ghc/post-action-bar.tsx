@@ -133,11 +133,11 @@ export function PostActionBar({
   }
 
   const soft =
-    "gh-pab-btn inline-flex h-11 min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-full px-3 text-[12px] font-bold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+    "gh-pab-btn inline-flex h-11 min-h-11 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-full px-2 text-[12px] font-bold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
 
   return (
-    <div className="gh-post-action-dock min-w-0 px-3 pb-3 pt-2.5 sm:px-4" role="toolbar" aria-label="Post actions and Community curation" data-pab-dock>
-      <div className="gh-post-action-primary flex min-w-0 flex-wrap items-center gap-x-2 gap-y-2">
+    <div className="gh-post-action-dock min-w-0 border-t border-border/60 px-3 pb-2.5 pt-2 sm:px-4" role="toolbar" aria-label="Post actions and Community curation" data-pab-dock>
+      <div className="gh-post-action-primary flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5">
         {/* 1 · fused vote pill + approval meter */}
         <div className="flex flex-col gap-1" role="group" aria-label="Quality votes">
           <div className="inline-flex items-stretch overflow-visible rounded-full border border-border/70 bg-card shadow-sm">
@@ -189,18 +189,18 @@ export function PostActionBar({
 
         {/* 4 · respond actions */}
       </div>
-      <div className="gh-post-action-secondary mt-2 grid min-w-0 grid-cols-3 gap-1.5" role="group" aria-label="Respond to post">
-          <button type="button" aria-label={`Comment · ${commentCount} ${commentCount === 1 ? "comment" : "comments"}`} title={`${commentCount} ${commentCount === 1 ? "comment" : "comments"}`} onClick={onComment} className={`${soft} gh-post-response-action min-w-0 flex-1 justify-center rounded-xl border border-border/50 bg-background/70 px-2`}>
-            <MessageCircle size={17} aria-hidden />
+      <div className="gh-post-action-secondary mt-2 grid min-w-0 grid-cols-3 gap-1 border-t border-border/40 pt-2" role="group" aria-label="Respond to post">
+          <button type="button" aria-label={`Comment · ${commentCount} ${commentCount === 1 ? "comment" : "comments"}`} title={`${commentCount} ${commentCount === 1 ? "comment" : "comments"}`} onClick={onComment} className={`${soft} gh-post-response-action min-w-0 flex-1 justify-center rounded-xl px-1.5`}>
+            <MessageCircle size={18} aria-hidden />
             <span className="tabular-nums">{fmt(commentCount)}</span>
-            <span>Comment</span>
+            <span className="hidden xs:inline sm:inline">Comment</span>
           </button>
           <button
             type="button"
             aria-label={isSaved ? "Unsave" : "Save"}
             aria-pressed={isSaved}
             onClick={() => { buzz(8); setSavePulse((n) => n + 1); onSave() }}
-            className={`${soft} gh-post-response-action min-w-0 flex-1 justify-center rounded-xl border border-border/50 bg-background/70 px-2 ${isSaved ? "!border-amber-300/60 !bg-amber-100 !text-amber-700 dark:!bg-amber-900/40 dark:!text-amber-300" : ""}`}
+            className={`${soft} gh-post-response-action min-w-0 flex-1 justify-center rounded-xl px-1.5 ${isSaved ? "!bg-amber-100 !text-amber-700 dark:!bg-amber-900/40 dark:!text-amber-300" : ""}`}
           >
             <Bookmark
               key={savePulse}
@@ -221,7 +221,7 @@ export function PostActionBar({
               shareTimer.current = setTimeout(() => setShared(false), 1600)
               onShare()
             }}
-            className={`${soft} gh-post-response-action min-w-0 flex-1 justify-center rounded-xl border border-border/50 bg-background/70 px-2 ${shared ? "!text-emerald-700 dark:!text-emerald-300" : ""}`}
+            className={`${soft} gh-post-response-action min-w-0 flex-1 justify-center rounded-xl px-1.5 ${shared ? "!text-emerald-700 dark:!text-emerald-300" : ""}`}
           >
             {shared ? <Check size={18} aria-hidden className="gh-pab-pop" /> : <Share2 size={18} aria-hidden />}
             <span>Share</span>

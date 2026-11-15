@@ -1,3 +1,12 @@
+Current source baseline for this consolidated report: `0.338.81`
+- Current audit status (v0.338.81): source verification only; production NOT APPROVED
+
+Current source baseline for this consolidated report: `0.338.79`
+- Current audit status (v0.338.79): source verification only; production NOT APPROVED
+
+Current source baseline for this consolidated report: `0.338.78`
+- Current audit status (v0.338.78): source verification only; production NOT APPROVED
+
 > **LEGACY VERIFICATION FIXTURE — NOT CURRENT PRODUCT AUTHORITY.**
 > This document is retained only because an executable regression/operator check references it. For current implementation decisions, follow `docs/SOURCE_OF_TRUTH.md` and executable source. Do not resurrect historical behavior from this file.
 

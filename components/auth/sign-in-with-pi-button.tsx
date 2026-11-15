@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { getPiClientId } from "@/lib/pi-env"
 import { startPiSignIn } from "@/lib/pi-oauth-client"
-import { isPiBrowserRuntime } from "@/lib/pi-native"
+import { isPiBrowserRuntime, markPiBrowserRuntime } from "@/lib/pi-native"
 import { usePiAuth } from "@/contexts/pi-auth-context"
 
 type Props = {
@@ -33,6 +33,7 @@ export function SignInWithPiButton({
       // Pi Browser: OAuth redirect pages often reject in-app WebViews.
       // Prefer the official SDK authenticate path already used by the provider.
       if (typeof window !== "undefined" && isPiBrowserRuntime()) {
+        markPiBrowserRuntime()
         await reinitialize()
         setBusy(false)
         return

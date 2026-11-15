@@ -76,9 +76,9 @@ interface EnhancedFeedScreenProps {
 
 function FeedSkeleton() {
   return (
-    <div className="space-y-4 px-3 py-3" role="status" aria-busy="true" aria-label="Loading feed">
+    <div className="space-y-2 px-0 py-2 sm:space-y-3 sm:px-3" role="status" aria-busy="true" aria-label="Loading feed">
       {[1, 2, 3].map((i) => (
-        <div key={i} className="gh-card gh-skeleton p-4">
+        <div key={i} className="gh-card gh-skeleton gh-post-card p-4">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-full bg-muted" />
             <div className="flex-1 space-y-2">
@@ -1305,7 +1305,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
               }
             />
           ) : (
-            <div className="gh-premium-feed-list gh-feed-column gh-section-stack space-y-4 px-2 py-3 sm:px-3">
+            <div className="gh-premium-feed-list gh-feed-column gh-section-stack space-y-2 px-0 py-1.5 sm:space-y-3 sm:px-3 sm:py-3">
               {displayPosts.map(({ post, reason }, index) => (
                 <div key={post.id}>
                   {index > 0 && !focusMode && activeFilter === "for-you" && interstitialKindAt(index) ? (

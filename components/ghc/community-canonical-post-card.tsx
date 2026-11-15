@@ -55,7 +55,7 @@ export function CommunityCanonicalPostCard({ post, communityId, isMod = false, o
   const renderPost: Post = {
     ...post,
     ...engagementOverride,
-    engagement: { ...(post.engagement || {}), ...(engagementOverride.engagement || {}) },
+    engagement: normalizeEngagementMetrics(post.engagement, engagementOverride.engagement),
   }
 
   const openPost = (action?: string) => {

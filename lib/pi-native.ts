@@ -29,17 +29,33 @@ export function isPiBrowserRuntime(): boolean {
   if (typeof window === "undefined") return false
   // Common Pi webview / bridge globals (vary by SDK generation)
   const w = window as unknown as Record<string, unknown>
-  if (w.PiApp || w.PiNetwork || w.__PI_BROWSER__ || w.piNetwork) return true
+  if (w.PiApp || w.PiNetwork || w.__PI_BROWSER__ || w.piNetwork || w.PiSDK || w.__pi_sdk__) return true
+  // Sticky client marker after a successful bridge probe in this session
+  try {
+    if (typeof sessionStorage !== "undefined" && sessionStorage.getItem("ghc.piBrowser") === "1") return true
+  } catch { /* private mode */ }
   if (typeof navigator === "undefined") return false
   const ua = String(navigator.userAgent || "")
-  if (/PiBrowser|Pi\s*Network|minepi|Pi\s*Browser|PiWebView|Pi\/|\bPiOS\b/i.test(ua)) return true
+  if (/PiBrowser|Pi\s*Network|minepi|Pi\s*Browser|PiWebView|Pi\/|\bPiOS\b|PiApp/i.test(ua)) return true
   // Android WebView packaging sometimes omits "PiBrowser" but includes host app markers
-  if (/wv\)/i.test(ua) && /pi\.network|minepi\.com/i.test(ua)) return true
+  if (/wv\)/i.test(ua) && /pi\.network|minepi\.com|app\.minepi/i.test(ua)) return true
   try {
     const ref = String(document.referrer || "")
-    if (/minepi\.com|pi\.app|pinet\.com/i.test(ref)) return true
+    if (/minepi\.com|pi\.app|pinet\.com|app\.minepi/i.test(ref)) return true
+  } catch { /* */ }
+  // Hostname when served inside Pi sandbox domains
+  try {
+    const host = String(window.location?.hostname || "")
+    if (/\.minepi\.com$|\.pi\.app$|pinet\.com$/i.test(host)) return true
   } catch { /* */ }
   return false
+}
+
+/** Record that the Pi bridge was observed so subsequent auth screens stay in soft-connect mode. */
+export function markPiBrowserRuntime(): void {
+  try {
+    if (typeof sessionStorage !== "undefined") sessionStorage.setItem("ghc.piBrowser", "1")
+  } catch { /* */ }
 }
 
 export function canOpenShareDialog(): boolean {
