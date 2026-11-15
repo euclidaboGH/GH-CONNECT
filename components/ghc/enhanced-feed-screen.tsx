@@ -1305,7 +1305,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
               }
             />
           ) : (
-            <div className="gh-premium-feed-list gh-feed-column gh-section-stack space-y-4 px-2 py-3 sm:px-3">
+            <div className="gh-premium-feed-list gh-feed-column gh-section-stack space-y-2 px-0 py-2 sm:space-y-3 sm:px-3 sm:py-3">
               {displayPosts.map(({ post, reason }, index) => (
                 <div key={post.id}>
                   {index > 0 && !focusMode && activeFilter === "for-you" && interstitialKindAt(index) ? (

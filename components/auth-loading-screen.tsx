@@ -4,10 +4,15 @@ import { usePiAuth } from "@/contexts/pi-auth-context"
 import { allowLocalAuthFallback } from "@/lib/system-config"
 import { BrandLogo } from "@/components/ghc/brand-logo"
 import { SignInWithPiButton } from "@/components/auth/sign-in-with-pi-button"
-import { isPiBrowserRuntime } from "@/lib/pi-native"
+import { isPiBrowserRuntime, markPiBrowserRuntime } from "@/lib/pi-native"
 
 export function AuthLoadingScreen() {
   const { authMessage, hasError, reinitialize, continueLocalPreview } = usePiAuth()
+  // Soft-connect mode: if we already know this is Pi Browser, remember it for the session
+  // so a slow SDK bridge does not surface a hard "Couldn’t sign you in".
+  if (typeof window !== "undefined" && isPiBrowserRuntime()) {
+    try { markPiBrowserRuntime() } catch { /* */ }
+  }
 
   return (
     <div className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-[#050a08] px-6">
@@ -71,7 +76,7 @@ export function AuthLoadingScreen() {
               {authMessage &&
               /server unavailable|api offline|redeploy|identity service/i.test(authMessage)
                 ? "Server temporarily unavailable"
-                : (isPiBrowserRuntime() || /Pi Browser is open|bridge is still loading|Still connecting/i.test(String(authMessage || "")))
+                : (isPiBrowserRuntime() || /Pi Browser is open|bridge is still loading|Still connecting|SDK not ready|authentication timed out|timeout|network/i.test(String(authMessage || "")))
                   ? "Still connecting to Pi"
                   : "Couldn’t sign you in"}
             </h1>

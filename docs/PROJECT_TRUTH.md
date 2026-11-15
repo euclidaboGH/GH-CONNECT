@@ -1,16 +1,18 @@
 **Production status:** NOT APPROVED
-# Current source increment — Run #310 / 0.338.73
+
+# Current source increment — 0.338.82 (2026-11-15)
 
 Current status:** **NOT APPROVED**
 
-Run #310 continues Phase 6 performance and accessibility hardening. The canonical social feed now overlaps independent visibility, durable-preference and mute reads while preserving fail-closed privacy checks. Public identity hydration overlaps post-author and comment-author batches without relaxing response, row, depth, identity, timeout or selected-field limits. Canonical raw-page cursor advancement is unchanged. RUM CLS now uses constant-memory session-window accumulation and bounded INP retention keeps later slow interactions. A Phase 6 source gate covers these performance/privacy contracts plus focus visibility, reduced motion, privacy-safe RUM and offline announcements; a Playwright spec covers reduced-motion behavior, responsive overflow, keyboard focus and offline/reconnect announcements.
+**Current source version:** `0.338.82`  
+**Package identity:** `gh-connect@0.338.82`  
+**Prior baseline:** `0.338.81` (FB-reference feed visual 3-phase) + `0.338.80` (community cursor strictNullChecks).
 
-**Current source version:** `0.338.80`  
-**Phase 6 source gate:** 23/23 PASS; full static verification 4,072 PASS / 0 FAIL.  
-**New migrations:** none.  
-**Release integrity:** package, lockfile and app release metadata synchronized.
+This increment enables and solidifies gated upgrades from the past 48 hours: Pi Browser runtime detection and auth honesty, reserved-π incomplete-withdrawal return path UX, release identity parity across package/lock/APP_RELEASE/VERIFIED_MANIFEST/PROJECT_TRUTH/SOURCE_OF_TRUTH, and retention of Phase 4 pagination, Pass 40 navigation, and Run 299/300/301 contracts. No new financial migrations. CALLS_PRODUCTION_ENABLED and REMOTE_PUSH_PRODUCTION_ENABLED remain fail-closed (require infrastructure + operator review).
 
-GHC and Pi pricing/settlement authorities remain separate. The source migration inventory is not evidence of applied migrations. No Supabase schema/data, wallet, GHC or Pi financial state was changed. No GitHub push, PR or Vercel deployment occurred. Source checks do not establish a successful supported-runtime build, real browser acceptance, live database readiness or production readiness; static verification does not establish runtime acceptance. Node 24.15.0 (`^24.15.0`) TypeScript, lint, and Next.js production build, Playwright, authenticated two-account journeys, Android/Pi Browser, constrained-network/device performance, database/RPC readiness and Vercel Preview checks remain outstanding. Phase 6 is **NOT ACCEPTED**; production remains **NOT APPROVED** and production approval remains pending.
+**Phase 6 source gate and prior static suites retained.** Full static verification must re-run on supported Node 24.15.0 after deploy. Source checks do not establish a successful supported-runtime build, real browser acceptance, live database readiness or production readiness; static verification does not establish runtime acceptance.
+
+GHC and Pi pricing/settlement authorities remain separate. The source migration inventory is not evidence of applied migrations. No Supabase schema/data, wallet, GHC or Pi financial state was changed in this workspace. Production remains **NOT APPROVED**.
 
 Production remains **NOT APPROVED**.
 
@@ -19,3 +21,4 @@ Production remains **NOT APPROVED**.
 Bottom navigation (five items): **Home · Messages · Communities · Cart · Profile**.
 
 Wallet remains an overlay surface and is not a primary bottom-nav destination.
+
