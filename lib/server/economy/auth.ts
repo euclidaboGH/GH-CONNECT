@@ -94,7 +94,7 @@ function verifyHs256Jwt(
  */
 export async function verifyPiAccessToken(
   accessToken: string
-): Promise<{ uid: string; username?: string; walletAddress?: string } | null> {
+): Promise<{ uid: string; username?: string; walletAddress?: string; scopes?: string[] } | null> {
   const env = readGhcServerEnv()
   const url = `${env.piPlatformApiUrl}/v2/me`
   try {
@@ -113,14 +113,20 @@ export async function verifyPiAccessToken(
       username?: string
       wallet_address?: string
       walletAddress?: string
+      credentials?: { scopes?: unknown }
     }
     const uid = data.uid || data.user?.uid
     if (typeof uid !== "string" || !uid) return null
     const walletAddress = data.wallet_address || data.walletAddress || data.user?.wallet_address || data.user?.walletAddress
+    // Pi's UserDTO reports the scopes the user granted in credentials.scopes.
+    const scopes = Array.isArray(data.credentials?.scopes)
+      ? (data.credentials!.scopes as unknown[]).filter((v): v is string => typeof v === "string").slice(0, 16)
+      : undefined
     return {
       uid,
       username: data.username || data.user?.username,
       ...(typeof walletAddress === "string" && walletAddress.trim() ? { walletAddress: walletAddress.trim().toUpperCase() } : {}),
+      ...(scopes ? { scopes } : {}),
     }
   } catch {
     return null

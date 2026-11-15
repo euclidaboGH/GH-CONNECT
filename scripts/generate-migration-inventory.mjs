@@ -50,6 +50,7 @@ const reviewRequired = new Set([
   '20261110125500_pi_wallet_address_binding_and_verified_a2u_diagnostics.sql',
   '20261112100001_financial_stale_hold_reaper.sql',
   '20261114100001_gh_feed_preferences_durable.sql',
+  '20261115100001_pi_wallet_scope_consent_provider_address_discovery.sql',
   '20261110210001_pi_a2u_ecosystem_qualification.sql',
   '20261110182120_community_chat_membership_revocation_and_reconciliation.sql',
   '20261110183004_community_server_filter_search_reconciliation.sql',
@@ -226,6 +227,7 @@ const notes = {
   '20261111120001_pi_earnings_release_stale_incomplete.sql': 'Run #291 payout-recovery safety correction. REVIEW_REQUIRED: only never-started Testnet reservations may be self-released. Processing/uncertain requests remain held because a missing persisted Pi payment ID does not prove that no provider payment was created. Verify the exact target migration history, service_role-only ACL, and reserve-release idempotency before applying; never use this RPC to clear uncertain payouts.',
   '20261111131500_run285_durable_message_reactions.sql': 'Run #285 durable message reactions. Additive server-only table and membership-checked SECURITY DEFINER RPC. REVIEW_REQUIRED: the current Testnet ledger has 29 applied entries without exact source files in the supplied archive. Do not apply until exact historical source restoration, disposable PostgreSQL clean replay, RLS/grant checks, and concurrent toggle tests pass.',
   '20261114100001_gh_feed_preferences_durable.sql': 'Run #308 Phase 5 durable feed preferences. Account-keyed JSONB preference store, deny-client RLS policy, bounded service_role-only read/write RPCs. REVIEW_REQUIRED: reconcile exact target migration history, validate clean replay and grants on disposable PostgreSQL, then Testnet preference isolation/two-account cross-device tests before deploying callers; no Mainnet application without separate approval.',
+  '20261115100001_pi_wallet_scope_consent_provider_address_discovery.sql': 'Run #302 Pi wallet_address scope consent without a pre-known address. Adds wallet_scope_verified_at, lets payout authorization rest on a server-verified scope grant (Pi /v2/me credentials.scopes), and adopts Pi PaymentDTO.to_address as the destination at first payout. REVIEW_REQUIRED: requires 20261110125500 applied; apply this single file to Testnet only after review, never db push. Legacy UID-only rows must re-consent.',
 }
 
 function classify(file) {

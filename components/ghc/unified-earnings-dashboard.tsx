@@ -296,8 +296,7 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
           if (aRes.ok && aJson?.ok) {
             setWalletAuthActive(
               aJson.authorizationActive === true &&
-              aJson.uidMatchesAuthorization === true &&
-              Boolean(aJson.piWalletAddress && aJson.walletAddressSource),
+              aJson.uidMatchesAuthorization === true,
             )
           } else if (aJson?.error === "WALLET_AUTHORIZATION_UNAVAILABLE") {
             setWalletAuthActive(null)
@@ -587,11 +586,13 @@ export function UnifiedEarningsDashboard({ compact = false }: { compact?: boolea
                   ? "Wallet address returned by Pi Platform API"
                   : snap.walletAuthorization?.walletAddressSource === "pi_sdk_scope"
                     ? "Wallet address reported by Pi SDK; provider match checked before payout"
-                    : "Wallet address permission required"}
+                    : snap.walletAuthorization?.authorizationActive === true
+                      ? "Wallet permission verified; Pi confirms the address at your first payout"
+                      : "Wallet address permission required"}
             </p>
           </div>
           <span className={`shrink-0 rounded-full px-2 py-1 text-[9px] font-bold ${snap.walletAuthorization?.walletAddressSource === "provider_payment" || snap.walletAuthorization?.walletAddressSource === "platform_api" ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200" : snap.walletAuthorization?.walletAddressSource === "pi_sdk_scope" ? "bg-violet-100 text-violet-800 dark:bg-violet-950/60 dark:text-violet-200" : "bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-200"}`}>
-            {walletAuthLoading ? "Checking" : snap.walletAuthorization?.walletAddressSource === "provider_payment" ? "Provider-confirmed" : snap.walletAuthorization?.walletAddressSource === "platform_api" ? "Pi API" : snap.walletAuthorization?.walletAddressSource === "pi_sdk_scope" ? "Pi SDK" : "Reconnect"}
+            {walletAuthLoading ? "Checking" : snap.walletAuthorization?.walletAddressSource === "provider_payment" ? "Provider-confirmed" : snap.walletAuthorization?.walletAddressSource === "platform_api" ? "Pi API" : snap.walletAuthorization?.walletAddressSource === "pi_sdk_scope" ? "Pi SDK" : snap.walletAuthorization?.authorizationActive === true ? "Permission verified" : "Reconnect"}
           </span>
         </div>
         {snap.walletAuthorization?.piWalletAddress ? (

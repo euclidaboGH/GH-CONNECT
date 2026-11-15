@@ -189,7 +189,7 @@ export function PiPayoutAuthorizationCard({
           </p>
           {snap?.authorizationReason === "PI_WALLET_ADDRESS_REQUIRED" || snap?.authorizationReason === "PI_WALLET_ADDRESS_UNVERIFIED" ? (
             <p className="mt-1 text-[11px] leading-relaxed text-amber-950 dark:text-amber-100">
-              Your previous Pi consent does not contain a wallet address verified by Pi's Platform API. Re-authorize below. If this repeats, check that wallet_address permission is enabled for GreenHaven in the Pi Developer Portal.
+              Your previous Pi consent did not include a verified wallet_address permission. Re-authorize below and tap Allow on the wallet-address prompt. If this repeats, check that wallet_address permission is enabled for GreenHaven in the Pi Developer Portal.
             </p>
           ) : null}
           <label className="mt-2 flex items-start gap-2 text-[12px] text-amber-950 dark:text-amber-100">

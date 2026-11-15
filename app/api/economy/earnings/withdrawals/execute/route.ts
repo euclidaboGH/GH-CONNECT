@@ -74,10 +74,11 @@ export async function POST(request:Request) {
   // create a replacement if that list has no exact match.
   const executionAttempts=Number(row.execution_attempts||0)
   const hasAmbiguousPriorAttempt=!row.provider_payment_id&&(row.status==="uncertain"||row.status==="processing"||(Number.isSafeInteger(executionAttempts)&&executionAttempts>0))
-  const expectedWalletAddress=String(row.recipient_wallet_address||wallet.piWalletAddress||"").trim().toUpperCase()
+  // The destination may still be unknown (scope-only consent): Pi surfaces it on the
+  // A2U PaymentDTO.to_address, which is adopted below before anything is submitted.
+  let expectedWalletAddress=String(row.recipient_wallet_address||wallet.piWalletAddress||"").trim().toUpperCase()
   const currentWalletAddress=String(wallet.piWalletAddress||"").trim().toUpperCase()
-  if(!expectedWalletAddress||!currentWalletAddress) return reply({ok:false,error:"PI_WALLET_ADDRESS_REQUIRED"},409)
-  if(expectedWalletAddress!==currentWalletAddress) return reply({ok:false,error:"PI_WALLET_ADDRESS_CHANGED_SINCE_REQUEST",reservationRetained:true},409)
+  if(expectedWalletAddress&&currentWalletAddress&&expectedWalletAddress!==currentWalletAddress) return reply({ok:false,error:"PI_WALLET_ADDRESS_CHANGED_SINCE_REQUEST",reservationRetained:true},409)
   const lease=randomUUID()
   const begin=await rpc<{ok:boolean;error?:string;providerPaymentId?:string|null;recipientUid:string;netPi:number;status?:string;duplicate?:boolean}>(base,key,"gh_pi_earnings_payout_begin_execution",{p_request_id:requestId,p_user_id:auth.userId,p_lease_token:lease}).catch(()=>null)
   if(!begin?.ok) return reply({ok:false,error:begin?.error||"EXECUTION_CLAIM_FAILED",retryable:begin?.error==="EXECUTION_BUSY"},begin?.error==="EXECUTION_BUSY"?409:503)
@@ -191,6 +192,25 @@ export async function POST(request:Request) {
     if(!matches(payment,{id:paymentId,requestId,uid:begin.recipientUid,amount:begin.netPi})) throw new Error("PROVIDER_PAYMENT_BINDING_MISMATCH")
     const providerToAddress=String(payment.to_address||"").trim().toUpperCase()
     if(!providerToAddress) throw new Error("PI_PROVIDER_WALLET_ADDRESS_UNAVAILABLE")
+    if(!/^G[A-Z2-7]{55}$/.test(providerToAddress)) throw new Error("PI_PROVIDER_WALLET_ADDRESS_INVALID")
+    if(!expectedWalletAddress) {
+      // First payout under a scope-only consent: bind Pi's own destination to this
+      // request and authorization. It is a no-op error if an address is already bound
+      // and differs, which falls through to the mismatch/review path below.
+      providerStage="ADOPT_PROVIDER_WALLET_ADDRESS"
+      const adopted=await rpc<{ok:boolean;error?:string;walletAddress?:string}>(base,key,"gh_pi_wallet_authorization_adopt_provider_address",{
+        p_user_id:auth.userId,p_pi_app_uid:row.recipient_pi_app_uid,p_request_id:requestId,p_provider_to_address:providerToAddress,
+      })
+      if(!adopted?.ok) {
+        if(adopted?.error==="PI_PAYOUT_WALLET_ADDRESS_MISMATCH") {
+          const queued=await enqueueA2uReview({sourceKind:"other",sourceRequestId:requestId,userId:auth.userId,reasonCode:"PI_PAYOUT_WALLET_ADDRESS_MISMATCH",providerPaymentId:paymentId,txid:paymentTxid||undefined,amountAtomic:Number(row.net_atomic),detail:`domain=pi_earnings;wallet_address_match=false;stage=adopt`}).catch(()=>({ok:false as const,error:"REVIEW_QUEUE_UNAVAILABLE"}))
+          failureCode="PI_PAYOUT_WALLET_ADDRESS_MISMATCH"
+          return reply({ok:false,error:"PI_PAYOUT_WALLET_ADDRESS_MISMATCH",retryable:false,reservationRetained:true,reviewQueued:queued.ok,requestId},409)
+        }
+        throw new Error(adopted?.error||"PI_WALLET_ADDRESS_ADOPT_FAILED")
+      }
+      expectedWalletAddress=providerToAddress
+    }
     if(providerToAddress!==expectedWalletAddress) {
       const queued=await enqueueA2uReview({sourceKind:"other",sourceRequestId:requestId,userId:auth.userId,reasonCode:"PI_PAYOUT_WALLET_ADDRESS_MISMATCH",providerPaymentId:paymentId,txid:paymentTxid||undefined,amountAtomic:Number(row.net_atomic),detail:`domain=pi_earnings;wallet_address_match=false;tx_present=${Boolean(paymentTxid)}`}).catch(()=>({ok:false as const,error:"REVIEW_QUEUE_UNAVAILABLE"}))
       failureCode="PI_PAYOUT_WALLET_ADDRESS_MISMATCH"

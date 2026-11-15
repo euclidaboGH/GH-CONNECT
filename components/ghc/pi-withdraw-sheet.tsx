@@ -38,8 +38,8 @@ function humanizeApiError(code?: string | null, message?: string | null, hints?:
   if (c === "WALLET_AUTHORIZATION_REQUIRED" || c === "PI_WALLET_ADDRESS_VERIFICATION_REQUIRED") {
     return "Reconnect your Pi wallet and approve the wallet-address permission before withdrawing. GreenHaven will check the actual provider destination before submitting any transfer."
   }
-  if (c === "PI_WALLET_ADDRESS_REQUIRED") {
-    return "Pi did not return a wallet address. Open this app in Pi Browser, approve wallet-address permission, and ensure the app is KYC-approved with wallet_address enabled in Pi Developer Portal."
+  if (c === "PI_WALLET_ADDRESS_REQUIRED" || c === "PI_WALLET_SCOPE_NOT_GRANTED") {
+    return "Pi did not confirm wallet-address permission. Open this app in Pi Browser, tap Allow on the wallet-address prompt, and ensure wallet_address is enabled for GreenHaven in the Pi Developer Portal."
   }
   if (c === "PI_WALLET_ADDRESS_INVALID" || c === "PI_WALLET_ADDRESS_MISMATCH") {
     return "Pi returned conflicting wallet details. No payout was submitted; reconnect your Pi wallet and try again."
@@ -187,7 +187,7 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
         ),
       ])
       if (res.ok) {
-        const active = res.status.authorizationActive === true && res.status.uidMatchesAuthorization === true && Boolean(res.status.piWalletAddress && res.status.walletAddressSource)
+        const active = res.status.authorizationActive === true && res.status.uidMatchesAuthorization === true
         setAuth({
           authorizationActive: active,
           mappedUsername: res.status.mappedUsername || linkedUsername || null,
@@ -818,6 +818,10 @@ export function PiWithdrawSheet({ open, onClose, availablePi, linkedUsername, on
             {auth?.piWalletAddress ? (
               <p className="font-mono text-[10px] text-violet-800/80 break-all">
                 Pi wallet address ({auth.walletAddressSource === "provider_payment" ? "provider-confirmed" : auth.walletAddressSource === "platform_api" ? "Pi API verified" : "Pi SDK-reported"}): {String(auth.piWalletAddress).slice(0, 7)}…{String(auth.piWalletAddress).slice(-6)}
+              </p>
+            ) : auth?.authorizationActive ? (
+              <p className="text-[10px] text-violet-800/80">
+                Wallet permission verified. Pi confirms your payout address when the transfer is created; nothing is sent to an unconfirmed address.
               </p>
             ) : null}
             <p>

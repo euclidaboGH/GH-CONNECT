@@ -21,7 +21,7 @@ add(!client.includes('piAuthenticateOfficial(["username", "payments", "wallet_ad
 add(runtime.includes('authResult?.user?.wallet_address || authResult?.user?.walletAddress'), 'Pi SDK wallet address extraction handles documented and camel-case SDK response variants')
 add(serverAuth.includes('data.wallet_address || data.walletAddress || data.user?.wallet_address || data.user?.walletAddress'), 'Server Pi /v2/me parsing handles top-level and nested address variants')
 add(consent.includes('Pi Platform did not independently verify it') && consent.includes('Pi Developer Portal'), 'Missing wallet scope gives actionable permission-recovery instructions')
-add(consent.includes('if (!platformWalletAddress)') && consent.includes('PI_WALLET_ADDRESS_UNVERIFIED') && !consent.includes('platformWalletAddress || sdkWalletAddress'), 'Wallet authorization still fails closed when neither trusted Pi source returns an address')
+add(consent.includes('if (!scopeGranted) return') && consent.includes('PI_WALLET_SCOPE_NOT_GRANTED') && !consent.includes('platformWalletAddress || sdkWalletAddress'), 'Wallet authorization still fails closed unless Pi /v2/me proves the wallet_address scope was granted')
 add(sheet.includes('min-h-12 w-full cursor-pointer') && sheet.includes('h-6 w-6'), 'Wallet consent remains a large accessible checkbox and tap target')
 add(/^\d+\.\d+\.\d+$/.test(pkg.version) && lock.version === pkg.version && lock.packages?.['']?.version === pkg.version, 'Package and lockfile release identity remain synchronized')
 for (const item of checks) console.log(`${item.ok ? 'PASS' : 'FAIL'} ${item.label}`)

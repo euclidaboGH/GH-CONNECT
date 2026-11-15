@@ -63,17 +63,30 @@ await t("missing SDK address is accepted only when Pi Platform independently ret
   assert.equal(result.walletAddressSource, "platform_api")
   assert.equal(calls.verify, 1)
 })
-await t("browser-only SDK address is never trusted when Pi Platform omits the address", async () => {
-  const { deps: d, calls } = deps({ verifyPiAccessToken: async () => { calls.verify++; return { uid: "pi-uid-1", username: "alice" } } })
-  assert.deepEqual(await verifyWalletConsentProof(good, d), { ok: false, error: "PI_WALLET_ADDRESS_UNVERIFIED" })
+await t("SDK address is provisional (pi_sdk_scope) only when Pi /v2/me confirms the wallet_address scope", async () => {
+  const { deps: d, calls } = deps({ verifyPiAccessToken: async () => { calls.verify++; return { uid: "pi-uid-1", username: "alice", scopes: ["wallet_address"] } } })
+  const r = await verifyWalletConsentProof(good, d)
+  assert.equal(r.ok, true)
+  assert.equal(r.piWalletAddress, PI_WALLET_ADDRESS)
+  assert.equal(r.walletAddressSource, "pi_sdk_scope")
   assert.equal(calls.byGh, 1)
   assert.equal(calls.byPi, 1)
 })
-await t("missing SDK and Platform addresses return a distinct missing-address failure", async () => {
-  const { deps: d, calls } = deps({ verifyPiAccessToken: async () => { calls.verify++; return { uid: "pi-uid-1", username: "alice" } } })
+await t("scope granted but no address anywhere records scope_only consent (Pi supplies the address at payout)", async () => {
+  const { deps: d, calls } = deps({ verifyPiAccessToken: async () => { calls.verify++; return { uid: "pi-uid-1", username: "alice", scopes: ["username", "wallet_address"] } } })
   const { walletAddress, ...withoutAddress } = good
-  assert.deepEqual(await verifyWalletConsentProof(withoutAddress, d), { ok: false, error: "PI_WALLET_ADDRESS_REQUIRED" })
-  assert.equal(calls.verify, 1)
+  const r = await verifyWalletConsentProof(withoutAddress, d)
+  assert.equal(r.ok, true)
+  assert.equal(r.piWalletAddress, null)
+  assert.equal(r.walletAddressSource, "scope_only")
+  assert.equal(r.piAppUid, "pi-uid-1")
+})
+await t("browser claims alone never authorize: no wallet_address scope reported by Pi is rejected", async () => {
+  const { deps: d, calls } = deps({ verifyPiAccessToken: async () => { calls.verify++; return { uid: "pi-uid-1", username: "alice" } } })
+  assert.deepEqual(await verifyWalletConsentProof(good, d), { ok: false, error: "PI_WALLET_SCOPE_NOT_GRANTED" })
+  const { deps: d2 } = deps({ verifyPiAccessToken: async () => ({ uid: "pi-uid-1", scopes: ["username", "payments"] }) })
+  const { walletAddress, ...withoutAddress } = good
+  assert.deepEqual(await verifyWalletConsentProof(withoutAddress, d2), { ok: false, error: "PI_WALLET_SCOPE_NOT_GRANTED" })
 })
 await t("server-returned wallet address must match Pi SDK address", async () => {
   const { deps: d } = deps({ verifyPiAccessToken: async () => ({ uid: "pi-uid-1", walletAddress: `G${"B".repeat(55)}` }) })
@@ -121,4 +134,4 @@ await t("every failure has a safe message and an HTTP status; none leak internal
   }
 })
 
-console.log(`\nPhase 28 wallet consent tests: ${passed}/14 passed`)
+console.log(`\nPhase 28 wallet consent tests: ${passed}/15 passed`)

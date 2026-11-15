@@ -23,13 +23,26 @@ export type WalletConsentFailure =
   | "PI_WALLET_ADDRESS_UNVERIFIED"
   | "PI_WALLET_ADDRESS_INVALID"
   | "PI_WALLET_ADDRESS_MISMATCH"
+  | "PI_WALLET_SCOPE_NOT_GRANTED"
 
+/**
+ * `piWalletAddress` is null (source "scope_only") when Pi confirmed the
+ * wallet_address scope grant but did not expose the address itself. Pi surfaces
+ * the destination on the A2U PaymentDTO.to_address; the payout worker adopts it
+ * from there and refuses to submit unless it is a valid address.
+ */
 export type WalletConsentVerification =
-  | { ok: true; piAppUid: string; piUsername: string | null; piWalletAddress: string; walletAddressSource: "platform_api" }
+  | {
+      ok: true
+      piAppUid: string
+      piUsername: string | null
+      piWalletAddress: string | null
+      walletAddressSource: "platform_api" | "pi_sdk_scope" | "scope_only"
+    }
   | { ok: false; error: WalletConsentFailure }
 
 export type WalletConsentDeps = {
-  verifyPiAccessToken: (token: string) => Promise<{ uid: string; username?: string; walletAddress?: string } | null>
+  verifyPiAccessToken: (token: string) => Promise<{ uid: string; username?: string; walletAddress?: string; scopes?: string[] } | null>
   getByGhUserId: (ghUserId: string) => Promise<{ ghUserId: string; piAppUid: string; piUsername?: string | null } | null>
   getByPiAppUid: (piAppUid: string) => Promise<{ ghUserId: string; piAppUid: string } | null>
 }
@@ -43,8 +56,10 @@ export async function verifyWalletConsentProof(
   // Explicit consent must be the literal boolean true — never truthy strings.
   if (input.consent !== true) return { ok: false, error: "CONSENT_REQUIRED" }
 
-  // The SDK value is used only as a consistency check. It is browser-controlled
-  // request data and MUST NEVER become the stored payout destination by itself.
+  // The SDK address is untrusted request data. It is compared with Pi's Platform
+  // response when present, and is stored only as a provisional destination
+  // (source "pi_sdk_scope") after Pi /v2/me has confirmed the granted scope. The
+  // payout worker compares it with Pi's PaymentDTO.to_address before any submit.
   const sdkWalletAddress = typeof input.walletAddress === "string" ? input.walletAddress.trim().toUpperCase() : ""
   if (sdkWalletAddress && !/^G[A-Z2-7]{55}$/.test(sdkWalletAddress)) {
     return { ok: false, error: "PI_WALLET_ADDRESS_INVALID" }
@@ -77,8 +92,10 @@ export async function verifyWalletConsentProof(
   // …and that Pi UID must resolve back to the same GH account (no cross-account authorization).
   if (!reverse || reverse.ghUserId !== ghUserId || reverse.piAppUid !== verifiedPiUid) return { ok: false, error: "IDENTITY_MISMATCH" }
 
-  // Only /v2/me can attest the wallet address server-side. The SDK field is
-  // untrusted request data and is compared when present, never used as fallback.
+  // Server-side proof of consent. Pi's /v2/me reports the scopes the user actually
+  // granted (credentials.scopes); it is the only trusted evidence that the
+  // wallet_address permission was approved for THIS token. The browser's claim is
+  // never trusted for consent.
   const platformWalletAddress = String(piUser.walletAddress || "").trim().toUpperCase()
   if (platformWalletAddress && !/^G[A-Z2-7]{55}$/.test(platformWalletAddress)) {
     return { ok: false, error: "PI_WALLET_ADDRESS_INVALID" }
@@ -86,18 +103,35 @@ export async function verifyWalletConsentProof(
   if (platformWalletAddress && sdkWalletAddress && platformWalletAddress !== sdkWalletAddress) {
     return { ok: false, error: "PI_WALLET_ADDRESS_MISMATCH" }
   }
-  if (!platformWalletAddress) {
-    return { ok: false, error: sdkWalletAddress ? "PI_WALLET_ADDRESS_UNVERIFIED" : "PI_WALLET_ADDRESS_REQUIRED" }
-  }
-  const piWalletAddress = platformWalletAddress
-  const walletAddressSource = "platform_api" as const
+  const scopeGranted = Array.isArray(piUser.scopes) && piUser.scopes.includes("wallet_address")
+  // Booleans only: never log tokens, uids or addresses.
+  console.info("[wallet-consent] pi proof shape", {
+    scopeGranted,
+    scopesReported: Array.isArray(piUser.scopes),
+    sdkAddressPresent: Boolean(sdkWalletAddress),
+    platformAddressPresent: Boolean(platformWalletAddress),
+  })
 
+  if (platformWalletAddress) {
+    return {
+      ok: true,
+      piAppUid: mapping.piAppUid,
+      piUsername: mapping.piUsername ?? piUser.username ?? null,
+      piWalletAddress: platformWalletAddress,
+      walletAddressSource: "platform_api",
+    }
+  }
+  if (!scopeGranted) return { ok: false, error: "PI_WALLET_SCOPE_NOT_GRANTED" }
+
+  // Scope granted. Prefer the SDK-reported address as a provisional destination
+  // (checked against Pi's PaymentDTO.to_address before any transfer is submitted);
+  // otherwise record the consent and let Pi's PaymentDTO supply the address.
   return {
     ok: true,
     piAppUid: mapping.piAppUid,
     piUsername: mapping.piUsername ?? piUser.username ?? null,
-    piWalletAddress,
-    walletAddressSource,
+    piWalletAddress: sdkWalletAddress || null,
+    walletAddressSource: sdkWalletAddress ? "pi_sdk_scope" : "scope_only",
   }
 }
 
@@ -109,7 +143,8 @@ export const WALLET_CONSENT_MESSAGES: Record<WalletConsentFailure, string> = {
   IDENTITY_MAPPING_REQUIRED: "Sign in with Pi so GreenHaven can link your Pi identity before authorizing withdrawals.",
   IDENTITY_MISMATCH: "Your authenticated Pi account does not match the Pi account linked to this GreenHaven account.",
   IDENTITY_LOOKUP_UNAVAILABLE: "Identity verification is temporarily unavailable. Withdrawals remain blocked; please try again shortly.",
-  PI_WALLET_ADDRESS_REQUIRED: "Pi did not return a wallet address for this account. No authorization or withdrawal was created. Reopen the registered GreenHaven app in Pi Browser and approve wallet-address access. If Pi does not prompt, confirm wallet_address is enabled for GreenHaven in the Pi Developer Portal.",
+  PI_WALLET_ADDRESS_REQUIRED: "Pi did not confirm wallet-address access for this account. No authorization or withdrawal was created. Reopen the registered GreenHaven app in Pi Browser and approve wallet-address access. If Pi does not prompt, confirm wallet_address is enabled for GreenHaven in the Pi Developer Portal.",
+  PI_WALLET_SCOPE_NOT_GRANTED: "Pi did not report wallet-address permission for this sign-in. No authorization or withdrawal was created. Retry, tap Allow on the wallet-address prompt, and confirm wallet_address is enabled for GreenHaven in the Pi Developer Portal.",
   PI_WALLET_ADDRESS_UNVERIFIED: "Pi returned a wallet address in the browser, but the Pi Platform did not independently verify it. GreenHaven cannot safely authorize withdrawals yet. Check that wallet_address permission is enabled for this app in the Pi Developer Portal, then retry in Pi Browser. Never enter an address manually.",
   PI_WALLET_ADDRESS_INVALID: "Pi returned an invalid wallet address. No payout authorization was changed.",
   PI_WALLET_ADDRESS_MISMATCH: "The wallet address from Pi authentication did not match Pi's server response. No payout authorization was changed.",
@@ -129,6 +164,7 @@ export function walletConsentFailureStatus(error: WalletConsentFailure): number 
     case "IDENTITY_LOOKUP_UNAVAILABLE":
       return 503
     case "PI_WALLET_ADDRESS_REQUIRED":
+    case "PI_WALLET_SCOPE_NOT_GRANTED":
     case "PI_WALLET_ADDRESS_UNVERIFIED":
     case "PI_WALLET_ADDRESS_MISMATCH":
       return 409

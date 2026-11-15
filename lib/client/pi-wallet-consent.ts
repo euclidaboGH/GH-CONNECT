@@ -25,6 +25,7 @@ export type WalletConsentErrorCode =
   | "PI_WALLET_ADDRESS_UNVERIFIED"
   | "PI_WALLET_ADDRESS_INVALID"
   | "PI_WALLET_ADDRESS_MISMATCH"
+  | "PI_WALLET_SCOPE_NOT_GRANTED"
   | "IDENTITY_MISMATCH"
   | "IDENTITY_MAPPING_REQUIRED"
   | "IDENTITY_LOOKUP_UNAVAILABLE"
@@ -45,6 +46,10 @@ export type WalletAuthorizationStatus = {
   piWalletAddress?: string | null
   walletAddressSource?: "platform_api" | "pi_sdk_scope" | "provider_payment" | null
   walletAddressVerifiedAt?: string | null
+  /** Set once the server verified the wallet_address scope grant with Pi. */
+  walletScopeVerifiedAt?: string | null
+  /** True while Pi has not yet supplied the destination (confirmed at first payout). */
+  walletAddressPending?: boolean
   authorizationReason?: string | null
 }
 
@@ -57,7 +62,8 @@ const MESSAGES: Record<WalletConsentErrorCode, string> = {
   PI_AUTH_UNAVAILABLE: "Pi authentication bridge is not ready. Stay in Pi Browser and retry. If this persists, reopen the app from Pi → Develop.",
   PI_TOKEN_REQUIRED: "Pi authentication is required. Please retry Pi authentication.",
   PI_TOKEN_INVALID: "Pi authentication could not be verified. Please retry Pi authentication.",
-  PI_WALLET_ADDRESS_REQUIRED: "Pi did not return a wallet address for this account. No authorization or withdrawal was created. Reopen the registered GreenHaven app in Pi Browser and approve wallet-address access. If Pi does not prompt, confirm wallet_address is enabled for GreenHaven in the Pi Developer Portal.",
+  PI_WALLET_ADDRESS_REQUIRED: "Pi did not confirm wallet-address access for this account. No authorization or withdrawal was created. Reopen the registered GreenHaven app in Pi Browser and approve wallet-address access. If Pi does not prompt, confirm wallet_address is enabled for GreenHaven in the Pi Developer Portal.",
+  PI_WALLET_SCOPE_NOT_GRANTED: "Pi did not report wallet-address permission for this sign-in. No authorization or withdrawal was created. Retry, tap Allow on the wallet-address prompt, and confirm wallet_address is enabled for GreenHaven in the Pi Developer Portal.",
   PI_WALLET_ADDRESS_UNVERIFIED: "Pi returned an address in the browser, but its Platform API did not independently verify it. Check that wallet_address permission is enabled for GreenHaven in the Pi Developer Portal, then retry in Pi Browser. No withdrawal was started.",
   PI_WALLET_ADDRESS_INVALID: "Pi returned an invalid wallet address. No payout authorization was changed.",
   PI_WALLET_ADDRESS_MISMATCH: "Pi returned conflicting wallet details. No payout authorization was changed.",
@@ -111,6 +117,8 @@ export async function fetchWalletAuthorizationStatus(signal?: AbortSignal): Prom
       piWalletAddress?: string | null
       walletAddressSource?: "platform_api" | "pi_sdk_scope" | "provider_payment" | null
       walletAddressVerifiedAt?: string | null
+      walletScopeVerifiedAt?: string | null
+      walletAddressPending?: boolean
       authorizationReason?: string | null
     } | null
     if (!res.ok || body?.ok !== true) {
@@ -120,7 +128,10 @@ export async function fetchWalletAuthorizationStatus(signal?: AbortSignal): Prom
     return {
       ok: true,
       status: {
-        authorizationActive: body.authorizationActive === true && uidMatches && (body.walletAddressSource === "platform_api" || body.walletAddressSource === "provider_payment") && Boolean(body.piWalletAddress && body.walletAddressVerifiedAt),
+        // Active = server-verified wallet_address scope for the mapped UID. A bound
+        // address, when present, must carry a known source; a pending address is
+        // confirmed from Pi's PaymentDTO.to_address at the first payout.
+        authorizationActive: body.authorizationActive === true && uidMatches && Boolean(body.walletScopeVerifiedAt) && (!body.piWalletAddress || Boolean(body.walletAddressSource)),
         uidMatchesAuthorization: uidMatches,
         hasMapping: body.hasMapping === true,
         mappedUsername: body.mappedUsername ?? null,
@@ -128,6 +139,8 @@ export async function fetchWalletAuthorizationStatus(signal?: AbortSignal): Prom
         piWalletAddress: body.piWalletAddress ?? null,
         walletAddressSource: body.walletAddressSource ?? null,
         walletAddressVerifiedAt: body.walletAddressVerifiedAt ?? null,
+        walletScopeVerifiedAt: body.walletScopeVerifiedAt ?? null,
+        walletAddressPending: body.walletAddressPending === true,
         authorizationReason: body.authorizationReason ?? null,
       },
     }
@@ -182,7 +195,8 @@ async function performPiWalletConsent(): Promise<WalletConsentResult> {
     accessToken = pi.accessToken
     const walletAddress = String(pi.walletAddress || "").trim().toUpperCase() || null
     if (walletAddress && !/^G[A-Z2-7]{55}$/.test(walletAddress)) return fail("PI_WALLET_ADDRESS_INVALID")
-    // Missing SDK data is not conclusive; the server verifies the token with Pi /v2/me.
+    // A missing SDK address is not an error: the server verifies the granted scope
+    // with Pi /v2/me, and Pi's A2U PaymentDTO supplies the destination at payout.
     const response = await postConsent(accessToken, walletAddress)
     if (!response) return fail("NETWORK_ERROR")
     const { status, body } = response

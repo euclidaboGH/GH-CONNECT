@@ -4,11 +4,11 @@ inventory_status=OK
 duplicate_version_prefixes=
 project_version=0.338.85
 manifest_format_version=1
-canonical_migrations=223
+canonical_migrations=224
 classification_required=119
 classification_requires_approval=1
 classification_proposal=2
-classification_review_required=101
+classification_review_required=102
 source=supabase/migrations/*.sql
 
 IMPORTANT: This manifest inventories repository files only. It does NOT prove migrations are applied to any Supabase project.
@@ -245,3 +245,4 @@ ALL_MIGRATIONS_ORDERED_FOR_REVIEW:
 [REVIEW_REQUIRED] size=3832 path=supabase/migrations/20261111131500_run285_durable_message_reactions.sql
 [REVIEW_REQUIRED] size=7793 path=supabase/migrations/20261112100001_financial_stale_hold_reaper.sql
 [REVIEW_REQUIRED] size=6600 path=supabase/migrations/20261114100001_gh_feed_preferences_durable.sql
+[REVIEW_REQUIRED] size=17829 path=supabase/migrations/20261115100001_pi_wallet_scope_consent_provider_address_discovery.sql

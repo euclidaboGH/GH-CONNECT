@@ -119,22 +119,24 @@ export async function POST(request: Request) {
   // authorization back through the independent status RPC and require an
   // active record for the exact currently mapped Pi UID.
   const verified = await getWalletAuthorization(auth.userId)
+  const expectedAddress = mapping.piWalletAddress || null
+  const readbackAddress = verified.piWalletAddress || null
   if (
     !verified.ok ||
     verified.authorizationActive !== true ||
     verified.uidMatchesAuthorization !== true ||
     verified.authorizedPiAppUid !== mapping.piAppUid ||
-    verified.piWalletAddress !== mapping.piWalletAddress ||
-    verified.walletAddressSource !== mapping.walletAddressSource ||
-    verified.walletAddressSource !== "platform_api" ||
-    !verified.walletAddressVerifiedAt
+    readbackAddress !== expectedAddress ||
+    !verified.walletScopeVerifiedAt ||
+    (expectedAddress && mapping.walletAddressSource !== "scope_only" && verified.walletAddressSource !== mapping.walletAddressSource) ||
+    (mapping.walletAddressSource === "platform_api" && !verified.walletAddressVerifiedAt)
   ) {
     const readbackCode = verified.error || (
       verified.uidMatchesAuthorization !== true || verified.authorizedPiAppUid !== mapping.piAppUid
         ? "IDENTITY_MISMATCH"
-        : verified.piWalletAddress !== mapping.piWalletAddress
+        : readbackAddress !== expectedAddress
           ? "PI_WALLET_ADDRESS_MISMATCH"
-          : verified.walletAddressSource !== "platform_api" || !verified.walletAddressVerifiedAt
+          : !verified.walletScopeVerifiedAt
             ? "PI_WALLET_ADDRESS_UNVERIFIED"
             : verified.authorizationReason || "AUTHORIZATION_NOT_CONFIRMED"
     )
@@ -164,10 +166,14 @@ export async function POST(request: Request) {
     piWalletAddress: verified.piWalletAddress,
     walletAddressSource: verified.walletAddressSource,
     walletAddressVerifiedAt: verified.walletAddressVerifiedAt,
+    walletScopeVerifiedAt: verified.walletScopeVerifiedAt,
+    walletAddressPending: verified.walletAddressPending === true,
     status: "active",
     authorizationActive: true,
     uidMatchesAuthorization: true,
-    message: "Pi wallet authorization granted and verified for App-to-User payouts to your linked identity.",
+    message: verified.walletAddressPending === true
+      ? "Pi wallet permission verified. Pi will confirm your wallet address when your first payout is created."
+      : "Pi wallet authorization granted and verified for App-to-User payouts to your linked identity.",
   })
 }
 
