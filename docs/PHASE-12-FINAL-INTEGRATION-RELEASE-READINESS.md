@@ -1,3 +1,7 @@
+Release: `0.338.79`
+**Current source baseline:** `0.338.79`
+**Production status: NOT APPROVED for production**
+
 Release: `0.338.78`
 **Current source baseline:** `0.338.78`
 **Production status: NOT APPROVED for production**

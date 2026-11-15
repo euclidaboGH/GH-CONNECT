@@ -1,8 +1,8 @@
 # Current source authority — Run #310 / 0.338.73 (2026-11-15)
 
 **Current working candidate:** `0.338.73`, derived from Run #309 / `0.338.72`.
-**Current source version:** `0.338.78`
-**Package identity:** `gh-connect@0.338.78` (the user-facing brand remains GREENHAVEN).
+**Current source version:** `0.338.79`
+**Package identity:** `gh-connect@0.338.79` (the user-facing brand remains GREENHAVEN).
 **Original uploaded authority:** `GREENHAVEN-0.338.72-PHASE6-PERFORMANCE-ACCESSIBILITY-2026-11-14.zip`, SHA-256 `d8271fb74d1440e6397346e5b8e346de538923d3938470eac5f46feb2ec71f3c`. The 0.338.73 candidate is a derived upgrade; it supersedes the working candidate only after user acceptance.
 
 Run #310 continues Phase 6 performance/accessibility hardening. The feed route executes independent visibility, preference and mute reads concurrently, retaining fail-closed privacy behavior. Post-author and comment-author profile hydration now run as concurrent bounded batches; the canonical public profile field allowlist, 500-row/12-depth/100-identity limits, 1 MiB response bound and 5-second upstream timeout remain. Raw-page cursor progression is unchanged. Added a 23/23 Phase 6 source gate and Playwright checks for reduced motion, narrow-to-desktop overflow, keyboard focus traversal and offline/reconnect announcements. RUM CLS tracking now uses a constant-memory session-window accumulator rather than retaining up to 500 layout-shift objects per surface. Bounded INP retention now replaces fast early samples with later slower interactions, improving the capped sample set. Regression tests cover both changes.
