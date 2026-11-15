@@ -1,10 +1,10 @@
-# Current source increment — Run #310 / 0.338.75
+# Current source increment — Run #310 / 0.338.73
 
 Current status:** **NOT APPROVED**
 
 Run #310 continues Phase 6 performance and accessibility hardening. The canonical social feed now overlaps independent visibility, durable-preference and mute reads while preserving fail-closed privacy checks. Public identity hydration overlaps post-author and comment-author batches without relaxing response, row, depth, identity, timeout or selected-field limits. Canonical raw-page cursor advancement is unchanged. RUM CLS now uses constant-memory session-window accumulation and bounded INP retention keeps later slow interactions. A Phase 6 source gate covers these performance/privacy contracts plus focus visibility, reduced motion, privacy-safe RUM and offline announcements; a Playwright spec covers reduced-motion behavior, responsive overflow, keyboard focus and offline/reconnect announcements.
 
-**Current source version:** `0.338.75`  
+**Current source version:** `0.338.76`  
 **Phase 6 source gate:** 23/23 PASS; full static verification 4,072 PASS / 0 FAIL.  
 **New migrations:** none.  
 **Release integrity:** package, lockfile and app release metadata synchronized.

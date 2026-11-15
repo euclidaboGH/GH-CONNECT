@@ -1,7 +1,7 @@
-Release: `0.338.75`
+Release: `0.338.73`
 **Production status: NOT APPROVED for production**
 
-**Current source baseline:** `0.338.75`
+**Current source baseline:** `0.338.73`
 
 This source-only release record is not production approval. Production approval remains pending supported-runtime build, database migration reconciliation, provider and authenticated browser/device acceptance.
 
