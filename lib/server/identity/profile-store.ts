@@ -6,6 +6,7 @@
 
 import { readGhcServerEnv, hasPrivilegedDatabase } from "@/lib/server/economy/env"
 import { sanitizeBusinessIdentityPayload, sanitizeProfessionalIdentityPayload } from "@/lib/profile/professional-identity"
+import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
 
 export type ServerProfileRecord = {
   ghUserId: string
@@ -315,15 +316,8 @@ async function dbSelect(ghUserId: string): Promise<ServerProfileRecord | null> {
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return null
   try {
-    const url = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_user_profiles?gh_user_id=eq.${encodeURIComponent(ghUserId)}&select=*&limit=1`
-    const res = await fetch(url, {
-      headers: {
-        apikey: env.supabaseServiceRoleKey,
-        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-        Accept: "application/json",
-      },
-      cache: "no-store",
-    })
+    const restResult = await supabaseRest(`gh_user_profiles?gh_user_id=eq.${encodeURIComponent(ghUserId)}&select=*&limit=1`, { method: "GET", timeoutMs: 10000 })
+    const res = { ok: restResult.ok, status: restResult.status, json: async () => restResult.ok ? restResult.data : restResult.body, text: async () => JSON.stringify(restResult.ok ? restResult.data : restResult.body) }
     if (!res.ok) return null
     const rows = (await res.json()) as DbRow[]
     if (!Array.isArray(rows) || !rows[0]) return null
@@ -361,19 +355,8 @@ async function dbUpsert(rec: ServerProfileRecord): Promise<ServerProfileRecord |
     updated_at: new Date(rec.updatedAt).toISOString(),
   }
   try {
-    const url = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_user_profiles?on_conflict=gh_user_id`
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: env.supabaseServiceRoleKey,
-        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-        Prefer: "resolution=merge-duplicates,return=representation",
-        Accept: "application/json",
-      },
-      body: JSON.stringify(body),
-      cache: "no-store",
-    })
+    const restResult = await supabaseRest(`gh_user_profiles?on_conflict=gh_user_id`, { method: "POST", body: JSON.stringify(body), timeoutMs: 10000 })
+    const res = { ok: restResult.ok, status: restResult.status, json: async () => restResult.ok ? restResult.data : restResult.body, text: async () => JSON.stringify(restResult.ok ? restResult.data : restResult.body) }
     if (!res.ok) {
       console.error("[profile-store] upsert failed", res.status)
       return null

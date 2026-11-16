@@ -7,6 +7,7 @@ import { getWithdrawableBalance, getEarningsBalances } from "@/lib/server/earnin
 import { getCharityUserSummary } from "@/lib/server/earnings/platform-utility"
 import { readGhcServerEnv, hasPrivilegedDatabase } from "@/lib/server/economy/env"
 import { ASSET_POLICY } from "@/lib/asset-separation"
+import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
 
 export type CrossFeatureFinding = {
   code: string
@@ -84,18 +85,7 @@ async function probeCashback(userId: string): Promise<{
     return { probed: false, featureAvailable: false, error: "CASHBACK_DATABASE_UNAVAILABLE" }
   }
   try {
-    const response = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/gh_pi_cashback_user_statement`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        apikey: env.supabaseServiceRoleKey,
-        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-      },
-      body: JSON.stringify({ p_user_id: userId, p_limit: 1 }),
-      cache: "no-store",
-      signal: AbortSignal.timeout(8_000),
-    })
+    const response = await (async () => { const rpcResult = await supabaseRpc('gh_pi_cashback_user_statement', { p_user_id: userId, p_limit: 1 }, { timeoutMs: 8000 }); return { ok: rpcResult.ok, status: rpcResult.status, json: async () => rpcResult.ok ? rpcResult.data : (rpcResult.body ?? null) }; })()
     const payload = await response.json().catch(() => null) as Record<string, unknown> | null
     if (!response.ok || !payload || payload.ok !== true || payload.featureAvailable !== true) {
       return { probed: true, featureAvailable: false, error: "CASHBACK_STATEMENT_UNAVAILABLE" }

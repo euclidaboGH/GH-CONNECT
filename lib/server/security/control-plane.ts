@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { checkRateLimit as localRateLimit, type RateLimitResult } from "@/lib/server/economy/rate-limit"
 import { assertDurableRateLimitInput, getDurableRateLimitFailure, parseDurableRateLimitResult } from "@/lib/server/security/rate-limit-contract"
+import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
 
 function hashKey(key: string): string {
   return createHash("sha256").update(key, "utf8").digest("hex")
@@ -11,17 +12,7 @@ async function rpc(name: string, body: Record<string, unknown>): Promise<unknown
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return null
   try {
-    const res = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/${name}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: env.supabaseServiceRoleKey,
-        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-      },
-      body: JSON.stringify(body),
-      cache: "no-store",
-      signal: AbortSignal.timeout(5000),
-    })
+    const res = await (async () => { const r = await supabaseRpc('${name}', typeof JSON.stringify(body) === "string" ? JSON.parse(JSON.stringify(body)) : JSON.stringify(body), { timeoutMs: 5000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
     if (!res.ok) return null
     return await res.json().catch(() => null)
   } catch { return null }

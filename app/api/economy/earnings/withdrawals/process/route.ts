@@ -24,8 +24,8 @@ export async function POST(request: Request) {
   if (process.env.PI_EARNINGS_AUTO_EXECUTE !== "true") {
     return reply({ ok: false, error: "PI_EARNINGS_AUTO_EXECUTE_DISABLED" }, 503)
   }
-  const key = String(process.env.PI_EARNINGS_EXECUTOR_KEY || process.env.GHC_A2U_ADMIN_KEY || "")
-  if (key.length < 16) return reply({ ok: false, error: "EXECUTOR_KEY_NOT_CONFIGURED" }, 503)
+  const key = String(process.env.PI_EARNINGS_EXECUTOR_KEY || "").trim()
+  if (Buffer.byteLength(key, "utf8") < 32) return reply({ ok: false, error: "EXECUTOR_KEY_NOT_CONFIGURED" }, 503)
 
   const boundedBody = await readBoundedText(request, 8 * 1024)
   if (!boundedBody.ok) return reply({ ok: false, error: boundedBody.error === "REQUEST_TOO_LARGE" ? "REQUEST_TOO_LARGE" : "INVALID_BODY" }, boundedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400)

@@ -11,9 +11,13 @@ const nextConfig = {
     ignoreBuildErrors: false,
   },
   images: {
-    unoptimized: true,
+    // Phase 4: enable Next image optimisation when GHC_IMAGE_OPTIMIZATION=1.
+    // Default remains unoptimized for Pi Browser / mixed CDN compatibility.
+    unoptimized: process.env.GHC_IMAGE_OPTIMIZATION === "1" ? false : true,
     remotePatterns: [
       { protocol: "https", hostname: "api.dicebear.com", pathname: "/**" },
+      { protocol: "https", hostname: "**.supabase.co", pathname: "/storage/v1/object/public/**" },
+      { protocol: "https", hostname: "**.minepi.com", pathname: "/**" },
     ],
   },
   poweredByHeader: false,

@@ -7,6 +7,10 @@ import { fileURLToPath } from 'node:url'
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const dir = join(root, 'supabase', 'migrations')
 const files = (await readdir(dir)).filter((name) => /^\d{14}_.+\.sql$/.test(name)).sort()
+// Held proposals are scanned too: they must meet the same RLS bar before anyone promotes them.
+const proposalDir = join(root, 'supabase', 'proposals')
+const proposalFiles = (await readdir(proposalDir).catch(() => [])).filter((name) => /\.sql$/.test(name)).sort()
+const sourcePaths = [...files.map((f) => join(dir, f)), ...proposalFiles.map((f) => join(proposalDir, f))]
 
 function stripSqlComments(sql) {
   let out = '', i = 0, mode = 'normal'
@@ -28,8 +32,8 @@ function stripSqlComments(sql) {
 }
 
 const created = new Set(), enabled = new Set(), policyTables = new Set()
-for (const file of files) {
-  const sql = stripSqlComments(await readFile(join(dir, file), 'utf8'))
+for (const path of sourcePaths) {
+  const sql = stripSqlComments(await readFile(path, 'utf8'))
   for (const m of sql.matchAll(/\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:public\.)?([a-z_][\w$]*)/gi)) created.add(m[1].toLowerCase())
   for (const m of sql.matchAll(/\bALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:public\.)?([a-z_][\w$]*)\s+ENABLE\s+ROW\s+LEVEL\s+SECURITY\b/gi)) enabled.add(m[1].toLowerCase())
   for (const m of sql.matchAll(/\bCREATE\s+POLICY\s+[\w"]+\s+ON\s+(?:public\.)?([a-z_][\w$]*)/gi)) policyTables.add(m[1].toLowerCase())
@@ -53,6 +57,6 @@ if (missingRls.length) failures.push(`Tables without explicit ENABLE ROW LEVEL S
 if (unreviewedNoPolicy.length) failures.push(`Tables without policies and without explicit service-managed review: ${unreviewedNoPolicy.join(', ')}`)
 if (staleAllowlist.length) failures.push(`Service-managed no-policy allowlist needs review: ${staleAllowlist.join(', ')}`)
 if (failures.length) { console.error(failures.map((failure) => `FAIL ${failure}`).join('\n')); process.exit(1) }
-console.log(`PASS static RLS coverage: ${created.size} executable table names have explicit RLS enablement.`)
+console.log(`PASS static RLS coverage: ${created.size} executable table names have explicit RLS enablement (migrations + ${proposalFiles.length} held proposals).`)
 console.log(`PASS policy review: ${policyTables.size} tables have policy definitions; ${serviceManagedWithoutClientPolicy.size} no-policy tables are explicitly allowlisted for operator/service-role review.`)
 console.log('LIMIT: source inspection does not prove deployed RLS state, grants, policy correctness, or service-role isolation. Verify each target database independently.')

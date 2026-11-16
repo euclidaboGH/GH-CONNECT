@@ -7,6 +7,7 @@
  */
 import { randomBytes, randomInt, scryptSync, timingSafeEqual } from "node:crypto"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
 
 export const QUESTION_BANK: Record<string, string> = {
   birth_city: "In which town or city were you born?",
@@ -69,18 +70,7 @@ async function recoveryRpc(name: string, body: Record<string, unknown>): Promise
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return { ok: false, error: "RECOVERY_SERVICE_UNAVAILABLE" }
   try {
-    const response = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/${name}`, {
-      method: "POST",
-      headers: {
-        apikey: env.supabaseServiceRoleKey,
-        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify(body),
-      cache: "no-store",
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    })
+    const response = await (async () => { const r = await supabaseRpc('${name}', typeof JSON.stringify(body) === "string" ? JSON.parse(JSON.stringify(body)) : JSON.stringify(body), { timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
     const data = (await response.json().catch(() => null)) as RecoveryRpc | null
     if (!response.ok) {
       const code = typeof data?.error === "string" ? data.error : typeof data?.code === "string" ? data.code : undefined

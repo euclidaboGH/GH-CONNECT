@@ -26,6 +26,7 @@ export type WalletConsentErrorCode =
   | "PI_WALLET_ADDRESS_INVALID"
   | "PI_WALLET_ADDRESS_MISMATCH"
   | "PI_WALLET_SCOPE_NOT_GRANTED"
+  | "WALLET_SCOPE_MIGRATION_REQUIRED"
   | "IDENTITY_MISMATCH"
   | "IDENTITY_MAPPING_REQUIRED"
   | "IDENTITY_LOOKUP_UNAVAILABLE"
@@ -63,6 +64,7 @@ const MESSAGES: Record<WalletConsentErrorCode, string> = {
   PI_TOKEN_REQUIRED: "Pi authentication is required. Please retry Pi authentication.",
   PI_TOKEN_INVALID: "Pi authentication could not be verified. Please retry Pi authentication.",
   PI_WALLET_ADDRESS_REQUIRED: "Pi did not confirm wallet-address access for this account. No authorization or withdrawal was created. Reopen the registered GreenHaven app in Pi Browser and approve wallet-address access. If Pi does not prompt, confirm wallet_address is enabled for GreenHaven in the Pi Developer Portal.",
+  WALLET_SCOPE_MIGRATION_REQUIRED: "Pi confirmed your wallet permission, but GreenHaven's payout database has not been upgraded yet. Nothing was changed and no Pi was reserved. Please try again after the upgrade.",
   PI_WALLET_SCOPE_NOT_GRANTED: "Pi did not report wallet-address permission for this sign-in. No authorization or withdrawal was created. Retry, tap Allow on the wallet-address prompt, and confirm wallet_address is enabled for GreenHaven in the Pi Developer Portal.",
   PI_WALLET_ADDRESS_UNVERIFIED: "Pi returned an address in the browser, but its Platform API did not independently verify it. Check that wallet_address permission is enabled for GreenHaven in the Pi Developer Portal, then retry in Pi Browser. No withdrawal was started.",
   PI_WALLET_ADDRESS_INVALID: "Pi returned an invalid wallet address. No payout authorization was changed.",
@@ -149,7 +151,19 @@ export async function fetchWalletAuthorizationStatus(signal?: AbortSignal): Prom
   }
 }
 
-type ConsentPostResponse = { status: number; body: { ok?: boolean; error?: string } | null }
+type ConsentPostResponse = {
+  status: number
+  body: { ok?: boolean; error?: string; stage?: string; diagnosticCode?: string; build?: string } | null
+}
+
+/** Append a short, secret-free diagnostic (build, stage, code, HTTP status) to a failure. */
+function failWithDiagnostic(code: WalletConsentErrorCode, status: number, body: ConsentPostResponse["body"]): WalletConsentResult {
+  const safe = (v: unknown) => (typeof v === "string" ? v.replace(/[^A-Za-z0-9_.:-]/g, "").slice(0, 48) : "")
+  const parts = [safe(body?.build), safe(body?.stage), safe(body?.diagnosticCode) || safe(body?.error), status ? `HTTP${status}` : ""].filter(Boolean)
+  const base = fail(code)
+  if (!base.ok && parts.length) return { ...base, message: `${base.message} (diagnostic: ${parts.join(" · ")})` }
+  return base
+}
 
 /** The access token only lives in this call's request body; it is never retained. */
 async function postConsent(accessToken: string, walletAddress: string | null): Promise<ConsentPostResponse | null> {
@@ -202,7 +216,7 @@ async function performPiWalletConsent(): Promise<WalletConsentResult> {
     const { status, body } = response
     if (status === 401 && body?.error === "AUTH_REQUIRED") return fail("AUTH_REQUIRED")
     if (status === 429) return fail("RATE_LIMITED")
-    if (status < 200 || status >= 300 || body?.ok !== true) return fail(normalizeCode(body?.error))
+    if (status < 200 || status >= 300 || body?.ok !== true) return failWithDiagnostic(normalizeCode(body?.error), status, body)
     const verified = await fetchWalletAuthorizationStatus()
     if (!verified.ok) return fail(verified.code === "NETWORK_ERROR" ? "NETWORK_ERROR" : "AUTHORIZATION_NOT_CONFIRMED")
     if (!verified.status.authorizationActive || !verified.status.uidMatchesAuthorization) return fail("AUTHORIZATION_NOT_CONFIRMED")

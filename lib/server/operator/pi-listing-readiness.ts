@@ -10,6 +10,7 @@ import { isPiIdentityDurable } from "@/lib/server/identity/pi-identity-store"
 import { isSessionStoreDurable } from "@/lib/server/identity/session-store"
 import { isPiOnlyCommerceEnabled } from "@/lib/server/economy/pi-only-commerce"
 import { countEngagedPioneers } from "@/lib/server/engagement/pioneer-activity"
+import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
 
 export type ChecklistItem = {
   id: string
@@ -27,7 +28,7 @@ async function countDurablePiIdentities(): Promise<number | null> {
     const base = env.supabaseUrl.replace(/\/$/, "")
     // Prefer count header
     const res = await fetch(
-      `${base}/rest/v1/gh_pi_identities?select=gh_user_id`,
+      `gh_pi_identities?select=gh_user_id`,
       {
         headers: {
           apikey: env.supabaseServiceRoleKey,

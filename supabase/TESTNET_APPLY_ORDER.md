@@ -243,7 +243,7 @@ The rows are sorted by the canonical migration identifier for review. Dependenci
 | 221 | `20261111131500_run285_durable_message_reactions.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
 | 222 | `20261112100001_financial_stale_hold_reaper.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
 | 223 | `20261114100001_gh_feed_preferences_durable.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
-| 224 | `20261115100001_pi_wallet_scope_consent_provider_address_discovery.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
+| 224 | `20261116045934_pi_wallet_scope_consent_provider_address_discovery.sql` | REVIEW_REQUIRED | APPLIED_TESTNET_ONLY_HOLD_OTHER_TARGETS |
 
 ## Classification meanings
 

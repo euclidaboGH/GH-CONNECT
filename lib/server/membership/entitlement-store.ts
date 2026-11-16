@@ -1,4 +1,5 @@
 import { addCalendarMonths, getMembershipGhcPrice, getMembershipPiPrice } from "@/lib/membership-pricing"
+import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
 /**
  * Server-authoritative membership entitlements.
  * DATABASE is production authority. Memory is cache / Studio-only fallback.
@@ -122,7 +123,7 @@ export async function loadEntitlementFromDb(
   }
   const env = readGhcServerEnv()
   try {
-    const url = `${env.supabaseUrl!.replace(/\/$/, "")}/rest/v1/ghc_membership_entitlements?user_id=eq.${encodeURIComponent(userId)}&select=*&limit=1`
+    const url = `ghc_membership_entitlements?user_id=eq.${encodeURIComponent(userId)}&select=*&limit=1`
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 8_000)
     let res: Response
@@ -477,16 +478,7 @@ export async function listOrphanMembershipPurchaseCandidates(
     return { ok: false, candidates: [], error: "SERVER_UNAVAILABLE" }
   }
   try {
-    const res = await fetch(
-      `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/ghc_membership_list_orphan_purchase_candidates`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: env.supabaseServiceRoleKey,
-          Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-        },
-        body: JSON.stringify({ p_limit: limit }),
+    const res = await (async () => { const r = await supabaseRpc('ghc_membership_list_orphan_purchase_candidates', typeof JSON.stringify({ p_limit: limit === "string" ? JSON.parse(JSON.stringify({ p_limit: limit) : JSON.stringify({ p_limit: limit, { timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })(),
       }
     )
     const data = await res.json().catch(() => null)
@@ -517,21 +509,7 @@ export async function completeOrphanedMembershipPurchase(input: {
     return { ok: false, error: "SERVER_UNAVAILABLE" }
   }
   try {
-    const res = await fetch(
-      `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/ghc_membership_complete_orphaned_purchase`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: env.supabaseServiceRoleKey,
-          Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-        },
-        body: JSON.stringify({
-          p_user_id: input.userId,
-          p_reference_id: input.referenceId,
-          p_row: input.row,
-          p_operator_note: (input.operatorNote || "ops_orphan_entitlement_complete").slice(0, 160),
-        }),
+    const res = await (async () => { const r = await supabaseRpc('ghc_membership_complete_orphaned_purchase', typeof JSON.stringify({ === "string" ? JSON.parse(JSON.stringify({) : JSON.stringify({, { timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })(),
       }
     )
     const data = await res.json().catch(() => null)

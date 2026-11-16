@@ -8,6 +8,7 @@
 import { getReputationState } from "@/lib/server/reputation/store"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import {
+import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
   computeCurationPower,
   DEFAULT_INTEGRITY,
   DEFAULT_JCS,
@@ -46,7 +47,7 @@ async function loadStoredIntelligence(
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey || !userId) return null
   try {
     const url =
-      `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_reputation_intelligence` +
+      `gh_reputation_intelligence` +
       `?user_id=eq.${encodeURIComponent(userId)}` +
       `&select=curation_power,risk_score,curation_eligible,calculated_at&limit=1`
     const res = await fetch(url, {
@@ -76,7 +77,7 @@ async function loadStoredCalibration(
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey || !userId) return null
   try {
     const url =
-      `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_curator_calibration` +
+      `gh_curator_calibration` +
       `?user_id=eq.${encodeURIComponent(userId)}` +
       `&select=jcs,integrity_score&limit=1`
     const res = await fetch(url, {

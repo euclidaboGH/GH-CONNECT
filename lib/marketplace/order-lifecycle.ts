@@ -100,7 +100,7 @@ export function orderRoleForViewer(order: { buyerId?: string; sellerId?: string 
   return "other"
 }
 
-export type BrowseSort = "newest" | "price_asc" | "price_desc"
+export type BrowseSort = "newest" | "price_asc" | "price_desc" | "relevance"
 
 /**
  * Sort listings without comparing nominal amounts across different assets.
@@ -114,6 +114,8 @@ export function sortMarketplaceListings<T extends { createdAt?: number; price?: 
   if (sort === "newest") {
     return [...items].sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0))
   }
+  // "relevance" keeps the caller's order; the search-ranking module ranks it.
+  if (sort === "relevance") return [...items]
 
   const groups = new Map<string, T[]>()
   for (const item of items) {

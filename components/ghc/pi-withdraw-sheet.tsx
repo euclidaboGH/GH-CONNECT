@@ -41,6 +41,9 @@ function humanizeApiError(code?: string | null, message?: string | null, hints?:
   if (c === "PI_WALLET_ADDRESS_REQUIRED" || c === "PI_WALLET_SCOPE_NOT_GRANTED") {
     return "Pi did not confirm wallet-address permission. Open this app in Pi Browser, tap Allow on the wallet-address prompt, and ensure wallet_address is enabled for GreenHaven in the Pi Developer Portal."
   }
+  if (c === "WALLET_SCOPE_MIGRATION_REQUIRED") {
+    return "Pi confirmed your wallet permission, but GreenHaven's payout database has not been updated for it yet. Nothing was reserved. This needs an operator update; retrying will not help."
+  }
   if (c === "PI_WALLET_ADDRESS_INVALID" || c === "PI_WALLET_ADDRESS_MISMATCH") {
     return "Pi returned conflicting wallet details. No payout was submitted; reconnect your Pi wallet and try again."
   }

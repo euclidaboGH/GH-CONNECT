@@ -1,7 +1,6 @@
 import type { ServerAuthContext } from "@/lib/server/economy/auth"
 
-const BASE = () => process.env.SUPABASE_URL?.replace(/\/$/, "")
-const KEY = () => process.env.SUPABASE_SERVICE_ROLE_KEY
+import { getServiceSupabaseConfig, supabaseRest } from "@/lib/server/supabase/rest-client"
 
 export class GovernanceStoreError extends Error {
   status: number
@@ -9,27 +8,19 @@ export class GovernanceStoreError extends Error {
   constructor(code: string, status = 503) { super(code); this.code = code; this.status = status }
 }
 
-function configured() { return Boolean(BASE() && KEY()) }
+function configured() { return Boolean(getServiceSupabaseConfig()) }
 async function rest(path: string, init: RequestInit = {}) {
   if (!configured()) throw new GovernanceStoreError("GOVERNANCE_STORE_UNAVAILABLE")
-  const response = await fetch(`${BASE()}/rest/v1/${path}`, {
-    ...init,
-    headers: {
-      apikey: KEY()!, Authorization: `Bearer ${KEY()}`,
-      "Content-Type": "application/json", Accept: "application/json",
-      ...(init.headers || {}),
-    },
-    cache: "no-store",
-    signal: AbortSignal.timeout(10_000),
-  })
-  const body = await response.text()
-  let data: unknown = null
-  try { data = body ? JSON.parse(body) : null } catch { /* handled below */ }
-  if (!response.ok) {
-    const code = (data && typeof data === "object" && "message" in data && typeof data.message === "string") ? data.message : "GOVERNANCE_DATABASE_ERROR"
-    throw new GovernanceStoreError(code, response.status >= 500 ? 503 : response.status)
+  const result = await supabaseRest(path, { ...init, timeoutMs: 10_000 })
+  if (!result.ok) {
+    const body = result.body
+    const code =
+      body && typeof body === "object" && "message" in body && typeof (body as { message: unknown }).message === "string"
+        ? String((body as { message: string }).message)
+        : "GOVERNANCE_DATABASE_ERROR"
+    throw new GovernanceStoreError(code, result.status >= 500 ? 503 : result.status)
   }
-  return data
+  return result.data
 }
 
 export async function communityRole(communityId: string, userId: string): Promise<string | null> {

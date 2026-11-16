@@ -1,5 +1,5 @@
-import { timingSafeEqual } from "node:crypto"
 import { NextResponse } from "next/server"
+import { operatorDiagnosticsAuthorized } from "@/lib/server/security/operator-key"
 import { listTreasuryCases, upsertTreasuryCase } from "@/lib/server/revenue/treasury-operations"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 
@@ -8,10 +8,7 @@ export const dynamic = "force-dynamic"
 const headers = { "Cache-Control": "private, no-store, max-age=0", Pragma: "no-cache" }
 function reply(body: unknown, status = 200) { return NextResponse.json(body, { status, headers }) }
 function authorized(request: Request) {
-  const key = String(process.env.GHC_OPERATOR_RECONCILE_KEY || process.env.GHC_ADMIN_API_KEY || process.env.GHC_A2U_ADMIN_KEY || "").trim()
-  if (Buffer.byteLength(key, "utf8") < 32) return false
-  const supplied = Buffer.from(request.headers.get("x-ghc-operator-key") || "", "utf8"), expected = Buffer.from(key, "utf8")
-  return supplied.length === expected.length && timingSafeEqual(supplied, expected)
+  return operatorDiagnosticsAuthorized(request)
 }
 export async function GET(request: Request) {
   if (!authorized(request)) return reply({ ok: false, error: "FORBIDDEN" }, 403)

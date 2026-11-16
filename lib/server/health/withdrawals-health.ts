@@ -7,6 +7,7 @@ import { readGhcServerEnv, hasPrivilegedDatabase } from "@/lib/server/economy/en
 import { getPiApiKey } from "@/lib/server/payments/pi-api"
 import { resolvePiSandbox, getPiClientId } from "@/lib/pi-env"
 import { getPiIncompleteA2uPayments, piA2uErrorDiagnostic, piA2uErrorHttpStatus } from "@/lib/server/payments/pi-platform-a2u"
+import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
 
 export type ComponentStatus = "ok" | "degraded" | "unavailable" | "not_configured" | "skipped"
 
@@ -130,7 +131,7 @@ async function probeSupabaseConnectivity(): Promise<WithdrawalsHealthComponent> 
   try {
     const { result, latencyMs } = await timed(async () => {
       // Minimal PostgREST root probe — does not return table data.
-      const res = await fetch(`${base}/rest/v1/`, {
+      const res = await fetch("" /* health root */, {
         method: "GET",
         headers: {
           apikey: env.supabaseServiceRoleKey!,
@@ -192,18 +193,7 @@ async function probeWalletAuthorizationRpc(): Promise<WithdrawalsHealthComponent
   const syntheticUserId = "00000000-0000-4000-8000-000000000000"
   try {
     const { result, latencyMs } = await timed(async () => {
-      const res = await fetch(`${base}/rest/v1/rpc/gh_pi_wallet_authorization_get`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: env.supabaseServiceRoleKey!,
-          Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-          Accept: "application/json",
-        },
-        body: JSON.stringify({ p_user_id: syntheticUserId }),
-        cache: "no-store",
-        signal: AbortSignal.timeout(10_000),
-      })
+      const res = await (async () => { const rpcResult = await supabaseRpc('gh_pi_wallet_authorization_get', { p_user_id: syntheticUserId }, { timeoutMs: 10000 }); return { ok: rpcResult.ok, status: rpcResult.status, json: async () => rpcResult.ok ? rpcResult.data : (rpcResult.body ?? null) }; })()
       const body = (await res.json().catch(() => null)) as Record<string, unknown> | null
       return { status: res.status, body, ok: res.ok }
     })
@@ -296,17 +286,7 @@ async function probeWalletAuthorizationTable(): Promise<WithdrawalsHealthCompone
   const base = env.supabaseUrl.replace(/\/$/, "")
   try {
     const { result, latencyMs } = await timed(async () => {
-      const res = await fetch(`${base}/rest/v1/gh_pi_wallet_authorizations?select=gh_user_id&limit=0`, {
-        method: "GET",
-        headers: {
-          apikey: env.supabaseServiceRoleKey!,
-          Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-          Accept: "application/json",
-          Prefer: "count=exact",
-        },
-        cache: "no-store",
-        signal: AbortSignal.timeout(8_000),
-      })
+      const res = await (async () => { const r = await supabaseRest(`gh_pi_wallet_authorizations?select=gh_user_id&limit=0`, { method: "GET", timeoutMs: 8000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
       const text = await res.text().catch(() => "")
       return { status: res.status, text }
     })
@@ -394,18 +374,7 @@ async function probeEarningsWithdrawableRpc(): Promise<WithdrawalsHealthComponen
 
     for (const probe of probes) {
       const { result, latencyMs } = await timed(async () => {
-        const res = await fetch(`${base}/rest/v1/rpc/${probe.name}`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            apikey: env.supabaseServiceRoleKey!,
-            Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-            Accept: "application/json",
-          },
-          body: JSON.stringify(probe.body),
-          cache: "no-store",
-          signal: AbortSignal.timeout(8_000),
-        })
+        const res = await (async () => { const r = await supabaseRpc('${probe.name}', typeof JSON.stringify(probe.body) === "string" ? JSON.parse(JSON.stringify(probe.body)) : JSON.stringify(probe.body), { timeoutMs: 8000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
         const body = await res.text().catch(() => "")
         return { status: res.status, body }
       })
@@ -518,18 +487,7 @@ async function probeWithdrawalSupportRpc(input: {
   const base = env.supabaseUrl.replace(/\/$/, "")
   try {
     const { result, latencyMs } = await timed(async () => {
-      const response = await fetch(`${base}/rest/v1/rpc/${input.functionName}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: env.supabaseServiceRoleKey!,
-          Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-          Accept: "application/json",
-        },
-        body: JSON.stringify(input.body),
-        cache: "no-store",
-        signal: AbortSignal.timeout(8_000),
-      })
+      const response = await (async () => { const r = await supabaseRpc('${input.functionName}', typeof JSON.stringify(input.body) === "string" ? JSON.parse(JSON.stringify(input.body)) : JSON.stringify(input.body), { timeoutMs: 8000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
       const body = await response.json().catch(() => null)
       return { status: response.status, body: body && typeof body === "object" ? body as Record<string, unknown> : null }
     })

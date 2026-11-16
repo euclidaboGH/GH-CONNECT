@@ -4,6 +4,7 @@
  * GHC utility ledger movements are not company revenue evidence.
  */
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
 
 export type CompanyRevenueEventType =
   | "marketplace_fee"
@@ -121,7 +122,7 @@ export async function appendVerifiedCompanyRevenueEvent(
     const baseUrl = env.supabaseUrl.endsWith("/") ? env.supabaseUrl.slice(0, -1) : env.supabaseUrl
     const hasAttribution = Boolean(input.payingUserId?.trim()) || input.cashbackEligible === true || Boolean(input.relatedSourceEventId?.trim())
     if (input.cashbackEligible === true && !input.payingUserId?.trim()) return { ok: false, error: "CASHBACK_ATTRIBUTION_REQUIRED" }
-    const endpoint = `${baseUrl}/rest/v1/rpc/${hasAttribution ? "gh_company_revenue_event_append_attributed" : "gh_company_revenue_event_append"}`
+    const endpoint = `rpc/${hasAttribution ? "gh_company_revenue_event_append_attributed" : "gh_company_revenue_event_append"}`
     const body = JSON.stringify({
       p_idempotency_key: input.idempotencyKey.trim(),
       p_source_provider: input.sourceProvider,

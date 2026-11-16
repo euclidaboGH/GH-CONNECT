@@ -43,8 +43,11 @@ function verifyHs256Jwt(
   if (parts.length !== 3) return null
   const [h, p, s] = parts
   try {
-    const header = JSON.parse(base64UrlDecode(h).toString("utf8")) as { alg?: string }
+    const header = JSON.parse(base64UrlDecode(h).toString("utf8")) as { alg?: string; typ?: string }
     if (!header.alg || header.alg === "none" || header.alg !== "HS256") return null
+    // Phase 2: require typ to be a recognized JWT type (header preferred, payload fallback).
+    const headerTyp = typeof header.typ === "string" ? header.typ.toUpperCase() : ""
+    if (headerTyp && headerTyp !== "JWT" && headerTyp !== "AT+JWT") return null
     const expected = createHmac("sha256", secret)
       .update(`${h}.${p}`)
       .digest()
@@ -65,6 +68,7 @@ function verifyHs256Jwt(
       iat?: number
       iss?: string
       aud?: string | string[]
+      typ?: string
     }
     const nowSeconds = Math.floor(Date.now() / 1000)
     // Authentication JWTs must be time-bounded. Missing/invalid exp used to
@@ -73,13 +77,18 @@ function verifyHs256Jwt(
     if (payload.exp <= nowSeconds) return null
     if (typeof payload.nbf === "number" && (!Number.isFinite(payload.nbf) || payload.nbf > nowSeconds + 30)) return null
     if (typeof payload.iat === "number" && (!Number.isFinite(payload.iat) || payload.iat > nowSeconds + 30)) return null
+    // Phase 2: typ required (header or payload). Reject tokens with neither.
+    const payloadTyp = typeof payload.typ === "string" ? payload.typ.toUpperCase() : ""
+    const typ = headerTyp || payloadTyp
+    if (typ !== "JWT" && typ !== "AT+JWT") return null
+    // Phase 2: iss and aud are required when first-party JWT verification is enabled.
+    // Configure GHC_AUTH_JWT_ISSUER and GHC_AUTH_JWT_AUDIENCE; missing config rejects the token.
     const expectedIssuer = process.env.GHC_AUTH_JWT_ISSUER?.trim()
-    if (expectedIssuer && payload.iss !== expectedIssuer) return null
+    if (!expectedIssuer || payload.iss !== expectedIssuer) return null
     const expectedAudience = process.env.GHC_AUTH_JWT_AUDIENCE?.trim()
-    if (expectedAudience) {
-      const audiences = Array.isArray(payload.aud) ? payload.aud : [payload.aud]
-      if (!audiences.includes(expectedAudience)) return null
-    }
+    if (!expectedAudience) return null
+    const audiences = Array.isArray(payload.aud) ? payload.aud : [payload.aud]
+    if (!audiences.includes(expectedAudience)) return null
     const sub = payload.sub || payload.user_id || payload.userId
     if (typeof sub !== "string" || !sub.trim() || sub.length > 256) return null
     return { sub: sub.trim(), username: payload.username }

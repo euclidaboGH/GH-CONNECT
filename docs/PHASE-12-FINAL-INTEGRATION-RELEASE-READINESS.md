@@ -1,5 +1,5 @@
-Release: `0.338.85`
-**Current source baseline:** `0.338.85`
+Release: `0.338.86`
+**Current source baseline:** `0.338.86`
 **Production status: NOT APPROVED for production**
 
 Release: `0.338.73`
@@ -7,7 +7,7 @@ Release: `0.338.73`
 
 **Current source baseline:** `0.338.73`
 
-This source-only release record is not production approval. Production approval remains pending supported-runtime build, database migration reconciliation, provider and authenticated browser/device acceptance.
+This source-only release record is not production approval. Production approval remains pending supported-runtime build, full migration reconciliation across environments, live Pi provider and authenticated browser/device acceptance. Run #302 migration 20261116045934 is applied to Testnet only; Mainnet remains untouched.
 
 > **LEGACY VERIFICATION FIXTURE — NOT CURRENT PRODUCT AUTHORITY.**
 > Current source baseline reference: `0.338.56` (2026-11-12). The historical release details below remain archived and are not a statement of current release readiness.

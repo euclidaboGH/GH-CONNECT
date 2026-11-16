@@ -3,8 +3,8 @@
  * Operator-only commerce summary. Requires x-ghc-admin-key matching GHC_ADMIN_API_KEY
  * (or GHC_A2U_ADMIN_KEY as fallback). Does not expose user PII.
  */
-import { createHash, timingSafeEqual } from "node:crypto"
 import { NextResponse } from "next/server"
+import { adminKeyAuthorized } from "@/lib/server/security/operator-key"
 import { commissionPolicyPublic } from "@/lib/server/marketplace/commission"
 import { payoutPolicyPublic } from "@/lib/server/payouts/eligibility"
 import { packPurchaseLimits, listGhcPacks } from "@/lib/server/economy/ghc-pack-catalog"
@@ -16,17 +16,7 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 function adminAuthorized(request: Request): boolean {
-  const expectedRaw =
-    String(process.env.GHC_ADMIN_API_KEY || process.env.GHC_A2U_ADMIN_KEY || "").trim()
-  if (Buffer.byteLength(expectedRaw, "utf8") < 32) return false
-  const expected = Buffer.from(expectedRaw, "utf8")
-  const supplied = Buffer.from(String(request.headers.get("x-ghc-admin-key") || "").trim(), "utf8")
-  if (expected.length === 0 || expected.length !== supplied.length) return false
-  try {
-    return timingSafeEqual(expected, supplied)
-  } catch {
-    return false
-  }
+  return adminKeyAuthorized(request)
 }
 
 export async function GET(request: Request) {

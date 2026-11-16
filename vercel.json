@@ -8,7 +8,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "frame-ancestors 'self' https://sandbox.minepi.com https://app-cdn.minepi.com https://minepi.com https://*.minepi.com https://*.pinet.com https://socialchain.app https://*.socialchain.app; object-src 'none'; base-uri 'self'; form-action 'self'"
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://sdk.minepi.com https://*.minepi.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://*.minepi.com https://*.pinet.com https://*.supabase.co wss://*.supabase.co https://api.dicebear.com; media-src 'self' blob:; frame-src 'self' https://sandbox.minepi.com https://app-cdn.minepi.com https://minepi.com https://*.minepi.com https://*.pinet.com https://socialchain.app https://*.socialchain.app; frame-ancestors 'self' https://sandbox.minepi.com https://app-cdn.minepi.com https://minepi.com https://*.minepi.com https://*.pinet.com https://socialchain.app https://*.socialchain.app; object-src 'none'; base-uri 'self'; form-action 'self'; worker-src 'self' blob:"
         },
         {
           "key": "X-Content-Type-Options",

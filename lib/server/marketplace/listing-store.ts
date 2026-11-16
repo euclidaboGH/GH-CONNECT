@@ -6,6 +6,7 @@
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { normalizeProductOptions, type MarketplaceProductOption } from "@/lib/marketplace/product-options"
 import { normalizeProductVariants, type MarketplaceProductVariant } from "@/lib/marketplace/product-variants"
+import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
 
 export type ServerMarketListing = {
   id: string
@@ -152,15 +153,7 @@ async function rpcJson(fn: string, body: Record<string, unknown>): Promise<unkno
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return null
   try {
-    const res = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/${fn}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: env.supabaseServiceRoleKey,
-        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-      },
-      body: JSON.stringify(body),
-    })
+    const res = await (async () => { const r = await supabaseRpc('${fn}', typeof JSON.stringify(body) === "string" ? JSON.parse(JSON.stringify(body)) : JSON.stringify(body), { timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
     if (!res.ok) return null
     const text = await res.text()
     if (!text) return null
@@ -271,13 +264,7 @@ export async function listActiveListings(limit = 50, filters: ActiveListingFilte
     for (const token of tokens) andFilters.push(`or(title.ilike.*${token}*,description.ilike.*${token}*)`)
     if (andFilters.length) params.set("and", `(${andFilters.join(",")})`)
     const q = `gh_marketplace_listings?${params.toString()}`
-    const res = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/${q}`, {
-      headers: {
-        apikey: env.supabaseServiceRoleKey,
-        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-      },
-      cache: "no-store",
-    })
+    const res = await (async () => { const r = await supabaseRest(`${q}`, { method: "GET", timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
     if (!res.ok) throw new Error(`Marketplace listing query failed (${res.status})`)
     const rows = (await res.json()) as Array<Record<string, unknown>>
     if (!Array.isArray(rows)) throw new Error("Marketplace listing query returned an invalid payload")
@@ -300,13 +287,7 @@ export async function listSellerListings(
   const lim = Math.min(Math.max(limit, 1), 100)
   try {
     const q = `gh_marketplace_listings?seller_id=eq.${encodeURIComponent(sid)}&status=neq.removed&select=${LISTING_SELECT}&order=updated_at.desc&limit=${lim}`
-    const res = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/${q}`, {
-      headers: {
-        apikey: env.supabaseServiceRoleKey,
-        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-      },
-      cache: "no-store",
-    })
+    const res = await (async () => { const r = await supabaseRest(`${q}`, { method: "GET", timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
     if (!res.ok) return []
     const rows = (await res.json()) as Array<Record<string, unknown>>
     if (!Array.isArray(rows)) return []
@@ -323,9 +304,7 @@ async function attachListingVariants(listings: ServerMarketListing[], baseUrl: s
   if (!ids.length) return listings
   try {
     const filter = `(${ids.map((id) => `"${id.replace(/"/g, "")}"`).join(",")})`
-    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/rest/v1/gh_marketplace_variants?listing_id=in.${encodeURIComponent(filter)}&select=id,listing_id,sku,label,price,currency,stock_on_hand,stock_reserved,active&order=sku.asc`, {
-      headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` }, cache: "no-store",
-    })
+    const response = await (async () => { const r = await supabaseRest(`gh_marketplace_variants?listing_id=in.${encodeURIComponent(filter)}&select=id,listing_id,sku,label,price,currency,stock_on_hand,stock_reserved,active&order=sku.asc`, { method: "GET", timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
     if (!response.ok) return listings
     const rows = await response.json() as Array<Record<string, unknown>>
     const grouped = new Map<string, unknown[]>()

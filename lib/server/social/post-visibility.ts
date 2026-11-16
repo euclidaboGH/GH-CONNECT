@@ -1,4 +1,5 @@
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
 
 type PostRow = { id: string; author_id: string; visibility: string | null; community_id: string | null; deleted_at: string | null; archived_at: string | null }
 type FollowRow = { follower_id: string; following_id: string }
@@ -64,10 +65,7 @@ export async function commentBelongsToPost(postId: string, commentId: string): P
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return null
   const query = new URLSearchParams({ id: `eq.${commentId}`, post_id: `eq.${postId}`, deleted_at: "is.null", select: "id", limit: "1" })
   try {
-    const response = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_post_comments?${query.toString()}`, {
-      headers: { apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}` },
-      cache: "no-store", signal: AbortSignal.timeout(8_000),
-    })
+    const response = await (async () => { const r = await supabaseRest(`gh_post_comments?${query.toString()}`, { method: "GET", timeoutMs: 8000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
     if (!response.ok) return null
     const rows = await response.json() as unknown[]
     return Array.isArray(rows) && rows.length > 0

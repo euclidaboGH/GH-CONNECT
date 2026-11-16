@@ -4,6 +4,7 @@
  * Never trusts client amounts or balances.
  */
 import { readGhcServerEnv, hasPrivilegedDatabase } from "@/lib/server/economy/env"
+import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
 
 export {
   PI_ATOMIC_SCALE,
@@ -31,17 +32,7 @@ async function rpcDetailed<T extends Record<string, unknown>>(
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return { ok: false, status: 0, code: "DB_NOT_CONFIGURED", message: "Supabase URL or service key missing" }
   try {
-    const response = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/${name}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: env.supabaseServiceRoleKey,
-        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-      },
-      body: JSON.stringify(body),
-      cache: "no-store",
-      signal: AbortSignal.timeout(12_000),
-    })
+    const response = await (async () => { const r = await supabaseRpc('${name}', typeof JSON.stringify(body) === "string" ? JSON.parse(JSON.stringify(body)) : JSON.stringify(body), { timeoutMs: 12000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
     const parsed = (await response.json().catch(() => null)) as (T & { code?: string; message?: string }) | null
     if (!response.ok || parsed === null) {
       return {

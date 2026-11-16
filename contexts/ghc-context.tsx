@@ -389,10 +389,10 @@ export interface GHCContextType {
   logout: () => Promise<void>
 }
 
-const GHCContext = createContext<GHCContextType | null>(null)
+export const GHCContext = createContext<GHCContextType | null>(null)
 
 /** Domain slices — consumers using these hooks only re-render when their slice changes */
-const GHCShellContext = createContext<{
+export const GHCShellContext = createContext<{
   ready: boolean
   tab: Tab
   setTab: (tab: Tab) => void
@@ -405,7 +405,7 @@ const GHCShellContext = createContext<{
   startConversation: GHCContextType["startConversation"]
 } | null>(null)
 
-const GHCProfileContext = createContext<{
+export const GHCProfileContext = createContext<{
   profile: Profile
   settings: Settings
   friends: string[]
@@ -417,7 +417,7 @@ const GHCProfileContext = createContext<{
   addToast: (message: string, type: "success" | "error" | "info") => void
 } | null>(null)
 
-const GHCDiscoveryContext = createContext<{
+export const GHCDiscoveryContext = createContext<{
   candidates: Candidate[]
   matches: MatchEntry[]
   following: string[]
@@ -433,7 +433,7 @@ const GHCDiscoveryContext = createContext<{
   profile: Profile
 } | null>(null)
 
-const GHCMessagingContext = createContext<{
+export const GHCMessagingContext = createContext<{
   conversations: Conversation[]
   sendMessage: GHCContextType["sendMessage"]
   sendMediaMessage: GHCContextType["sendMediaMessage"]
@@ -456,7 +456,7 @@ const GHCMessagingContext = createContext<{
 } | null>(null)
 
 /** Feed / posts slice — Home re-renders only when posts/stories change */
-const GHCFeedContext = createContext<{
+export const GHCFeedContext = createContext<{
   posts: Post[]
   stories: StoryItem[]
   likedPostIds: string[]
@@ -8536,6 +8536,7 @@ const dismissMatchCelebration = useCallback(() => {
     </GHCContext.Provider>
   )
 }
+
 
 export function useGHC() {
   const context = useContext(GHCContext)

@@ -10,6 +10,7 @@ import { formatPrice, listedWhen, relatedSearchTokens, relatedListingsFor, sugge
 import { parseProductOptionsText, productOptionsToText } from "@/lib/marketplace/product-options"
 import { parseProductVariantsText, productVariantsToText } from "@/lib/marketplace/product-variants"
 import { mapMarketplaceListingRecord, mapMarketplaceOrderRecord, mapSavedMarketplaceListingRecord } from "@/lib/marketplace/record-mappers"
+import { kindLabel, statusChip } from "@/lib/marketplace/listing-presentation"
 
 /**
  * GreenHaven Marketplace — product surface.
@@ -82,6 +83,17 @@ import { WorkflowFeedback } from "@/components/ghc/workflow-feedback"
 import { workflowFeedback } from "@/lib/workflow-experience"
 import { SurfaceIntro } from "./ui/product-surface"
 import { LazyImage } from "./lazy-image"
+import { MarketplaceAddressesPanel } from "./marketplace-addresses"
+import { ListingGridSkeleton } from "./marketplace-skeleton"
+import { featuredReviews, summarizeVerifiedRatings } from "@/lib/marketplace/review-quality"
+import { sellerTrustBadges, stockBadge } from "@/lib/marketplace/listing-badges"
+import { computeLandedCost, formatLandedCostLine } from "@/lib/marketplace/landed-cost"
+import { checklistProgress, sellerChecklist } from "@/lib/marketplace/seller-checklist"
+import { rankByRelevance } from "@/lib/marketplace/search-ranking"
+import { isPromotedNow, limitPromotedShare, promotionLabel } from "@/lib/marketplace/boost-disclosure"
+import { averageHoursToComplete, completedRevenueByCurrency, restockCandidates, staleListings, topSellingListings } from "@/lib/marketplace/seller-insights"
+import { returnGuideFor } from "@/lib/marketplace/returns"
+import { readRecentlyViewed, recordRecentlyViewed } from "@/lib/marketplace/recently-viewed"
 import { downloadMedia } from "@/lib/media/download-media"
 import { socialFetchMarketplaceSaved, socialToggleMarketplaceSaved } from "@/lib/social/client"
 import { IdentityService } from "@/lib/identity/identity-service"
@@ -107,22 +119,6 @@ import {
   type ListingFeeRail,
 } from "@/lib/marketplace/listing-fee-client"
 import { getMarketplaceOrderCurrency, type MarketplaceCurrency } from "@/lib/marketplace/checkout-contract"
-
-function kindLabel(kind: MarketplaceListing["kind"]): string {
-  if (kind === "service") return "Service"
-  if (kind === "opportunity") return "Opportunity"
-  return "Product"
-}
-
-function statusChip(status: MarketplaceListing["status"]): { label: string; className: string } {
-  if (status === "active")
-    return { label: "Available", className: "bg-emerald-500/15 text-emerald-800 dark:text-emerald-200" }
-  if (status === "sold_out")
-    return { label: "Sold out", className: "bg-amber-500/15 text-amber-800 dark:text-amber-200" }
-  if (status === "paused")
-    return { label: "Paused", className: "bg-muted text-muted-foreground" }
-  return { label: status, className: "bg-muted text-muted-foreground" }
-}
 
 function ListingCard({
   listing,
@@ -164,6 +160,11 @@ function ListingCard({
         >
           {chip.label}
         </span>
+        {isPromotedNow(listing) ? (
+          <span className="absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-bold text-white" data-testid="promoted-label">
+            {promotionLabel(listing)}
+          </span>
+        ) : null}
       </div>
       <div className="flex flex-1 flex-col gap-1.5 p-3">
         <p className="line-clamp-2 min-h-[2.5rem] text-[13px] font-semibold leading-snug text-foreground">
@@ -195,6 +196,10 @@ function ListingCard({
           {listing.availability > 0 && listing.availability <= 3 ? (
             <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:text-amber-200">
               {listing.availability} left
+            </span>
+          ) : stockBadge(listing.kind, listing.availability)?.id === "stock-ok" ? (
+            <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 dark:text-emerald-200">
+              In stock
             </span>
           ) : null}
           {listing.category ? (
@@ -357,6 +362,14 @@ function CheckoutPanel({ listing }: { listing: MarketplaceListing }) {
             ? `Buy now · ${formatPrice(listing)}`
             : `Continue · pay with π · ${formatPrice(listing)}`}
       </button>
+      {(() => {
+        const cost = computeLandedCost({ unitPrice: Number(listing.price), quantity: 1, currency: listing.currency })
+        return cost ? (
+          <p className="text-[11px] font-medium text-foreground" data-testid="landed-cost-summary">
+            {formatLandedCostLine("Item", cost.subtotal, cost.currency)} · {formatLandedCostLine("Delivery", cost.shipping, cost.currency)}
+          </p>
+        ) : null
+      })()}
       <p className="text-[11px] leading-relaxed text-muted-foreground">
         {payRail === "ghc"
           ? "This listing is priced in GHC. Payment debits available GHC on the durable ledger; seller settlement follows fulfillment."
@@ -421,6 +434,13 @@ function ListingDetail({
   const isOwner = isOwnedByCurrentUser(listing.sellerId)
   const relatedTokens = useMemo(() => relatedSearchTokens(listing), [listing])
   const relatedItems = useMemo(() => relatedListingsFor(listing, 6), [listing])
+  const sellerOthers = useMemo(() => {
+    try {
+      return (getMarketplaceDomain()?.listListings?.({ status: "active" }) || []).filter((l) => l.sellerId === listing.sellerId && l.id !== listing.id).slice(0, 4)
+    } catch {
+      return [] as MarketplaceListing[]
+    }
+  }, [listing.sellerId, listing.id])
   const communitySuggestions = useMemo(() => suggestedCommunitiesFor(listing, 5), [listing])
   const when = listedWhen(listing.createdAt)
   const locationLine = [listing.location, when].filter(Boolean).join(" · ")
@@ -795,6 +815,13 @@ function ListingDetail({
               ) : (
                 <p className="mt-0.5 text-[10px] text-muted-foreground">Verify details before high-value trades</p>
               )}
+              {sellerTrustBadges(sellerTrust).filter((b) => b.id !== "seller-identity").length ? (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {sellerTrustBadges(sellerTrust).filter((b) => b.id !== "seller-identity").map((b) => (
+                    <span key={b.id} className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${b.tone === "good" ? "bg-emerald-500/10 text-emerald-800 dark:text-emerald-200" : "bg-muted text-muted-foreground"}`}>{b.label}</span>
+                  ))}
+                </div>
+              ) : null}
             </div>
             <button
               type="button"
@@ -806,7 +833,12 @@ function ListingDetail({
           </div>
           {sellerReviews.length > 0 ? (
             <ul className="mt-3 space-y-2">
-              {sellerReviews.map((r) => (
+              {summarizeVerifiedRatings(sellerReviews).count > 0 ? (
+                <li className="text-[11px] font-semibold text-muted-foreground">
+                  {summarizeVerifiedRatings(sellerReviews).average.toFixed(1)}★ from {summarizeVerifiedRatings(sellerReviews).count} verified purchase{summarizeVerifiedRatings(sellerReviews).count === 1 ? "" : "s"}
+                </li>
+              ) : null}
+              {featuredReviews(sellerReviews, 3).map((r) => (
                 <li key={r.id} className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
                   <p className="text-[11px] font-bold text-foreground">{r.rating}/5</p>
                   <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">{r.text}</p>
@@ -899,6 +931,22 @@ function ListingDetail({
             </div>
           ) : null}
         </section>
+
+        {sellerOthers.length > 0 ? (
+          <section className="border-b border-border/50 px-4 py-4" data-testid="more-from-seller">
+            <h3 className="text-[15px] font-bold text-foreground">More from this seller</h3>
+            <ul className="mt-2 space-y-1.5">
+              {sellerOthers.map((sl) => (
+                <li key={sl.id}>
+                  <button type="button" onClick={() => onOpenListing?.(sl.id)} className="flex min-h-11 w-full items-center justify-between gap-2 rounded-xl border border-border/50 bg-card px-3 text-left text-[12px] font-semibold">
+                    <span className="truncate">{sl.title}</span>
+                    <span className="shrink-0 text-muted-foreground">{formatPrice(sl)}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
 
         {/* Related listings — real domain data only */}
         {relatedItems.length > 0 ? (
@@ -1103,6 +1151,17 @@ function SellListingForm({
   const [photoBusy, setPhotoBusy] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const feeQuote = mode === "edit" ? quoteListingEditFee(feeRail) : quoteListingCreateFee(feeRail)
+  const checklistItems = sellerChecklist({
+    title,
+    description,
+    category,
+    mediaCount: mediaUrls.length,
+    price: Number(price),
+    availability: Number(availability),
+    deliveryMode,
+    kind: "product",
+  })
+  const checklistStats = checklistProgress(checklistItems)
   const cta = formatListingFeeCta(mode, feeRail)
 
   const onPickPhotos = async (files: FileList | null) => {
@@ -1143,6 +1202,28 @@ function SellListingForm({
             : "Priced in ₲ GHC or π Pi. A non-refundable π listing fee is charged when you publish (Pi-only commerce for ecosystem listing)."}
         </p>
       </div>
+
+      {mode === "create" ? (
+        <div className="rounded-xl border border-border/60 bg-card p-3" data-testid="seller-checklist" aria-live="polite">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[12px] font-bold text-foreground">Listing checklist</span>
+            <span className="text-[11px] text-muted-foreground">
+              {checklistStats.done}/{checklistStats.total}
+            </span>
+          </div>
+          <ul className="mt-2 space-y-1">
+            {checklistItems.map((item) => (
+              <li key={item.id} className={`flex items-start gap-2 text-[12px] ${item.done ? "text-foreground" : "text-muted-foreground"}`}>
+                <span aria-hidden="true">{item.done ? "✓" : "○"}</span>
+                <span>
+                  {item.label}
+                  {!item.done && item.required ? <span className="ml-1 font-semibold">(required)</span> : null}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       <div>
         <span className="text-[12px] font-bold text-muted-foreground">{wt("photos")}</span>
@@ -1745,6 +1826,27 @@ function SellerCommandCenter({
           <div className="rounded-2xl border border-border/50 bg-background/80 p-3"><p className="text-[10px] text-muted-foreground">Completed</p><p className="mt-1 text-lg font-extrabold">{loading ? "—" : completedOrders}</p></div>
         </div>
       </div>
+      {(() => {
+        const revenue = Object.entries(completedRevenueByCurrency(sellerOrders))
+        const hours = averageHoursToComplete(sellerOrders)
+        const top = topSellingListings(sellerOrders, 1)[0]
+        const topListing = top ? listings.find((l) => l.id === top.listingId) : null
+        const stale = staleListings(listings).length
+        const restock = restockCandidates(listings).length
+        if (!revenue.length && hours === null && !stale && !restock) return null
+        return (
+          <div className="border-t border-border/50 p-3 text-[11px] text-muted-foreground" data-testid="seller-insights">
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-300">Insights</p>
+            <ul className="mt-1.5 space-y-1">
+              {revenue.map(([cur, amount]) => <li key={cur}>Completed sales: <strong className="text-foreground">{cur === "GHC" ? `₲ ${amount}` : cur === "PI" ? `${amount} π` : `${amount} ${cur}`}</strong></li>)}
+              {hours !== null ? <li>Average time to complete an order: <strong className="text-foreground">{hours} h</strong></li> : null}
+              {topListing ? <li>Best seller: <strong className="text-foreground">{topListing.title}</strong> ({top.units} sold)</li> : null}
+              {restock ? <li>{restock} listing{restock === 1 ? "" : "s"} low or out of stock</li> : null}
+              {stale ? <li>{stale} active listing{stale === 1 ? "" : "s"} not updated in 60+ days</li> : null}
+            </ul>
+          </div>
+        )
+      })()}
       <div className="grid gap-2 p-3 sm:grid-cols-2">
         <button type="button" onClick={onNewListing} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[var(--gh-green)] px-4 text-sm font-bold text-white"><Plus size={15} /> Create listing</button>
         <button type="button" onClick={onOpenOrders} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 text-sm font-bold"><Package size={15} /> Manage seller orders{needsAttention ? ` · ${needsAttention}` : ""}</button>
@@ -2003,6 +2105,16 @@ export function MarketplaceScreen({
   const setBrowseFrom = useCallback((value: string) => { resetBrowsePage(); browseFilters.update("from", value); if (value && browseTo && value > browseTo) browseFilters.update("to", "") }, [browseFilters, browseTo, resetBrowsePage])
   const setBrowseTo = useCallback((value: string) => { resetBrowsePage(); browseFilters.update("to", value); if (value && browseFrom && value < browseFrom) browseFilters.update("from", "") }, [browseFilters, browseFrom, resetBrowsePage])
   const [selectedId, setSelectedId] = useState<string | null>(initialListingId || null)
+  const [recentIds, setRecentIds] = useState<string[]>([])
+  useEffect(() => {
+    try {
+      const uid = IdentityService.getCurrentUserId() || ""
+      if (!uid || typeof window === "undefined") return
+      setRecentIds(selectedId ? recordRecentlyViewed(uid, selectedId, window.localStorage) : readRecentlyViewed(uid, window.localStorage))
+    } catch {
+      setRecentIds([])
+    }
+  }, [selectedId])
   const [bucket, setBucket] = useState<"browse" | "orders" | "saved" | "sell" | "mine" | "cart">("browse")
   const [mineListings, setMineListings] = useState<MarketplaceListing[]>([])
   const [mineStatusFilter, setMineStatusFilter] = useState<"all" | "active" | "paused" | "sold_out" | "draft">("all")
@@ -2360,7 +2472,10 @@ export function MarketplaceScreen({
       { min: minPrice === "" ? null : Number(minPrice), max: maxPrice === "" ? null : Number(maxPrice) },
       priceCurrency,
     ))
-    return sortMarketplaceListings(ranged, browseSort)
+    const ordered = sortMarketplaceListings(ranged, browseSort)
+    const relevant = browseSort === "relevance" ? rankByRelevance(ordered, query) : ordered
+    // Paid placement is disclosed and capped; explicit price sorts stay purely price-ordered.
+    return browseSort === "price_asc" || browseSort === "price_desc" ? relevant : limitPromotedShare(relevant)
   }, [domain, category, kindFilter, deliveryFilter, query, tick, browseSort, serverBrowseListings, minPrice, maxPrice, priceCurrency])
 
   const filteredMineListings = useMemo(() => {
@@ -3341,6 +3456,7 @@ export function MarketplaceScreen({
           />
         ) : bucket === "orders" ? (
           <div className="space-y-3">
+            <MarketplaceAddressesPanel />
             <FilterPanel
               title="Filter your orders"
               description="Switch between purchases and sales while keeping the server-confirmed order lifecycle unchanged."
@@ -3537,6 +3653,15 @@ export function MarketplaceScreen({
                       ) : null}
                       {!['completed','cancelled','disputed','refunded'].includes(status) && o.paymentStatus === "verified" ? <button type="button" disabled={busy} onClick={() => void runOrderAction(o.id,"dispute")} className="min-h-9 rounded-full border border-amber-500/50 px-3 text-xs font-bold text-amber-700 dark:text-amber-300">Open dispute</button> : null}
                     </div>
+                    {!isSeller ? (() => {
+                      const guide = returnGuideFor({ status, paymentStatus: o.paymentStatus, deliveryStatus: o.deliveryStatus, deliveredAt: o.fulfilledAt, completedAt: o.completedAt, updatedAt: o.updatedAt })
+                      return guide.stage === "not_eligible" ? null : (
+                        <details className="mt-2 rounded-xl border border-border/50 bg-muted/20 px-3 py-2" data-testid="return-guide">
+                          <summary className="cursor-pointer text-[12px] font-bold text-foreground">Returns &amp; problems · {guide.headline}</summary>
+                          {guide.steps.length ? <ol className="mt-1.5 list-decimal space-y-1 pl-4 text-[11px] text-muted-foreground">{guide.steps.map((step) => <li key={step}>{step}</li>)}</ol> : null}
+                        </details>
+                      )
+                    })() : null}
                     <OrderTimelinePanel orderId={o.id} initialOpen={focusedOrderId === o.id} focusAt={focusedResponseAt} focusAction={focusedResponseAction} />
                     <p className="mt-2 text-[11px] text-muted-foreground">Updated {new Date(o.updatedAt || o.createdAt).toLocaleString()}</p>
                     {reviewDraftOrderId === o.id ? (
@@ -3646,6 +3771,19 @@ export function MarketplaceScreen({
           </div>
         ) : (
           <>
+            {!query.trim() && !category && recentIds.length > 0 ? (() => {
+              const recent = recentIds.map((id) => listings.find((l) => l.id === id)).filter((l): l is MarketplaceListing => Boolean(l)).slice(0, 6)
+              return recent.length ? (
+                <section className="mb-3" aria-label="Recently viewed" data-testid="recently-viewed">
+                  <h3 className="mb-1.5 text-[12px] font-bold text-foreground">Recently viewed</h3>
+                  <div className="flex gap-2 overflow-x-auto pb-1">
+                    {recent.map((rl) => (
+                      <button key={rl.id} type="button" onClick={() => setSelectedId(rl.id)} className="min-h-11 max-w-[11rem] shrink-0 truncate rounded-full border border-border/70 bg-card px-3 text-[11px] font-semibold text-foreground">{rl.title}</button>
+                    ))}
+                  </div>
+                </section>
+              ) : null
+            })() : null}
             <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
               <div>
                 <h2 className="text-[15px] font-bold text-foreground">Discover on GreenHaven</h2>
@@ -3664,6 +3802,7 @@ export function MarketplaceScreen({
                   className="h-8 rounded-full border border-border/70 bg-card px-2.5 text-[11px] font-semibold text-foreground"
                 >
                   <option value="newest">Newest</option>
+                  <option value="relevance">Best match</option>
                   <option value="price_asc">Price · low to high (by currency)</option>
                   <option value="price_desc">Price · high to low (by currency)</option>
                 </select>
@@ -3672,6 +3811,7 @@ export function MarketplaceScreen({
                 </button>
               </div>
             </div>
+            {serverBrowseState === "loading" && listings.length === 0 ? <ListingGridSkeleton count={6} /> : null}
             <div className="grid grid-cols-2 gap-2.5 min-[640px]:grid-cols-3 min-[960px]:grid-cols-4">
               {listings.map((l) => (
                 <ListingCard key={l.id} listing={l} onOpen={setSelectedId} />

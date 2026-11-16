@@ -3,6 +3,7 @@
  * Requires x-ghc-operator-key (same family as reconcile/admin keys).
  */
 import { NextResponse } from "next/server"
+import { operatorDiagnosticsAuthorized } from "@/lib/server/security/operator-key"
 import { timingSafeEqual } from "node:crypto"
 import {
   listOpenA2uReviews,
@@ -20,18 +21,7 @@ function reply(body: unknown, status = 200) {
 }
 
 function authorized(request: Request): boolean {
-  const expected = String(
-    process.env.GHC_OPERATOR_RECONCILE_KEY || process.env.GHC_A2U_ADMIN_KEY || "",
-  ).trim()
-  if (!expected || expected.length < 16) return false
-  const supplied = Buffer.from(String(request.headers.get("x-ghc-operator-key") || ""), "utf8")
-  const want = Buffer.from(expected, "utf8")
-  if (supplied.length !== want.length) return false
-  try {
-    return timingSafeEqual(supplied, want)
-  } catch {
-    return false
-  }
+  return operatorDiagnosticsAuthorized(request)
 }
 
 export async function GET(request: Request) {

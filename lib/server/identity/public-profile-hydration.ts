@@ -4,6 +4,7 @@
  * profile attributes and treats persisted post/comment labels as a fallback.
  */
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
 
 type Row = Record<string, unknown>
 
@@ -112,11 +113,7 @@ export async function hydratePublicProfileIdentity<T extends Row>(items: T[]): P
       select: "gh_user_id,display_name,username,photos",
       limit: String(ids.length),
     })
-    const response = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_user_profiles?${query.toString()}`, {
-      headers: { apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}`, Accept: "application/json" },
-      cache: "no-store",
-      signal: AbortSignal.timeout(5000),
-    })
+    const response = await (async () => { const r = await supabaseRest(`gh_user_profiles?${query.toString()}`, { method: "GET", timeoutMs: 5000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
     if (!response.ok) return items
     const data = await readBoundedProfileRows(response, 1024 * 1024)
     if (!data || data.length > ids.length) return items

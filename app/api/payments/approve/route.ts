@@ -19,6 +19,7 @@ import {
   amountsMatch,
   getPiApiKey,
 } from "@/lib/server/payments/pi-api"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -33,6 +34,15 @@ export async function POST(request: Request) {
     } catch {
       auth = null
     }
+    const rateKey = auth?.userId ? `payments-approve:user:${auth.userId}` : `payments-approve:ip:${request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown"}`
+    const rate = await checkDurableRateLimit(rateKey, 30, 60_000, { onUnavailable: "deny" })
+    if (!rate.ok) {
+      return NextResponse.json(
+        { ok: false, error: durableRateLimitCode(rate), retryAfterSec: rate.retryAfterSec },
+        { status: durableRateLimitStatus(rate), headers: { "Cache-Control": "no-store" } },
+      )
+    }
+
     const parsedBody = await readBoundedJson(request, 8 * 1024)
     if (!parsedBody.ok) {
       const tooLarge = parsedBody.error === "REQUEST_TOO_LARGE"
@@ -51,12 +61,8 @@ export async function POST(request: Request) {
     if (!getPiApiKey()) {
       console.error("[payments/approve] PI_API_KEY missing on this deployment")
       return NextResponse.json(
-        {
-          ok: false,
-          error: "PI_API_KEY is not configured on the server",
-          hint: "Set PI_API_KEY (Secret) for both Preview and Production in Vercel, then redeploy the matching environment.",
-        },
-        { status: 503 }
+        { ok: false, error: "PAYMENT_PROVIDER_UNAVAILABLE" },
+        { status: 503, headers: { "Cache-Control": "no-store" } },
       )
     }
 
@@ -97,7 +103,7 @@ export async function POST(request: Request) {
         // Still ensure Pi approved (retry-safe) only after durable binding.
         const appr = await piApprovePayment(paymentId)
         if (!appr.ok) {
-          return NextResponse.json({ ok: false, error: "PI_APPROVE_FAILED", detail: appr.error, retryable: true }, { status: 502 })
+          return NextResponse.json({ ok: false, error: "PI_APPROVE_FAILED", retryable: true }, { status: 502, headers: { "Cache-Control": "no-store" } })
         }
         return NextResponse.json({
           ok: true,
@@ -128,12 +134,9 @@ export async function POST(request: Request) {
             return NextResponse.json(
               {
                 ok: false,
-                error: "environment_mismatch",
-                intentEnvironment: intentEnv,
-                serverEnvironment: expected,
-                hint: "Align NEXT_PUBLIC_PI_SANDBOX, Pi Developer Portal app network, and PI_API_KEY.",
+                error: "ENVIRONMENT_MISMATCH",
               },
-              { status: 409 }
+              { status: 409, headers: { "Cache-Control": "no-store" } },
             )
           }
         }
@@ -161,7 +164,7 @@ export async function POST(request: Request) {
       // Lookup + verify amount before approve
       const lookup = await piGetPayment(paymentId)
       if (!lookup.ok || !lookup.payment) {
-        return NextResponse.json({ ok: false, error: "PI_PAYMENT_LOOKUP_UNAVAILABLE", detail: lookup.error, retryable: true }, { status: 502 })
+        return NextResponse.json({ ok: false, error: "PI_PAYMENT_LOOKUP_UNAVAILABLE", retryable: true }, { status: 502 })
       }
       {
         if (!amountsMatch(intent.amount, lookup.payment.amount)) {
@@ -180,14 +183,22 @@ export async function POST(request: Request) {
             { status: 409 }
           )
         }
-        // Optional metadata purpose check
+        // Phase 2: purpose mismatch is a hard reject when both sides declare a purpose.
         const metaPurpose = lookup.payment.metadata?.purpose || lookup.payment.metadata?.intentPurpose
         if (
           metaPurpose &&
           intent.metadata?.purpose &&
           String(metaPurpose) !== String(intent.metadata.purpose)
         ) {
-          // soft warn only — purpose in our intent is authoritative
+          await transitionIntent(intent.id, "FAILED", {
+            actor: "system",
+            detail: "Purpose mismatch",
+            error: `expected ${intent.metadata.purpose} got ${metaPurpose}`,
+          })
+          return NextResponse.json(
+            { ok: false, error: "PURPOSE_MISMATCH" },
+            { status: 409, headers: { "Cache-Control": "no-store" } },
+          )
         }
       }
     }
@@ -228,20 +239,14 @@ export async function POST(request: Request) {
           error: appr.error,
         })
       }
+      // Phase 2: do not leak provider status text, key configuration hints, or raw errors to the client.
       return NextResponse.json(
         {
           ok: false,
-          error: "Pi approve failed",
-          status: appr.status,
-          detail: appr.error,
-          hint:
-            appr.status === 401 || appr.status === 403
-              ? "PI_API_KEY may be wrong or belongs to a different app in the Pi Developer Portal."
-              : appr.status === 404
-                ? "Payment ID not found on Pi — ensure sandbox/production match (NEXT_PUBLIC_PI_SANDBOX)."
-                : undefined,
+          error: "PI_APPROVE_FAILED",
+          retryable: appr.status === 429 || (typeof appr.status === "number" && appr.status >= 500),
         },
-        { status: 502 }
+        { status: 502, headers: { "Cache-Control": "no-store" } },
       )
     }
 
@@ -263,9 +268,10 @@ export async function POST(request: Request) {
       intent: intent ? getPaymentIntent(intent.id) : null,
     })
   } catch (err) {
+    console.error("[payments/approve] unhandled", err instanceof Error ? err.message : err)
     return NextResponse.json(
-      { ok: false, error: err instanceof Error ? err.message : "Approve failed" },
-      { status: 500 }
+      { ok: false, error: "APPROVE_FAILED" },
+      { status: 500, headers: { "Cache-Control": "no-store" } },
     )
   }
 }

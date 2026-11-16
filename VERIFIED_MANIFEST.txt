@@ -2,7 +2,7 @@ GH-CONNECT VERIFIED SOURCE MANIFEST
 ==================================
 inventory_status=OK
 duplicate_version_prefixes=
-project_version=0.338.85
+project_version=0.338.86
 manifest_format_version=1
 canonical_migrations=224
 classification_required=119
@@ -245,4 +245,4 @@ ALL_MIGRATIONS_ORDERED_FOR_REVIEW:
 [REVIEW_REQUIRED] size=3832 path=supabase/migrations/20261111131500_run285_durable_message_reactions.sql
 [REVIEW_REQUIRED] size=7793 path=supabase/migrations/20261112100001_financial_stale_hold_reaper.sql
 [REVIEW_REQUIRED] size=6600 path=supabase/migrations/20261114100001_gh_feed_preferences_durable.sql
-[REVIEW_REQUIRED] size=17829 path=supabase/migrations/20261115100001_pi_wallet_scope_consent_provider_address_discovery.sql
+[REVIEW_REQUIRED] size=20602 path=supabase/migrations/20261116045934_pi_wallet_scope_consent_provider_address_discovery.sql

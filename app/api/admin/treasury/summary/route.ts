@@ -6,6 +6,7 @@
  */
 import { timingSafeEqual } from "node:crypto"
 import { NextResponse } from "next/server"
+import { operatorDiagnosticsAuthorized } from "@/lib/server/security/operator-key"
 import { reconcileCashbackPeriod } from "@/lib/server/revenue/cashback-attribution"
 import { inspectPiIncompleteServerPayments, listOpenA2uReviews, listStuckA2uJobs } from "@/lib/server/payments/a2u-orchestration"
 import { getTreasuryFinancialReport, getMembershipReconciliationReport, listTreasuryCases } from "@/lib/server/revenue/treasury-operations"
@@ -19,14 +20,7 @@ function reply(body: unknown, status = 200) {
 }
 
 function authorized(request: Request): boolean {
-  const expectedRaw = String(
-    process.env.GHC_OPERATOR_RECONCILE_KEY || process.env.GHC_ADMIN_API_KEY || process.env.GHC_A2U_ADMIN_KEY || "",
-  ).trim()
-  if (Buffer.byteLength(expectedRaw, "utf8") < 32) return false
-  const expected = Buffer.from(expectedRaw, "utf8")
-  const supplied = Buffer.from(String(request.headers.get("x-ghc-operator-key") || ""), "utf8")
-  if (expected.length !== supplied.length) return false
-  try { return timingSafeEqual(expected, supplied) } catch { return false }
+  return operatorDiagnosticsAuthorized(request)
 }
 
 function utcQuarterWindow(now: Date): { startsAt: string; endsAt: string } {

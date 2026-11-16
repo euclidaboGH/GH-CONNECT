@@ -204,7 +204,16 @@ export class TransactionManager {
    * Generate unique ID (overridable by nested managers)
    */
   protected generateId(prefix: string = "tx"): string {
-    return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    // Phase 2: prefer cryptographically strong IDs for transaction handles.
+    try {
+      const { securePrefixedId } = require("@/lib/secure-id") as typeof import("@/lib/secure-id")
+      return securePrefixedId(prefix)
+    } catch {
+      if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+        return `${prefix}_${crypto.randomUUID()}`
+      }
+      return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
+    }
   }
 
   /**

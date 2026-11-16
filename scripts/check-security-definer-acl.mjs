@@ -27,8 +27,12 @@ function stripSqlComments(sql) {
   return out
 }
 
+// Held proposals are audited with the same rules as canonical migrations.
+const proposalDir = join(root, 'supabase', 'proposals')
+const proposalFiles = (await readdir(proposalDir).catch(() => [])).filter((name) => /\.sql$/.test(name)).sort()
 const sources = []
 for (const file of files) sources.push({ file, sql: stripSqlComments(await readFile(join(migrationDir, file), 'utf8')) })
+for (const file of proposalFiles) sources.push({ file: `proposals/${file}`, sql: stripSqlComments(await readFile(join(proposalDir, file), 'utf8')) })
 const allSql = sources.map((source) => source.sql).join('\n')
 const routines = []
 for (const source of sources) {
@@ -58,5 +62,5 @@ if (failures.length) {
   console.error(failures.map((failure) => `FAIL ${failure}`).join('\n'))
   process.exit(1)
 }
-console.log(`PASS SECURITY DEFINER source audit: ${routines.length} declarations include SET search_path and a matching PUBLIC execute revoke.`)
+console.log(`PASS SECURITY DEFINER source audit: ${routines.length} declarations (migrations + proposals) include SET search_path and a matching PUBLIC execute revoke.`)
 console.log('LIMIT: overload-level ACL equivalence, effective role grants, function ownership, deployed catalog state, and runtime exploitability require live database verification.')

@@ -5,6 +5,7 @@
  */
 
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
 
 export type MarketOrderStatus =
   | "created"
@@ -92,18 +93,7 @@ async function rpcJson(fn: string, body: Record<string, unknown>): Promise<unkno
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return null
   try {
-    const res = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/${fn}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Cache-Control": "no-store",
-        apikey: env.supabaseServiceRoleKey,
-        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-      },
-      cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
-      body: JSON.stringify(body),
-    })
+    const res = await (async () => { const r = await supabaseRpc('${fn}', typeof JSON.stringify(body) === "string" ? JSON.parse(JSON.stringify(body)) : JSON.stringify(body), { timeoutMs: 10000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
     if (!res.ok) return null
     const text = await res.text()
     // PostgREST void RPCs may legitimately return an empty body. A non-empty,

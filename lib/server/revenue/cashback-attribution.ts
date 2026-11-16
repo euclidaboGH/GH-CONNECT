@@ -4,6 +4,7 @@
  * Never trusts client amounts. Refunds/chargebacks require related source events.
  */
 import {
+import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
   appendVerifiedCompanyRevenueEvent,
   type CompanyRevenueEventType,
   type CompanyRevenueAppendResult,
@@ -119,19 +120,7 @@ export async function reconcileCashbackPeriod(input: {
     return { ok: false, error: "DATABASE_UNAVAILABLE" }
   }
   try {
-    const response = await fetch(
-      `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/gh_pi_cashback_reconcile_period`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: env.supabaseServiceRoleKey,
-          Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-        },
-        body: JSON.stringify({
-          p_starts_at: input.startsAt,
-          p_ends_at: input.endsAt,
-        }),
+    const response = await (async () => { const r = await supabaseRpc('gh_pi_cashback_reconcile_period', typeof JSON.stringify({ === "string" ? JSON.parse(JSON.stringify({) : JSON.stringify({, { timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })(),
         cache: "no-store",
         signal: AbortSignal.timeout(15_000),
       },

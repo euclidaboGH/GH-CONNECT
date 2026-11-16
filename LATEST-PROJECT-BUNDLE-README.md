@@ -1,25 +1,28 @@
 # GreenHaven — Current Project Bundle
 
-**Authoritative uploaded baseline:** `GREENHAVEN-0.338.85-CI-NODE-ASSERT-HYGIENE.zip`
-**Package:** `gh-connect@0.338.85`
-**Date:** 2026-11-15
-**SHA-256:** `ede88266a095c3904044134270ed56b5bdd5c07a4a08ea9a363b756cabb2d36a`
+**Package:** `gh-connect@0.338.86`  
+**Hardening program:** Phases 1–4 complete in source  
+**Date:** 2026-11-16  
 
-## Latest delivery — 0.338.85 / CI Node assertion hygiene
+## Delivery identity
+Record SHA-256 of each packaged zip after build.
 
-- Adds explicit exact-Node.js-24.15.0 assertions to both the static-verification and build jobs in GitHub Actions.
-- Retains the 0.338.84 feed, home, profile, community and post-card density improvements.
-- Synchronizes the release identity and keeps production deployment authority fail-closed.
-- No database migration was applied; no wallet, GHC, Pi, provider or production state was changed.
+| Artifact | SHA-256 |
+|----------|---------|
+| HARDENING phases 1–4 complete | *(see package output)* |
 
-## Required release gates
+## Hardening summary
+1. **Phase 1** — Address privacy hard-delete + CI proposal scan + route hardening  
+2. **Phase 2** — Operator keys, JWT claims, cookie CSRF, CSP, approve hardening, rate limits  
+3. **Phase 3** — Money/auth contracts, Playwright CI, supply chain, lint ratchet → 100, critical audit  
+4. **Phase 4** — Central Supabase client (0 raw `/rest/v1/` under `lib/`), file splits, image opt flag, worklog archive  
 
-The current audit workspace runs Node.js 22.16.0; `.nvmrc` and the package engine require Node.js 24.15.0. Dependencies are not installed in the audit workspace. Therefore dependency-backed TypeScript, ESLint and Next.js production build results must be obtained under Node.js 24.15.0.
+## Gates
+- Node 24.15+  
+- No bulk migration push while REVIEW_REQUIRED remains  
+- **Production remains NOT APPROVED**
 
-Authenticated browser/device and two-account acceptance, live provider checks, and independent Testnet/Mainnet migration-history reconciliation remain outstanding. The repository contains 223 canonical migration sources, including 101 REVIEW_REQUIRED, 2 PROPOSAL and 1 REQUIRES_APPROVAL classifications. The manifest is source inventory, not proof of remote application.
-
-Do not run `supabase db push` or replay migrations while histories and held classifications remain unresolved. No GitHub push, pull request, Vercel deployment or production approval is implied by this archive.
-
-**Production remains NOT APPROVED.**
-
-See `docs/SOURCE_OF_TRUTH.md`, `docs/UPGRADE-WORKLOG-0.338.85.md` and `docs/PROJECT_TRUTH.md`.
+## Key docs
+- `docs/SOURCE_OF_TRUTH.md`
+- `docs/HARDENING-PROGRAM-4-PHASES.md`
+- `docs/HARDENING-PHASE4-STRUCTURE-RELEASE-PROGRESS.md`

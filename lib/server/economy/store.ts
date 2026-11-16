@@ -1,4 +1,5 @@
 import { readGhcServerEnv } from "./env"
+import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
 /**
  * Authoritative GHC store interface + in-memory implementation for tests.
  *
@@ -826,25 +827,7 @@ export async function executeDurableGhcSpend(input: {
   if (!ref) return { ok: false, error: "REFERENCE_REQUIRED" }
 
   try {
-    const res = await fetch(
-      `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/ghc_execute_spend`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-store",
-          apikey: env.supabaseServiceRoleKey,
-          Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-        },
-        cache: "no-store",
-        signal: AbortSignal.timeout(10_000),
-        body: JSON.stringify({
-          p_user_id: input.userId,
-          p_amount: amount,
-          p_reference_id: ref,
-          p_reason: input.reason,
-          p_source_event: input.sourceEvent || "SYSTEM",
-        }),
+    const res = await (async () => { const r = await supabaseRpc('ghc_execute_spend', typeof JSON.stringify({ === "string" ? JSON.parse(JSON.stringify({) : JSON.stringify({, { timeoutMs: 10000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })(),
       }
     )
     const data = await res.json().catch(() => null)

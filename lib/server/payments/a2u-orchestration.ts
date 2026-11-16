@@ -12,6 +12,7 @@ import type { PiBackendPayment } from "pi-backend"
 import { resolvePiSandbox } from "@/lib/pi-env"
 import { readGhcServerEnv, hasPrivilegedDatabase } from "@/lib/server/economy/env"
 import { getPiIncompleteA2uPayments, piA2uErrorDiagnostic, piA2uErrorHttpStatus } from "@/lib/server/payments/pi-platform-a2u"
+import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
 
 export type A2uSourceKind = "cashback" | "seller_marketplace" | "creator" | "other"
 
@@ -91,17 +92,7 @@ async function rpc<T extends Record<string, unknown>>(
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return null
   try {
-    const response = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/${name}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: env.supabaseServiceRoleKey,
-        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-      },
-      body: JSON.stringify(body),
-      cache: "no-store",
-      signal: AbortSignal.timeout(12_000),
-    })
+    const response = await (async () => { const r = await supabaseRpc('${name}', typeof JSON.stringify(body) === "string" ? JSON.parse(JSON.stringify(body)) : JSON.stringify(body), { timeoutMs: 12000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
     const result = (await response.json().catch(() => null)) as T | null
     if (!response.ok || result === null) return null
     return result

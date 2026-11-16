@@ -9,6 +9,7 @@
  */
 
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
 
 export type VerificationRequestType =
   | "identity"
@@ -127,10 +128,7 @@ async function rest<T>(
   }
   if (init.prefer) headers.Prefer = init.prefer
   try {
-    const res = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/${path}`, {
-      ...init,
-      headers: { ...headers, ...(init.headers as Record<string, string> | undefined) },
-    })
+    const res = await (async () => { const r = await supabaseRest(`${path}`, { method: "GET", timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
     const text = await res.text()
     let data: T | null = null
     if (text) {

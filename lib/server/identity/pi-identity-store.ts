@@ -20,6 +20,7 @@
 
 import { randomUUID } from "node:crypto"
 import { readGhcServerEnv, hasPrivilegedDatabase } from "@/lib/server/economy/env"
+import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
 
 export type PiIdentityRecord = {
   /** GreenHaven canonical user id (stable) */
@@ -130,16 +131,8 @@ async function dbSelectByPi(piAppUid: string): Promise<PiIdentityRecord | null> 
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
     throw new Error("PI_IDENTITY_DATABASE_UNAVAILABLE")
   }
-  const url = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_pi_identities?pi_app_uid=eq.${encodeURIComponent(piAppUid)}&select=*&limit=1`
-  const res = await fetch(url, {
-    headers: {
-      apikey: env.supabaseServiceRoleKey,
-      Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-      Accept: "application/json",
-    },
-    cache: "no-store",
-    signal: AbortSignal.timeout(10_000),
-  })
+  const restResult = await supabaseRest(`gh_pi_identities?pi_app_uid=eq.${encodeURIComponent(piAppUid)}&select=*&limit=1`, { method: "GET", timeoutMs: 10000 })
+    const res = { ok: restResult.ok, status: restResult.status, json: async () => restResult.ok ? restResult.data : restResult.body, text: async () => JSON.stringify(restResult.ok ? restResult.data : restResult.body) }
   if (!res.ok) {
     console.error("[pi-identity] dbSelectByPi failed", res.status)
     throw new Error("PI_IDENTITY_LOOKUP_FAILED")
@@ -154,16 +147,8 @@ async function dbSelectByGh(ghUserId: string): Promise<PiIdentityRecord | null> 
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
     throw new Error("PI_IDENTITY_DATABASE_UNAVAILABLE")
   }
-  const url = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_pi_identities?gh_user_id=eq.${encodeURIComponent(ghUserId)}&select=*&limit=1`
-  const res = await fetch(url, {
-    headers: {
-      apikey: env.supabaseServiceRoleKey,
-      Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-      Accept: "application/json",
-    },
-    cache: "no-store",
-    signal: AbortSignal.timeout(10_000),
-  })
+  const restResult = await supabaseRest(`gh_pi_identities?gh_user_id=eq.${encodeURIComponent(ghUserId)}&select=*&limit=1`, { method: "GET", timeoutMs: 10000 })
+    const res = { ok: restResult.ok, status: restResult.status, json: async () => restResult.ok ? restResult.data : restResult.body, text: async () => JSON.stringify(restResult.ok ? restResult.data : restResult.body) }
   if (!res.ok) {
     console.error("[pi-identity] dbSelectByGh failed", res.status)
     throw new Error("PI_IDENTITY_LOOKUP_FAILED")
@@ -179,22 +164,8 @@ async function dbUpdateExisting(rec: PiIdentityRecord): Promise<PiIdentityRecord
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
     throw new Error("PI_IDENTITY_DATABASE_UNAVAILABLE")
   }
-  const url = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_pi_identities?pi_app_uid=eq.${encodeURIComponent(rec.piAppUid)}`
-  const res = await fetch(url, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: env.supabaseServiceRoleKey,
-      Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-      Prefer: "return=representation",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({
-      pi_username: rec.piUsername,
-      updated_at: new Date().toISOString(),
-      last_seen_at: new Date(rec.lastSeenAt).toISOString(),
-      verified_at: new Date(rec.verifiedAt).toISOString(),
-    }),
+  const restResult = await supabaseRest(`gh_pi_identities?pi_app_uid=eq.${encodeURIComponent(rec.piAppUid)}`, { method: "PATCH", body: JSON.stringify({, timeoutMs: 10000 })
+    const res = { ok: restResult.ok, status: restResult.status, json: async () => restResult.ok ? restResult.data : restResult.body, text: async () => JSON.stringify(restResult.ok ? restResult.data : restResult.body) },
     cache: "no-store",
     signal: AbortSignal.timeout(10_000),
   })
@@ -219,25 +190,8 @@ async function dbInsertNew(rec: PiIdentityRecord): Promise<{ record: PiIdentityR
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
     throw new Error("PI_IDENTITY_DATABASE_UNAVAILABLE")
   }
-  const url = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_pi_identities`
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: env.supabaseServiceRoleKey,
-      Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-      Prefer: "resolution=ignore-duplicates,return=representation",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({
-      pi_app_uid: rec.piAppUid,
-      gh_user_id: rec.ghUserId,
-      pi_username: rec.piUsername,
-      onboarding_completed: false,
-      greenhaven_profile_id: null,
-      last_seen_at: new Date(rec.lastSeenAt).toISOString(),
-      verified_at: new Date(rec.verifiedAt).toISOString(),
-    }),
+  const restResult = await supabaseRest(`gh_pi_identities`, { method: "POST", body: JSON.stringify({, timeoutMs: 10000 })
+    const res = { ok: restResult.ok, status: restResult.status, json: async () => restResult.ok ? restResult.data : restResult.body, text: async () => JSON.stringify(restResult.ok ? restResult.data : restResult.body) },
     cache: "no-store",
     signal: AbortSignal.timeout(10_000),
   })
@@ -262,21 +216,8 @@ async function dbMarkOnboarding(ghUserId: string): Promise<PiIdentityRecord | nu
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return null
   try {
-    const url = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_pi_identities?gh_user_id=eq.${encodeURIComponent(ghUserId)}`
-    const res = await fetch(url, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: env.supabaseServiceRoleKey,
-        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-        Prefer: "return=representation",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({
-        onboarding_completed: true,
-        updated_at: new Date().toISOString(),
-        last_seen_at: new Date().toISOString(),
-      }),
+    const restResult = await supabaseRest(`gh_pi_identities?gh_user_id=eq.${encodeURIComponent(ghUserId)}`, { method: "PATCH", body: JSON.stringify({, timeoutMs: 10000 })
+    const res = { ok: restResult.ok, status: restResult.status, json: async () => restResult.ok ? restResult.data : restResult.body, text: async () => JSON.stringify(restResult.ok ? restResult.data : restResult.body) },
       cache: "no-store",
     })
     if (!res.ok) {
@@ -333,15 +274,7 @@ export async function getByPiUsername(username: string): Promise<PiIdentityRecor
           pi_username: `ilike.${key}`,
           limit: "5",
         })
-        const res = await fetch(`${base}/rest/v1/gh_pi_identities?${params}`, {
-          headers: {
-            apikey: env.supabaseServiceRoleKey,
-            Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-            Accept: "application/json",
-          },
-          cache: "no-store",
-          signal: AbortSignal.timeout(10_000),
-        })
+        const res = await (async () => { const r = await supabaseRest(`gh_pi_identities?${params}`, { method: "GET", timeoutMs: 10000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
         if (!res.ok) {
           throw new Error("PI_IDENTITY_USERNAME_LOOKUP_FAILED")
         }
@@ -523,7 +456,7 @@ export async function touchLastSeen(ghUserId: string): Promise<void> {
     const env = readGhcServerEnv()
     if (env.supabaseUrl && env.supabaseServiceRoleKey) {
       try {
-        const url = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_pi_identities?gh_user_id=eq.${encodeURIComponent(key)}`
+        const url = `gh_pi_identities?gh_user_id=eq.${encodeURIComponent(key)}`
         await fetch(url, {
           method: "PATCH",
           headers: {

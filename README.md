@@ -1,18 +1,30 @@
 # GreenHaven
 
-**Current source version:** `0.338.85`
+**Current source version:** `0.338.86`
 
 Production status: **NOT APPROVED** — supported Node 24.15.0 dependency-backed typecheck/lint/build, browser/device, live database/provider and operator acceptance remain outstanding.
 
 This repository is the canonical GreenHaven source tree. See `docs/SOURCE_OF_TRUTH.md` and `docs/CURRENT_BUILD_CONTEXT.md` before implementation or release work.
 
-## Latest implementation — 0.338.85 / CI Node assertion hygiene
+## Latest implementation — 0.338.86 / CI Node assertion hygiene
 
-Run #301 release-gate metadata is synchronized to 0.338.85. Both CI jobs explicitly assert the exact Node.js 24.15.0 runtime after setup-node. The 0.338.84 feed/home/profile/community/post-card density improvements remain included. The current audit workspace is Node 22.16.0 without dependencies, so dependency-backed typecheck/lint/build are not claimed. Browser/device, authenticated cross-account, live database/provider, migration-history reconciliation and Preview acceptance remain outstanding. No migration, financial/provider state, GitHub push or deployment was performed. Production remains NOT APPROVED.
+Run #302 hardens Pi A2U wallet-scope consent and binds provider destination adoption to the exact Testnet payment and payout request. The prior CI Node 24.15.0 assertions and product improvements remain included. The current audit workspace is Node 22.16.0 without dependencies, so dependency-backed typecheck/lint/build are not claimed. Browser/device, authenticated cross-account, live Pi provider transfer, Mainnet migration reconciliation and Preview acceptance remain outstanding. Run #302 migration 20261116045934 was applied to Testnet only; no payout/ledger records were changed. No GitHub push or Vercel deployment was performed. Production remains NOT APPROVED.
+
+## Candidate addition — Marketplace Phase 3 (saved delivery addresses, foundation)
+
+Source-only, additive: a held SQL proposal for an owner-only saved-address table with four service-role-only RPCs (`supabase/proposals/20261116_marketplace_phase3_saved_addresses_proposal.sql`, not a migration, not applied, not rehearsed), a pure client contract, an authenticated `/api/marketplace/addresses` route that fails closed with 503 until the proposal is applied, and a collapsed "Delivery addresses" manager in the Orders section. Addresses are not attached to orders, and there is no order, payment, payout, provider or version change. See `docs/MARKETPLACE-TRANSFORMATION-PHASE3.md`. Production remains NOT APPROVED.
+
+## Candidate addition — Marketplace Phase 2 (discovery & seller growth)
+
+Source-only, additive: Best-match sort, disclosed and capped promoted placement, Seller Centre insights, buyer returns guide, more-from-seller, recently viewed and address validation helper. No migration, financial, provider or version change. See `docs/MARKETPLACE-TRANSFORMATION-PHASE2.md`. Production remains NOT APPROVED.
+
+## Candidate addition — Marketplace Phase 1 (trust & speed)
+
+Source-only, additive: verified-purchase rating summary and featured-review quality filter, landed-cost line at checkout, stock and seller-trust badges, a first-run seller checklist helper and a browse skeleton. No migration, financial, provider or version change. See `docs/MARKETPLACE-TRANSFORMATION-PHASE1.md`. Production remains NOT APPROVED.
 
 ## Candidate addition — Run #302 (Pi wallet-scope consent / A2U withdrawal fix)
 
-Fixes withdrawals blocked by "Pi did not return a wallet address" after the user had allowed the wallet-address permission. Consent now rests on Pi `/v2/me` `credentials.scopes` proving the `wallet_address` scope; the payout destination is adopted from, or checked against, Pi's A2U `PaymentDTO.to_address` before anything is submitted. Review-required migration, unapplied. See `RUN302-PI-WALLET-SCOPE-A2U-FIX-DELIVERY.md`. Production remains NOT APPROVED.
+Fixes withdrawals blocked by "Pi did not return a wallet address" after the user had allowed the wallet-address permission. Consent now rests on Pi `/v2/me` `credentials.scopes` proving the `wallet_address` scope; the payout destination is adopted from, or checked against, Pi's A2U `PaymentDTO.to_address` before anything is submitted. Corrected Testnet migration `20261116045934` is applied and verified. See `RUN302-PI-WALLET-SCOPE-A2U-FIX-DELIVERY.md`. Production remains NOT APPROVED.
 
 ## Previous implementation — Run #310 / 0.338.73
 

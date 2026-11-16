@@ -15,18 +15,23 @@
 -- Funds are only submitted after the provider address is known and valid. A later
 -- change in the provider address versus the bound address still blocks and queues review.
 --
--- REVIEW_REQUIRED. Do not apply with `db push` (migration history is unreconciled);
--- apply this single file to Testnet only after review. Requires 20261110125500 to be applied.
+-- Corrected after security review. Apply as this single migration to Testnet only.
+-- Requires 20261110125500 to be applied. Do not apply to Mainnet: payout creation
+-- remains explicitly fenced to Pi Testnet until separate Mainnet A2U approval.
 
 ALTER TABLE public.gh_pi_wallet_authorizations
   ADD COLUMN IF NOT EXISTS wallet_scope_verified_at timestamptz;
 
--- Rows that already carry an address could only have been created through the
--- wallet_address-scope consent flow, so they count as scope-verified. Legacy
--- UID-only rows (no address) stay NULL and must re-consent.
+-- Backfill only records whose stored provenance demonstrates an explicit user
+-- consent and a recognized wallet-address source. Do not infer consent from an
+-- address alone: operator/bridge/legacy records must re-consent.
 UPDATE public.gh_pi_wallet_authorizations
   SET wallet_scope_verified_at = COALESCE(wallet_scope_verified_at, consented_at, now())
-  WHERE pi_wallet_address IS NOT NULL AND wallet_scope_verified_at IS NULL;
+  WHERE pi_wallet_address IS NOT NULL
+    AND wallet_scope_verified_at IS NULL
+    AND consent_source = 'user_explicit'
+    AND wallet_address_source IN ('pi_sdk_scope', 'platform_api', 'provider_payment')
+    AND pi_wallet_address ~ '^G[A-Z2-7]{55}$';
 
 -- Grant: same 5-argument signature. Blank address + source 'scope_only' records a
 -- server-verified wallet_address scope grant with the address still to be confirmed
@@ -67,7 +72,9 @@ BEGIN
     v_address_source := NULL;
     v_address_verified_at := NULL;
   ELSE
-    IF v_address !~ '^G[A-Z2-7]{55}$' OR v_address_source NOT IN ('pi_sdk_scope','platform_api') THEN
+    IF v_address !~ '^G[A-Z2-7]{55}$'
+       OR v_address_source IS NULL
+       OR v_address_source NOT IN ('pi_sdk_scope','platform_api') THEN
       RETURN jsonb_build_object('ok', false, 'error', 'PI_WALLET_ADDRESS_REQUIRED');
     END IF;
     IF v_address_source='platform_api' THEN v_address_verified_at := now(); ELSE v_address_verified_at := NULL; END IF;
@@ -190,7 +197,8 @@ $$;
 -- as the bound address (source provider_payment) and snapshot it onto the request.
 -- If an address is already bound, it must match exactly or nothing changes.
 CREATE OR REPLACE FUNCTION public.gh_pi_wallet_authorization_adopt_provider_address(
-  p_user_id text, p_pi_app_uid text, p_request_id uuid, p_provider_to_address text
+  p_user_id text, p_pi_app_uid text, p_request_id uuid,
+  p_provider_payment_id text, p_provider_to_address text
 ) RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -200,15 +208,39 @@ DECLARE
   v_user text := NULLIF(trim(COALESCE(p_user_id,'')), '');
   v_uid text := NULLIF(trim(COALESCE(p_pi_app_uid,'')), '');
   v_actual text := upper(trim(COALESCE(p_provider_to_address,'')));
+  v_payment_id text := NULLIF(trim(COALESCE(p_provider_payment_id,'')), '');
   v_row public.gh_pi_wallet_authorizations%ROWTYPE;
   v_req public.gh_pi_earnings_payout_requests%ROWTYPE;
+  v_map public.gh_pi_identities%ROWTYPE;
 BEGIN
-  IF v_user IS NULL OR v_uid IS NULL OR p_request_id IS NULL OR v_actual !~ '^G[A-Z2-7]{55}$' THEN
+  IF v_user IS NULL OR v_uid IS NULL OR p_request_id IS NULL
+     OR v_payment_id IS NULL OR length(v_payment_id) NOT BETWEEN 1 AND 200
+     OR v_actual !~ '^G[A-Z2-7]{55}$' THEN
     RETURN jsonb_build_object('ok',false,'error','INVALID_INPUT');
   END IF;
+
+  -- The Pi identity must still be the current mapping for this GreenHaven user.
+  SELECT * INTO v_map FROM public.gh_pi_identities
+    WHERE gh_user_id=v_user AND pi_app_uid=v_uid LIMIT 1 FOR SHARE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('ok',false,'error','IDENTITY_MAPPING_MISMATCH');
+  END IF;
+
+  -- Address adoption is permitted only for the exact provider payment already
+  -- bound to this payout request, on Testnet, while execution is still active.
   SELECT * INTO v_req FROM public.gh_pi_earnings_payout_requests
     WHERE id=p_request_id AND user_id=v_user AND recipient_pi_app_uid=v_uid FOR UPDATE;
   IF NOT FOUND THEN RETURN jsonb_build_object('ok',false,'error','REQUEST_NOT_FOUND'); END IF;
+  IF v_req.network IS DISTINCT FROM 'Pi Testnet' THEN
+    RETURN jsonb_build_object('ok',false,'error','TESTNET_ONLY');
+  END IF;
+  IF v_req.status NOT IN ('reserved','processing','uncertain') THEN
+    RETURN jsonb_build_object('ok',false,'error','PAYOUT_NOT_EXECUTABLE');
+  END IF;
+  IF v_req.provider_payment_id IS DISTINCT FROM v_payment_id THEN
+    RETURN jsonb_build_object('ok',false,'error','PROVIDER_PAYMENT_BINDING_MISMATCH');
+  END IF;
+
   SELECT * INTO v_row FROM public.gh_pi_wallet_authorizations
     WHERE gh_user_id=v_user AND pi_app_uid=v_uid AND status='active' LIMIT 1 FOR UPDATE;
   IF NOT FOUND OR v_row.wallet_scope_verified_at IS NULL THEN
@@ -230,6 +262,32 @@ BEGIN
     UPDATE public.gh_pi_earnings_payout_requests SET recipient_wallet_address=v_actual,updated_at=now() WHERE id=v_req.id;
   END IF;
   RETURN jsonb_build_object('ok',true,'walletAddress',v_actual,'walletAddressSource','provider_payment');
+END;
+$$;
+
+-- Backward-compatible service-only adapter for the currently deployed worker.
+-- It never accepts a payment ID from the caller: it reads the already-bound ID
+-- from this payout row, then delegates to the strict five-argument implementation.
+CREATE OR REPLACE FUNCTION public.gh_pi_wallet_authorization_adopt_provider_address(
+  p_user_id text, p_pi_app_uid text, p_request_id uuid, p_provider_to_address text
+) RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_payment_id text;
+BEGIN
+  SELECT provider_payment_id INTO v_payment_id
+    FROM public.gh_pi_earnings_payout_requests
+    WHERE id=p_request_id AND user_id=NULLIF(trim(COALESCE(p_user_id,'')),'')
+      AND recipient_pi_app_uid=NULLIF(trim(COALESCE(p_pi_app_uid,'')),'');
+  IF v_payment_id IS NULL THEN
+    RETURN jsonb_build_object('ok',false,'error','PROVIDER_PAYMENT_BINDING_MISMATCH');
+  END IF;
+  RETURN public.gh_pi_wallet_authorization_adopt_provider_address(
+    p_user_id,p_pi_app_uid,p_request_id,v_payment_id,p_provider_to_address
+  );
 END;
 $$;
 
@@ -308,11 +366,13 @@ REVOKE ALL ON FUNCTION public.gh_pi_wallet_authorization_grant(text,text,text,te
 REVOKE ALL ON FUNCTION public.gh_pi_wallet_authorization_get(text) FROM PUBLIC,anon,authenticated;
 REVOKE ALL ON FUNCTION public.gh_pi_wallet_authorization_assert_payout(text,text) FROM PUBLIC,anon,authenticated;
 REVOKE ALL ON FUNCTION public.gh_pi_wallet_authorization_adopt_provider_address(text,text,uuid,text) FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON FUNCTION public.gh_pi_wallet_authorization_adopt_provider_address(text,text,uuid,text,text) FROM PUBLIC,anon,authenticated;
 REVOKE ALL ON FUNCTION public.gh_pi_earnings_payout_create(text,text,text,numeric,numeric,numeric,text) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.gh_pi_wallet_authorization_grant(text,text,text,text,text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.gh_pi_wallet_authorization_get(text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.gh_pi_wallet_authorization_assert_payout(text,text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.gh_pi_wallet_authorization_adopt_provider_address(text,text,uuid,text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.gh_pi_wallet_authorization_adopt_provider_address(text,text,uuid,text,text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.gh_pi_earnings_payout_create(text,text,text,numeric,numeric,numeric,text) TO service_role;
 
 COMMENT ON COLUMN public.gh_pi_wallet_authorizations.wallet_scope_verified_at IS

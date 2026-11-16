@@ -15,9 +15,10 @@ export const dynamic = "force-dynamic"
 const headers = { "Cache-Control": "private, no-store, max-age=0", Pragma: "no-cache" }
 function reply(body: unknown, status=200) { return NextResponse.json(body,{status,headers}) }
 function secretOk(request: Request) {
-  const expected=Buffer.from(String(process.env.PI_EARNINGS_EXECUTOR_KEY||process.env.GHC_A2U_ADMIN_KEY||""),"utf8")
-  const supplied=Buffer.from(String(request.headers.get("x-ghc-pi-earnings-key")||request.headers.get("x-ghc-a2u-admin-key")||""),"utf8")
-  return expected.length>=16 && expected.length===supplied.length && timingSafeEqual(expected,supplied)
+  // Phase 2: single purpose key only. No fallback to GHC_A2U_ADMIN_KEY.
+  const expected = Buffer.from(String(process.env.PI_EARNINGS_EXECUTOR_KEY || "").trim(), "utf8")
+  const supplied = Buffer.from(String(request.headers.get("x-ghc-pi-earnings-key") || "").trim(), "utf8")
+  return expected.length >= 32 && expected.length === supplied.length && timingSafeEqual(expected, supplied)
 }
 function amountMatches(a: unknown,b:number) { const n=typeof a==="number"?a:Number(a); return Number.isFinite(n)&&Math.abs(n-b)<1e-8 }
 function matches(p: PiA2uPayment,input:{id:string;requestId:string;uid:string;amount:number}) {
@@ -199,7 +200,8 @@ export async function POST(request:Request) {
       // and differs, which falls through to the mismatch/review path below.
       providerStage="ADOPT_PROVIDER_WALLET_ADDRESS"
       const adopted=await rpc<{ok:boolean;error?:string;walletAddress?:string}>(base,key,"gh_pi_wallet_authorization_adopt_provider_address",{
-        p_user_id:auth.userId,p_pi_app_uid:row.recipient_pi_app_uid,p_request_id:requestId,p_provider_to_address:providerToAddress,
+        p_user_id:auth.userId,p_pi_app_uid:row.recipient_pi_app_uid,p_request_id:requestId,
+        p_provider_payment_id:paymentId,p_provider_to_address:providerToAddress,
       })
       if(!adopted?.ok) {
         if(adopted?.error==="PI_PAYOUT_WALLET_ADDRESS_MISMATCH") {

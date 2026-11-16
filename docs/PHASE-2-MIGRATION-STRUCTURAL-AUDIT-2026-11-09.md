@@ -10,34 +10,34 @@ This inventory scans every canonical 'supabase/migrations/*.sql' file. It does n
 
 ## Inventory totals
 
-- Canonical migration files scanned: **206**
-- 'create_table': **151**
-- 'alter_table': **229**
-- 'create_function': **442**
+- Canonical migration files scanned: **224**
+- 'create_table': **155**
+- 'alter_table': **240**
+- 'create_function': **479**
 - 'create_procedure': **0**
 - 'create_view': **0**
 - 'create_type': **0**
-- 'create_index': **252**
-- 'create_policy': **155**
+- 'create_index': **259**
+- 'create_policy': **159**
 - 'create_trigger': **23**
-- 'security_definer': **457**
-- 'enable_rls': **154**
+- 'security_definer': **494**
+- 'enable_rls': **158**
 - 'force_rls': **0**
-- 'drop_statement': **178**
-- 'truncate_statement': **0**
-- 'delete_statement': **32**
-- 'update_statement': **350**
+- 'drop_statement': **182**
+- 'truncate_statement': **1**
+- 'delete_statement': **43**
+- 'update_statement': **389**
 - 'dynamic_execute': **5**
-- 'grant_statement': **531**
-- 'revoke_statement': **526**
-- 'transaction_begin': **586**
-- 'transaction_commit': **14**
+- 'grant_statement': **578**
+- 'revoke_statement': **580**
+- 'transaction_begin': **629**
+- 'transaction_commit': **17**
 - 'transaction_rollback': **0**
 
 ## Per-file review signals
 
-- 'REVIEW_DATA_MUTATION': present in **122** migration file(s).
-- 'REVIEW_DESTRUCTIVE_DDL': present in **86** migration file(s).
+- 'REVIEW_DATA_MUTATION': present in **134** migration file(s).
+- 'REVIEW_DESTRUCTIVE_DDL': present in **90** migration file(s).
 - 'REVIEW_TRIGGER_ORDER_AND_SIDE_EFFECTS': present in **15** migration file(s).
 - 'REVIEW_FUNCTION_ACL_EVIDENCE': present in **14** migration file(s).
 - 'REVIEW_SECURITY_DEFINER_SEARCH_PATH': present in **6** migration file(s).

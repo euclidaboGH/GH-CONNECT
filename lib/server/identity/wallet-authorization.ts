@@ -4,6 +4,7 @@
  * Never trusts client-supplied recipient UIDs or stores tokens/seeds.
  */
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
 
 export type WalletAuthorizationStatus = {
   ok: boolean
@@ -19,6 +20,8 @@ export type WalletAuthorizationStatus = {
   walletAddressVerifiedAt?: string | null
   walletScopeVerifiedAt?: string | null
   walletAddressPending?: boolean
+  /** False when the database RPC predates wallet_scope_verified_at (migration not applied). */
+  scopeSchemaReady?: boolean
   consentedAt?: string | null
   lastVerifiedAt?: string | null
   uidMatchesAuthorization?: boolean
@@ -55,17 +58,7 @@ async function rpc<T extends Record<string, unknown>>(
   }
 
   try {
-    const response = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/${name}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: env.supabaseServiceRoleKey,
-        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-      },
-      body: JSON.stringify(body),
-      cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
-    })
+    const response = await (async () => { const r = await supabaseRpc('${name}', typeof JSON.stringify(body) === "string" ? JSON.parse(JSON.stringify(body)) : JSON.stringify(body), { timeoutMs: 10000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
     const raw = await response.text()
     let result: T | null = null
     try {
@@ -126,9 +119,12 @@ export async function getWalletAuthorization(ghUserId: string): Promise<WalletAu
   // The address may be provisional (SDK-reported) or still pending; Pi's A2U
   // PaymentDTO.to_address is checked/adopted before any transfer is submitted.
   const active = value.authorizationActive === true && uidMatches && Boolean(scopeVerifiedAt) && (!address || (validAddress && Boolean(source)))
+  const scopeSchemaReady = Object.prototype.hasOwnProperty.call(value, "walletScopeVerifiedAt")
   const authorizationReason = active
     ? null
-    : !value.hasMapping
+    : !scopeSchemaReady
+      ? "WALLET_SCOPE_MIGRATION_REQUIRED"
+      : !value.hasMapping
       ? "IDENTITY_MAPPING_REQUIRED"
       : !uidMatches
         ? "IDENTITY_MISMATCH"
@@ -145,6 +141,7 @@ export async function getWalletAuthorization(ghUserId: string): Promise<WalletAu
     walletAddressVerifiedAt: uidMatches && validAddress ? verifiedAt : null,
     walletScopeVerifiedAt: uidMatches ? scopeVerifiedAt : null,
     walletAddressPending: active && !validAddress,
+    scopeSchemaReady,
     uidMatchesAuthorization: uidMatches,
   }
 }
@@ -182,6 +179,10 @@ export async function grantWalletAuthorization(input: {
     const error = typeof result.value.error === "string" && /^[A-Z0-9_]{2,80}$/.test(result.value.error)
       ? result.value.error
       : "GRANT_FAILED"
+    // A database still on the pre-Run#302 grant function rejects a blank address with
+    // PI_WALLET_ADDRESS_REQUIRED even though Pi proved the scope. Surface that as an
+    // operator-actionable condition instead of telling the user Pi withheld access.
+    if (scopeOnly && error === "PI_WALLET_ADDRESS_REQUIRED") return { ok: false, error: "WALLET_SCOPE_MIGRATION_REQUIRED" }
     return { ok: false, error }
   }
   if (

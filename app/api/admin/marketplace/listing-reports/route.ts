@@ -1,9 +1,9 @@
 /** Operator-only marketplace listing report queue and review transitions. */
-import { timingSafeEqual } from "node:crypto"
 import { NextResponse } from "next/server"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
+import { operatorDiagnosticsAuthorized } from "@/lib/server/security/operator-key"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -19,11 +19,7 @@ function reply(body: unknown, status = 200) {
 }
 
 function authorized(request: Request): boolean {
-  const configured = String(process.env.GHC_OPERATOR_RECONCILE_KEY || process.env.GHC_ADMIN_API_KEY || process.env.GHC_A2U_ADMIN_KEY || "").trim()
-  const supplied = String(request.headers.get("x-ghc-operator-key") || "")
-  const expectedBytes = Buffer.from(configured, "utf8")
-  const suppliedBytes = Buffer.from(supplied, "utf8")
-  return expectedBytes.length >= 32 && suppliedBytes.length === expectedBytes.length && timingSafeEqual(expectedBytes, suppliedBytes)
+  return operatorDiagnosticsAuthorized(request)
 }
 
 function databaseConfig() {

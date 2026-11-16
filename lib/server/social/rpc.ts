@@ -8,6 +8,7 @@
  * - EXECUTE is granted to service_role only; browser never calls these RPCs.
  */
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
 
 const SOCIAL_UPSTREAM_TIMEOUT_MS = 12_000
 
@@ -74,26 +75,7 @@ async function socialRpcOnce(
     return { ok: false, data: null, error: "DB_UNAVAILABLE", status: 503, fn }
   }
   try {
-    const res = await fetch(
-      `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/${encodeURIComponent(fn)}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          // Explicit public schema — avoids profile mismatch on multi-schema projects
-          "Content-Profile": "public",
-          "Accept-Profile": "public",
-          apikey: env.supabaseServiceRoleKey,
-          Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-        },
-        body: JSON.stringify(body),
-        cache: "no-store",
-        // Bound upstream latency so a stalled PostgREST request cannot pin a
-        // serverless invocation indefinitely. Callers receive the existing fail-closed result.
-        signal: AbortSignal.timeout(SOCIAL_UPSTREAM_TIMEOUT_MS),
-      }
-    )
+    const res = await (async () => { const r = await supabaseRpc('${encodeURIComponent(fn)}', typeof JSON.stringify(body) === "string" ? JSON.parse(JSON.stringify(body)) : JSON.stringify(body), { timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
     const text = await res.text()
     const parsed = parsePostgrestBody(text)
     if (!res.ok) {
@@ -163,21 +145,7 @@ export async function socialRest<T = unknown>(
     return { ok: false, data: null, error: "DB_UNAVAILABLE", status: 503 }
   }
   try {
-    const res = await fetch(
-      `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/${pathAndQuery.replace(/^\//, "")}`,
-      {
-        method: "GET",
-        headers: {
-          Accept: "application/json",
-          "Accept-Profile": "public",
-          apikey: env.supabaseServiceRoleKey,
-          Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-        },
-        cache: "no-store",
-        // Keep direct table reads within the same upstream latency budget as RPCs.
-        signal: AbortSignal.timeout(SOCIAL_UPSTREAM_TIMEOUT_MS),
-      }
-    )
+    const res = await (async () => { const r = await supabaseRest(`${pathAndQuery.replace(/^\//, "")}`, { method: "GET", timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
     const text = await res.text()
     let data: T | null = null
     if (text && text !== "null") {

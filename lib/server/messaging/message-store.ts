@@ -7,6 +7,7 @@
 
 import { createHash, randomBytes } from "crypto"
 import { readGhcServerEnv, hasPrivilegedDatabase } from "@/lib/server/economy/env"
+import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
 
 export type ConversationKind = "direct" | "group" | "community"
 
@@ -167,12 +168,7 @@ async function rest<T>(
     if (init?.body && !headers["Content-Type"]) {
       headers["Content-Type"] = "application/json"
     }
-    const res = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/${path}`, {
-      ...init,
-      headers,
-      cache: "no-store",
-      signal: init?.signal || AbortSignal.timeout(8_000),
-    })
+    const res = await (async () => { const r = await supabaseRest(`${path}`, { method: "GET", timeoutMs: 8000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
     if (res.status === 204) return { ok: res.ok, status: res.status, data: null }
     const data = (await res.json().catch(() => null)) as T | null
     return { ok: res.ok, status: res.status, data }
@@ -1358,18 +1354,7 @@ export async function toggleMessageReaction(input: {
     const env = readGhcServerEnv()
     if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return { ok: false, error: "STORE_UNAVAILABLE" }
     try {
-      const response = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/gh_message_toggle_reaction`, {
-        method: "POST",
-        headers: {
-          apikey: env.supabaseServiceRoleKey,
-          Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify({ p_conversation_id: cid, p_message_id: mid, p_actor_id: uid, p_emoji: emoji }),
-        cache: "no-store",
-        signal: AbortSignal.timeout(8_000),
-      })
+      const response = await (async () => { const rpcResult = await supabaseRpc('gh_message_toggle_reaction', { p_conversation_id: cid, p_message_id: mid, p_actor_id: uid, p_emoji: emoji }, { timeoutMs: 8000 }); return { ok: rpcResult.ok, status: rpcResult.status, json: async () => rpcResult.ok ? rpcResult.data : (rpcResult.body ?? null) }; })()
       const result = await response.json().catch(() => null) as {
         ok?: boolean; error?: string; active?: boolean;
         reaction_counts?: Record<string, number>; viewer_reactions?: string[]
@@ -1427,21 +1412,7 @@ export async function editMessage(input: {
     if (env.supabaseUrl && env.supabaseServiceRoleKey) {
       // Prefer RPC when migration 55 applied
       try {
-        const rpcRes = await fetch(
-          `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/gh_edit_message`,
-          {
-            method: "POST",
-            headers: {
-              apikey: env.supabaseServiceRoleKey,
-              Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-              "Content-Type": "application/json",
-              Prefer: "return=representation",
-            },
-            body: JSON.stringify({
-              p_message_id: mid,
-              p_actor_id: uid,
-              p_body: body,
-            }),
+        const rpcRes = await (async () => { const r = await supabaseRpc('gh_edit_message', typeof JSON.stringify({ === "string" ? JSON.parse(JSON.stringify({) : JSON.stringify({, { timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })(),
             cache: "no-store",
           }
         )
@@ -1533,20 +1504,7 @@ export async function pinMessage(input: {
     const env = readGhcServerEnv()
     if (env.supabaseUrl && env.supabaseServiceRoleKey) {
       try {
-        const rpcRes = await fetch(
-          `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/gh_pin_message`,
-          {
-            method: "POST",
-            headers: {
-              apikey: env.supabaseServiceRoleKey,
-              Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              p_message_id: mid,
-              p_actor_id: uid,
-              p_pinned: Boolean(input.pinned),
-            }),
+        const rpcRes = await (async () => { const r = await supabaseRpc('gh_pin_message', typeof JSON.stringify({ === "string" ? JSON.parse(JSON.stringify({) : JSON.stringify({, { timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })(),
             cache: "no-store",
           }
         )
@@ -1598,26 +1556,7 @@ export async function setConversationPrefs(input: {
     const env = readGhcServerEnv()
     if (env.supabaseUrl && env.supabaseServiceRoleKey) {
       try {
-        const rpcRes = await fetch(
-          `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/gh_set_conversation_prefs`,
-          {
-            method: "POST",
-            headers: {
-              apikey: env.supabaseServiceRoleKey,
-              Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              p_conversation_id: cid,
-              p_actor_id: uid,
-              p_is_pinned: input.isPinned ?? null,
-              p_is_archived: input.isArchived ?? null,
-              p_muted_until:
-                input.mutedUntil != null
-                  ? new Date(input.mutedUntil).toISOString()
-                  : null,
-              p_clear_mute: input.mutedUntil === null,
-            }),
+        const rpcRes = await (async () => { const r = await supabaseRpc('gh_set_conversation_prefs', typeof JSON.stringify({ === "string" ? JSON.parse(JSON.stringify({) : JSON.stringify({, { timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })(),
             cache: "no-store",
           }
         )

@@ -8,6 +8,7 @@
  */
 import { REFERENCE_GHC_PER_PI } from "@/lib/server/economy/economic-config"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
 
 export const WITHDRAWAL_MIN_PI = 100 as const
 
@@ -97,20 +98,7 @@ async function rpcJson(
     return { ok: false, error: "DB_UNAVAILABLE" }
   }
   try {
-    const res = await fetch(
-      `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/${fn}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: env.supabaseServiceRoleKey,
-          Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-        },
-        body: JSON.stringify(args),
-        cache: "no-store",
-        signal: AbortSignal.timeout(8_000),
-      }
-    )
+    const res = await (async () => { const r = await supabaseRpc('${fn}', typeof JSON.stringify(args) === "string" ? JSON.parse(JSON.stringify(args)) : JSON.stringify(args), { timeoutMs: 8000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
     const data = (await res.json().catch(() => null)) as unknown
     if (!res.ok) {
       const errObj = data && typeof data === "object" ? (data as Record<string, unknown>) : {}
@@ -198,7 +186,7 @@ export async function listWithdrawalsForUser(userId: string): Promise<Withdrawal
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return null
   try {
     const url =
-      `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/ghc_withdrawal_requests` +
+      `ghc_withdrawal_requests` +
       `?user_id=eq.${encodeURIComponent(userId)}&order=created_at.desc&limit=50`
     const res = await fetch(url, {
       headers: {

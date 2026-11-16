@@ -13,12 +13,21 @@ import {
   validateSession,
 } from "@/lib/server/identity/session-store"
 import { revokeStepUpsForSession } from "@/lib/server/identity/step-up-store"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 export async function POST(request: Request) {
   try {
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown"
+    const rate = await checkDurableRateLimit(`auth-logout:${ip}`, 20, 60_000, { onUnavailable: "local" })
+    if (!rate.ok) {
+      return NextResponse.json(
+        { ok: false, error: durableRateLimitCode(rate), retryAfterSec: rate.retryAfterSec },
+        { status: durableRateLimitStatus(rate), headers: { "Cache-Control": "no-store" } },
+      )
+    }
     const token = extractSessionTokenFromCookie(request.headers)
     if (token) {
       const session = await validateSession(token, { touch: false })

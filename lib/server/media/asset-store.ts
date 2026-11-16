@@ -5,6 +5,7 @@
 import { randomUUID } from "node:crypto"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { isSafeMediaBucket, mediaCategoryMatches, mediaExtensionMatchesMime, parseOwnedMediaPath, validateMediaMetadata } from "@/lib/server/media/path-policy.mjs"
+import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
 
 function genMediaId(): string {
   return `media_${Date.now().toString(36)}_${randomUUID().replace(/-/g, "")}`
@@ -44,31 +45,7 @@ export async function createMediaAssetRecord(input: {
   }
   const id = input.id || genMediaId()
   try {
-    const res = await fetch(
-      `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/gh_media_asset_create`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: env.supabaseServiceRoleKey,
-          Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-        },
-        body: JSON.stringify({
-          p_id: id,
-          p_owner_id: input.ownerId,
-          p_bucket: input.bucket,
-          p_storage_path: input.storagePath,
-          p_media_kind: input.mediaKind,
-          p_mime_type: input.mimeType,
-          p_byte_size: input.byteSize,
-          p_width: input.width ?? null,
-          p_height: input.height ?? null,
-          p_duration_ms: input.durationMs ?? null,
-          p_public_url: input.publicUrl ?? null,
-          p_thumb_path: input.thumbPath ?? null,
-          p_thumb_url: input.thumbUrl ?? null,
-          p_metadata: input.metadata || {},
-        }),
+    const res = await (async () => { const r = await supabaseRpc('gh_media_asset_create', typeof JSON.stringify({ === "string" ? JSON.parse(JSON.stringify({) : JSON.stringify({, { timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })(),
         cache: "no-store",
         signal: AbortSignal.timeout(8_000),
       }
@@ -97,16 +74,7 @@ export async function resolveMediaAssets(
   const clean = ids.map(String).filter(Boolean).slice(0, 20)
   if (clean.length === 0) return { ok: true, assets: [] }
   try {
-    const res = await fetch(
-      `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/gh_media_assets_resolve`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: env.supabaseServiceRoleKey,
-          Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-        },
-        body: JSON.stringify({ p_actor_id: actorId, p_ids: clean }),
+    const res = await (async () => { const r = await supabaseRpc('gh_media_assets_resolve', typeof JSON.stringify({ p_actor_id: actorId === "string" ? JSON.parse(JSON.stringify({ p_actor_id: actorId) : JSON.stringify({ p_actor_id: actorId, { timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })(),
         cache: "no-store",
         signal: AbortSignal.timeout(8_000),
       }

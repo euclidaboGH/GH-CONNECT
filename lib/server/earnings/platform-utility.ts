@@ -2,33 +2,17 @@
  * Phase 9 — Platform utility & charity accounting (server-only).
  * Segregated from user withdrawable earnings. Fees and charity never mint available PI.
  */
-import { readGhcServerEnv, hasPrivilegedDatabase } from "@/lib/server/economy/env"
+import { hasPrivilegedDatabase } from "@/lib/server/economy/env"
+import { supabaseRpc } from "@/lib/server/supabase/rest-client"
 
 async function rpc<T extends Record<string, unknown>>(
   name: string,
   body: Record<string, unknown> = {},
 ): Promise<T | null> {
   if (!hasPrivilegedDatabase()) return null
-  const env = readGhcServerEnv()
-  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return null
-  try {
-    const response = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/${name}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: env.supabaseServiceRoleKey,
-        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-      },
-      body: JSON.stringify(body),
-      cache: "no-store",
-      signal: AbortSignal.timeout(12_000),
-    })
-    const result = (await response.json().catch(() => null)) as T | null
-    if (!response.ok || result === null) return null
-    return result
-  } catch {
-    return null
-  }
+  const result = await supabaseRpc<T>(name, body, { timeoutMs: 12_000 })
+  if (!result.ok) return null
+  return result.data
 }
 
 /** Record the 3% withdrawal fee as platform utility (not user credit). */

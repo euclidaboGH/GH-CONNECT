@@ -39,11 +39,17 @@ test('legacy authorization UI explains re-consent and Developer Portal permissio
 test('wallet consent error copy never recommends manually entering a payout address', !/enter or substitute an address manually/i.test(consent + client))
 
 const exec = read('app/api/economy/earnings/withdrawals/execute/route.ts')
-const mig = read('supabase/migrations/20261115100001_pi_wallet_scope_consent_provider_address_discovery.sql')
+const mig = read('supabase/migrations/20261116045934_pi_wallet_scope_consent_provider_address_discovery.sql')
 test('payout worker never submits before the provider destination is a valid address bound to this request', exec.indexOf('gh_pi_wallet_authorization_adopt_provider_address') < exec.indexOf('providerStage="SUBMIT_PAYMENT"') && /PI_PROVIDER_WALLET_ADDRESS_INVALID/.test(exec) && /PI_PAYOUT_WALLET_ADDRESS_MISMATCH/.test(exec))
 test('scope-only authorization adopts Pi PaymentDTO.to_address and refuses a conflicting bound address', /adopt_provider_address/.test(mig) && /PI_PAYOUT_WALLET_ADDRESS_MISMATCH/.test(mig) && /wallet_scope_verified_at IS NULL/.test(mig))
-test('legacy UID-only rows cannot pay out until re-consent (scope timestamp required, backfill only for rows with an address)', /pi_wallet_address IS NOT NULL AND wallet_scope_verified_at IS NULL/.test(mig) && /wallet_scope_verified_at IS NULL THEN/.test(mig))
-test('new RPC is service-role only', /REVOKE ALL ON FUNCTION public\.gh_pi_wallet_authorization_adopt_provider_address/.test(mig) && /GRANT EXECUTE ON FUNCTION public\.gh_pi_wallet_authorization_adopt_provider_address\(text,text,uuid,text\) TO service_role/.test(mig))
+test('legacy UID-only and unproven-consent rows cannot be silently upgraded; backfill requires explicit consent and a recognized address source', /consent_source = 'user_explicit'/.test(mig) && /wallet_address_source IN \('pi_sdk_scope', 'platform_api', 'provider_payment'\)/.test(mig) && /wallet_scope_verified_at IS NULL THEN/.test(mig))
+test('provider-address adoption is bound to exact provider payment, current UID mapping, Testnet, and an executable request', /v_req\.provider_payment_id IS DISTINCT FROM v_payment_id/.test(mig) && /v_req\.network IS DISTINCT FROM 'Pi Testnet'/.test(mig) && /v_req\.status NOT IN \('reserved','processing','uncertain'\)/.test(mig) && /IDENTITY_MAPPING_MISMATCH/.test(mig) && /p_provider_payment_id:paymentId/.test(exec))
+test('new adoption RPC is service-role only and uses the five-argument signature', /REVOKE ALL ON FUNCTION public\.gh_pi_wallet_authorization_adopt_provider_address/.test(mig) && /GRANT EXECUTE ON FUNCTION public\.gh_pi_wallet_authorization_adopt_provider_address\(text,text,uuid,text,text\) TO service_role/.test(mig))
+test('wallet address source validation is null-safe', /v_address_source IS NULL/.test(mig))
+
+test('database schema gap is reported as an operator error, not a user retry', /WALLET_SCOPE_MIGRATION_REQUIRED/.test(route) && /scopeSchemaReady/.test(store) && /WALLET_SCOPE_MIGRATION_REQUIRED/.test(client) && /scopeOnly && error === "PI_WALLET_ADDRESS_REQUIRED"/.test(store))
+
+test('every consent failure carries a secret-free build/stage/code diagnostic', /WALLET_AUTH_BUILD/.test(route) && /stage: "PI_PROOF"/.test(route) && /failWithDiagnostic/.test(client) && /replace\(\/\[\^A-Za-z0-9_\.:-\]\/g/.test(client))
 
 const failed = checks.filter((x) => !x).length
 console.log(`\nRun #302 Pi withdrawal hardening: ${checks.length - failed}/${checks.length} passed; ${failed} failed.`)

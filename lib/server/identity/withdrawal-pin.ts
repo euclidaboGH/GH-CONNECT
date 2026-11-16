@@ -5,6 +5,7 @@
  */
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
 
 const MAX_ATTEMPTS = 5
 const LOCK_MS = 15 * 60_000
@@ -50,12 +51,8 @@ export async function getWithdrawalPinStatus(userId: string): Promise<PinStatus>
     return { ok: false, configured: false, locked: false, error: "PIN_SERVICE_UNAVAILABLE" }
   }
   try {
-    const url = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_withdrawal_pins?user_id=eq.${encodeURIComponent(userId)}&select=failed_attempts,locked_until`
-    const res = await fetch(url, {
-      headers: restHeaders(env.supabaseServiceRoleKey),
-      cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
-    })
+    const restResult = await supabaseRest(`gh_withdrawal_pins?user_id=eq.${encodeURIComponent(userId)}&select=failed_attempts,locked_until`, { method: "GET", timeoutMs: 10000 })
+    const res = { ok: restResult.ok, status: restResult.status, json: async () => restResult.ok ? restResult.data : restResult.body, text: async () => JSON.stringify(restResult.ok ? restResult.data : restResult.body) }
     if (!res.ok) {
       // A missing table/schema is not the same as an unconfigured PIN. Fail closed
       // so the UI never invites setup against unavailable persistence.
@@ -92,23 +89,8 @@ export async function setWithdrawalPin(input: {
   const salt = randomBytes(16).toString("hex")
   const pinHash = hashPin(input.pin, salt)
   try {
-    const url = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_withdrawal_pins`
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        ...restHeaders(env.supabaseServiceRoleKey),
-        // First PIN setup is insert-only. Never let a repeated setup request replace
-        // an existing credential; PIN changes need a separate verified flow.
-        Prefer: "resolution=ignore-duplicates,return=representation",
-      },
-      body: JSON.stringify({
-        user_id: input.userId,
-        pin_hash: pinHash,
-        pin_salt: salt,
-        failed_attempts: 0,
-        locked_until: null,
-        updated_at: new Date().toISOString(),
-      }),
+    const restResult = await supabaseRest(`gh_withdrawal_pins`, { method: "POST", body: JSON.stringify({, timeoutMs: 10000 })
+    const res = { ok: restResult.ok, status: restResult.status, json: async () => restResult.ok ? restResult.data : restResult.body, text: async () => JSON.stringify(restResult.ok ? restResult.data : restResult.body) },
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),
     })
@@ -138,10 +120,7 @@ export async function verifyWithdrawalPin(input: {
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return { ok: false, error: "PIN_SERVICE_UNAVAILABLE" }
   const base = env.supabaseUrl.replace(/\/$/, "")
   const call = async (fn: string, body: Record<string, unknown>) => {
-    const res = await fetch(`${base}/rest/v1/rpc/${fn}`, {
-      method: "POST", headers: restHeaders(env.supabaseServiceRoleKey!), body: JSON.stringify(body),
-      cache: "no-store", signal: AbortSignal.timeout(10_000),
-    })
+    const res = await (async () => { const r = await supabaseRpc('${fn}', typeof JSON.stringify(body) === "string" ? JSON.parse(JSON.stringify(body)) : JSON.stringify(body), { timeoutMs: 10000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
     if (!res.ok) throw new Error(`RPC_${res.status}`)
     return res.json().catch(() => null)
   }
@@ -181,17 +160,8 @@ export async function changeWithdrawalPin(input: {
   if (!verified.ok) return verified
   const salt = randomBytes(16).toString("hex")
   try {
-    const url = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_withdrawal_pins?user_id=eq.${encodeURIComponent(input.userId)}`
-    const res = await fetch(url, {
-      method: "PATCH",
-      headers: restHeaders(env.supabaseServiceRoleKey),
-      body: JSON.stringify({
-        pin_hash: hashPin(input.newPin, salt),
-        pin_salt: salt,
-        failed_attempts: 0,
-        locked_until: null,
-        updated_at: new Date().toISOString(),
-      }),
+    const restResult = await supabaseRest(`gh_withdrawal_pins?user_id=eq.${encodeURIComponent(input.userId)}`, { method: "PATCH", body: JSON.stringify({, timeoutMs: 10000 })
+    const res = { ok: restResult.ok, status: restResult.status, json: async () => restResult.ok ? restResult.data : restResult.body, text: async () => JSON.stringify(restResult.ok ? restResult.data : restResult.body) },
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),
     })

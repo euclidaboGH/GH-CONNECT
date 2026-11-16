@@ -9,6 +9,7 @@
 
 import { createHash, randomBytes } from "crypto"
 import { readGhcServerEnv, hasPrivilegedDatabase } from "@/lib/server/economy/env"
+import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
 
 /** Cookie name for GH server session */
 export const GH_SESSION_COOKIE = "gh_session"
@@ -156,27 +157,8 @@ async function dbInsert(rec: SessionRecord): Promise<boolean> {
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return false
   try {
-    const url = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_sessions`
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: env.supabaseServiceRoleKey,
-        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-        Prefer: "return=minimal",
-      },
-      body: JSON.stringify({
-        id: rec.id,
-        token_hash: rec.tokenHash,
-        gh_user_id: rec.ghUserId,
-        created_at: new Date(rec.createdAt).toISOString(),
-        last_seen_at: new Date(rec.lastSeenAt).toISOString(),
-        expires_at: new Date(rec.expiresAt).toISOString(),
-        absolute_expires_at: new Date(rec.absoluteExpiresAt).toISOString(),
-        revoked_at: null,
-        user_agent_hash: rec.userAgentHash,
-        meta: { deviceLabel: rec.deviceLabel || "Unknown device" },
-      }),
+    const restResult = await supabaseRest(`gh_sessions`, { method: "POST", body: JSON.stringify({, timeoutMs: 10000 })
+    const res = { ok: restResult.ok, status: restResult.status, json: async () => restResult.ok ? restResult.data : restResult.body, text: async () => JSON.stringify(restResult.ok ? restResult.data : restResult.body) },
       cache: "no-store",
     })
     if (!res.ok) {
@@ -194,15 +176,8 @@ async function dbSelectByHash(tokenHash: string): Promise<SessionRecord | null> 
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return null
   try {
-    const url = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_sessions?token_hash=eq.${encodeURIComponent(tokenHash)}&select=*&limit=1`
-    const res = await fetch(url, {
-      headers: {
-        apikey: env.supabaseServiceRoleKey,
-        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-        Accept: "application/json",
-      },
-      cache: "no-store",
-    })
+    const restResult = await supabaseRest(`gh_sessions?token_hash=eq.${encodeURIComponent(tokenHash)}&select=*&limit=1`, { method: "GET", body: undefined, timeoutMs: 10000 })
+    const res = { ok: restResult.ok, status: restResult.status, json: async () => restResult.ok ? restResult.data : restResult.body, text: async () => JSON.stringify(restResult.ok ? restResult.data : restResult.body) }
     if (!res.ok) return null
     const rows = (await res.json()) as DbRow[]
     if (!Array.isArray(rows) || !rows[0]) return null
@@ -219,18 +194,8 @@ async function dbPatch(
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return false
   try {
-    const url = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_sessions?id=eq.${encodeURIComponent(id)}`
-    const res = await fetch(url, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: env.supabaseServiceRoleKey,
-        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-        Prefer: "return=minimal",
-      },
-      body: JSON.stringify(patch),
-      cache: "no-store",
-    })
+    const restResult = await supabaseRest(`gh_sessions?id=eq.${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch), timeoutMs: 10000 })
+    const res = { ok: restResult.ok, status: restResult.status, json: async () => restResult.ok ? restResult.data : restResult.body, text: async () => JSON.stringify(restResult.ok ? restResult.data : restResult.body) }
     return res.ok
   } catch {
     return false
@@ -454,16 +419,8 @@ export async function revokeAllSessionsForUser(ghUserId: string): Promise<number
       throw new Error("SESSION_REVOCATION_UNAVAILABLE")
     }
     try {
-      const url = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_sessions?gh_user_id=eq.${encodeURIComponent(uid)}&revoked_at=is.null`
-      const response = await fetch(url, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: env.supabaseServiceRoleKey,
-          Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-          Prefer: "return=minimal",
-        },
-        body: JSON.stringify({ revoked_at: new Date(t).toISOString() }),
+      const restResult = await supabaseRest(`gh_sessions?gh_user_id=eq.${encodeURIComponent(uid)}&revoked_at=is.null`, { method: "PATCH", body: JSON.stringify({ revoked_at: new Date(t).toISOString(), timeoutMs: 10000 })
+    const response = { ok: restResult.ok, status: restResult.status, json: async () => restResult.ok ? restResult.data : restResult.body, text: async () => JSON.stringify(restResult.ok ? restResult.data : restResult.body) },
         cache: "no-store",
       })
       if (!response.ok) throw new Error("durable revoke returned non-success")
@@ -572,15 +529,8 @@ async function dbListByUser(ghUserId: string): Promise<SessionRecord[]> {
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return []
   try {
-    const url = `${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_sessions?gh_user_id=eq.${encodeURIComponent(ghUserId)}&order=last_seen_at.desc&select=id,token_hash,gh_user_id,created_at,last_seen_at,expires_at,absolute_expires_at,revoked_at,user_agent_hash,meta&limit=50`
-    const res = await fetch(url, {
-      headers: {
-        apikey: env.supabaseServiceRoleKey,
-        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-        Accept: "application/json",
-      },
-      cache: "no-store",
-    })
+    const restResult = await supabaseRest(`gh_sessions?gh_user_id=eq.${encodeURIComponent(ghUserId)}&order=last_seen_at.desc&select=id,token_hash,gh_user_id,created_at,last_seen_at,expires_at,absolute_expires_at,revoked_at,user_agent_hash,meta&limit=50`, { method: "GET", body: undefined, timeoutMs: 10000 })
+    const res = { ok: restResult.ok, status: restResult.status, json: async () => restResult.ok ? restResult.data : restResult.body, text: async () => JSON.stringify(restResult.ok ? restResult.data : restResult.body) }
     if (!res.ok) return []
     const rows = (await res.json()) as DbRow[]
     if (!Array.isArray(rows)) return []

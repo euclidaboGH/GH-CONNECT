@@ -3,6 +3,7 @@
  * Settlement requires GHC_REFERRAL_SETTLEMENT_ENABLED=1 and issuance guard migration applied.
  */
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
 
 function env() {
   return readGhcServerEnv()
@@ -16,15 +17,7 @@ async function rpc(name: string, body: Record<string, unknown>): Promise<Record<
   const e = env()
   if (!e.supabaseUrl || !e.supabaseServiceRoleKey) return null
   try {
-    const res = await fetch(`${e.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/${name}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: e.supabaseServiceRoleKey,
-        Authorization: `Bearer ${e.supabaseServiceRoleKey}`,
-      },
-      body: JSON.stringify(body),
-    })
+    const res = await (async () => { const r = await supabaseRpc('${name}', typeof JSON.stringify(body) === "string" ? JSON.parse(JSON.stringify(body)) : JSON.stringify(body), { timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
     const data = await res.json().catch(() => null)
     if (!res.ok) return { ok: false, error: String(data?.message || data?.error || res.status) }
     return data && typeof data === "object" ? (data as Record<string, unknown>) : null
@@ -122,15 +115,15 @@ export async function getReferralStatus(userId: string): Promise<{
 
     const [attrAsReferred, attrAsReferrer, rewards] = await Promise.all([
       fetch(
-        `${base}/rest/v1/ghc_referral_attributions?referred_user_id=eq.${encodeURIComponent(userId)}&select=referrer_user_id,created_at&limit=1`,
+        `ghc_referral_attributions?referred_user_id=eq.${encodeURIComponent(userId)}&select=referrer_user_id,created_at&limit=1`,
         { headers, cache: "no-store" },
       ),
       fetch(
-        `${base}/rest/v1/ghc_referral_attributions?referrer_user_id=eq.${encodeURIComponent(userId)}&select=referred_user_id&limit=200`,
+        `ghc_referral_attributions?referrer_user_id=eq.${encodeURIComponent(userId)}&select=referred_user_id&limit=200`,
         { headers, cache: "no-store" },
       ),
       fetch(
-        `${base}/rest/v1/ghc_referral_rewards?referrer_user_id=eq.${encodeURIComponent(userId)}&select=status,reward_ghc&limit=100`,
+        `ghc_referral_rewards?referrer_user_id=eq.${encodeURIComponent(userId)}&select=status,reward_ghc&limit=100`,
         { headers, cache: "no-store" },
       ),
     ])

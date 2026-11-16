@@ -437,7 +437,7 @@ export function timeAgo(timestamp: number): string {
 }
 
 export function generateId(): string {
-  return Math.random().toString(36).substring(2, 11)
+  try { const { secureHex } = require("@/lib/secure-id"); return secureHex(8) } catch { return typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID().replace(/-/g,"").slice(0,16) : Math.random().toString(36).substring(2, 11) }
 }
 
 /** @deprecated Prefer purpose-aware helpers from @/lib/media/compress-image */

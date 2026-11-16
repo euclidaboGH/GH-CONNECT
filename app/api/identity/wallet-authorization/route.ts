@@ -25,9 +25,15 @@ import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
+const SCOPE_MIGRATION_MESSAGE =
+  "Pi confirmed your wallet permission, but GreenHaven's payout database has not been updated for it yet. Nothing was created and no Pi was reserved. This needs an operator update; retrying will not help."
 const noStore = { "Cache-Control": "private, no-store, max-age=0", Pragma: "no-cache" }
+// Identifies the deployed consent code in every response, so a screenshot of a
+// failure shows which build and stage produced it. Contains no secrets.
+const WALLET_AUTH_BUILD = "run302-scope-consent-v3"
 function reply(body: unknown, status = 200) {
-  return NextResponse.json(body, { status, headers: noStore })
+  const payload = body && typeof body === "object" && !Array.isArray(body) ? { ...(body as Record<string, unknown>), build: WALLET_AUTH_BUILD } : body
+  return NextResponse.json(payload, { status, headers: noStore })
 }
 
 export async function GET(request: Request) {
@@ -71,6 +77,8 @@ export async function POST(request: Request) {
     return reply({
       ok: false,
       error: proof.error,
+      stage: "PI_PROOF",
+      diagnosticCode: proof.error,
       message: WALLET_CONSENT_MESSAGES[proof.error],
       retryable: proof.error !== "IDENTITY_MISMATCH" && proof.error !== "IDENTITY_MAPPING_REQUIRED",
     }, walletConsentFailureStatus(proof.error))
@@ -89,10 +97,12 @@ export async function POST(request: Request) {
       "WALLET_AUTHORIZATION_UNAVAILABLE", "INVALID_INPUT", "INVALID_SOURCE",
       "IDENTITY_MAPPING_REQUIRED", "IDENTITY_MAPPING_MISMATCH", "PI_WALLET_ADDRESS_REQUIRED",
       "PI_WALLET_ADDRESS_PROOF_REQUIRED", "PI_WALLET_ADDRESS_UNVERIFIED", "GRANT_RESPONSE_MISMATCH",
+      "WALLET_SCOPE_MIGRATION_REQUIRED",
     ])
     const publicError = knownGrantErrors.has(String(granted.error)) ? String(granted.error) : "AUTHORIZATION_SAVE_FAILED"
-    const status = publicError === "WALLET_AUTHORIZATION_UNAVAILABLE" ? 503 : publicError === "INVALID_INPUT" ? 400 : publicError === "IDENTITY_MAPPING_MISMATCH" ? 403 : 409
+    const status = publicError === "WALLET_AUTHORIZATION_UNAVAILABLE" || publicError === "WALLET_SCOPE_MIGRATION_REQUIRED" ? 503 : publicError === "INVALID_INPUT" ? 400 : publicError === "IDENTITY_MAPPING_MISMATCH" ? 403 : 409
     const requestId = String(request.headers.get("x-vercel-id") || request.headers.get("x-request-id") || "").slice(0, 128)
+    if (publicError === "WALLET_SCOPE_MIGRATION_REQUIRED") console.error("[wallet-authorization] apply supabase/migrations/20261116045934_pi_wallet_scope_consent_provider_address_discovery.sql (Pi proved wallet_address scope; DB grant RPC predates scope-only consent)")
     console.error("[wallet-authorization] grant failed", {
       stage: "GRANT_RPC", diagnosticCode: publicError,
       upstreamStatus: typeof granted.httpStatus === "number" ? granted.httpStatus : undefined,
@@ -105,10 +115,12 @@ export async function POST(request: Request) {
       IDENTITY_MAPPING_MISMATCH: WALLET_CONSENT_MESSAGES.IDENTITY_MISMATCH,
       INVALID_INPUT: "The authorization request was incomplete. Please restart Pi authorization.",
       GRANT_RESPONSE_MISMATCH: "Pi authorization could not be independently confirmed. Withdrawals remain blocked; please retry.",
+      WALLET_SCOPE_MIGRATION_REQUIRED: SCOPE_MIGRATION_MESSAGE,
     }
     return reply({
       ok: false,
       error: publicError,
+      stage: "GRANT_RPC",
       message: grantMessages[publicError] || "Wallet authorization could not be saved. Please retry Pi authentication.",
       diagnosticCode: publicError,
       ...(typeof granted.httpStatus === "number" ? { upstreamStatus: granted.httpStatus } : {}),
@@ -119,6 +131,15 @@ export async function POST(request: Request) {
   // authorization back through the independent status RPC and require an
   // active record for the exact currently mapped Pi UID.
   const verified = await getWalletAuthorization(auth.userId)
+  if (verified.ok && verified.scopeSchemaReady === false) {
+    console.error("[wallet-authorization] independent read-back failed", { stage: "READ_BACK", diagnosticCode: "WALLET_SCOPE_MIGRATION_REQUIRED" })
+    return reply({
+      ok: false,
+      error: "WALLET_SCOPE_MIGRATION_REQUIRED",
+      diagnosticCode: "WALLET_SCOPE_MIGRATION_REQUIRED",
+      message: SCOPE_MIGRATION_MESSAGE,
+    }, 503)
+  }
   const expectedAddress = mapping.piWalletAddress || null
   const readbackAddress = verified.piWalletAddress || null
   if (
