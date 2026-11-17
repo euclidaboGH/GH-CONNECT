@@ -1,5 +1,0 @@
-User-agent: *
-Allow: /
-
-# Pi domain validation must stay publicly fetchable
-Allow: /validation-key.txt
