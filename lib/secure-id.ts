@@ -13,7 +13,6 @@ export function secureUUID(): string {
   }
   // Node fallback when global crypto.randomUUID is unavailable
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { randomUUID } = require("node:crypto") as typeof import("node:crypto")
     return randomUUID()
   } catch {
@@ -44,8 +43,7 @@ export function secureHex(bytes = 16): string {
     crypto.getRandomValues(arr)
   } else {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { randomBytes } = require("node:crypto") as typeof import("node:crypto")
+        const { randomBytes } = require("node:crypto") as typeof import("node:crypto")
       const buf = randomBytes(n)
       return buf.toString("hex")
     } catch {

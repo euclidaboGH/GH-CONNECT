@@ -3812,7 +3812,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
       errorLogger.logError(err instanceof Error ? err : new Error(String(err)))
       addToast("Could not delete comment", "error")
     }
-  }, [addToast])
+  }, [addToast, state.posts])
 
   const addCommentReaction = useCallback(async (postId: string, commentId: string, emoji: string) => {
     const em = String(emoji || "").trim().slice(0, 16)

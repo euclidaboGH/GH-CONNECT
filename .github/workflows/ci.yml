@@ -93,14 +93,22 @@ jobs:
         env:
           NEXT_TELEMETRY_DISABLED: "1"
 
+      - name: Prepare Next.js diagnostics artifact on failure
+        if: failure()
+        run: |
+          mkdir -p .next/diagnostics
+          printf 'Workflow: %s\nRun: %s\nAttempt: %s\nCommit: %s\n' \
+            "$GITHUB_WORKFLOW" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$GITHUB_SHA" \
+            > .next/diagnostics/ci-failure-context.txt
+
       - name: Preserve Next.js build diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v7
         with:
           name: next-build-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            .next/trace
             .next/diagnostics/**
+            .next/trace
             .next/server/**/*.js.nft.json
-          if-no-files-found: ignore
+          if-no-files-found: error
           retention-days: 7

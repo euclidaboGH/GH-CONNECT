@@ -1,12 +1,12 @@
 # GreenHaven
 
-**Current source version:** `0.338.96`
+**Current source version:** `0.338.97`
 
 Production status: **NOT APPROVED** — supported Node 24.15.0 dependency-backed typecheck/lint/build, browser/device, live database/provider and operator acceptance remain outstanding.
 
 This repository is the canonical GreenHaven source tree. See `docs/SOURCE_OF_TRUTH.md` and `docs/CURRENT_BUILD_CONTEXT.md` before implementation or release work.
 
-## Latest implementation — 0.338.96 / 30-Screen Experience Upgrade
+## Latest implementation — 0.338.97 / Run 315 CI lint and build remediation
 
 Run 314 applies 30 targeted UI and interaction refinements across Wallet, Pi payment and withdrawal journeys, Messages, Communities, Marketplace and Orders, Feed, Profile, Rewards, Membership and Settings. The pass adds responsive content rails, improved desktop card grids, safe-area-aware sheets and composers, clearer transaction and conversation presentation, stable profile/feed widths, and accessible focus/scroll behavior. It is presentation and interaction hardening only: wallet, payment, order, reward and membership authority remain server-side. No service registry status changes, database migrations, financial mutations, push or deployment are included. Full Node 24.15.0 build and browser/device acceptance remain outstanding; Production remains NOT APPROVED.
 

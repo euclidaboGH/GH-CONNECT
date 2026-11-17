@@ -19,7 +19,7 @@ const checks = [
   ['Pi payout execution remains disabled in env template', read('.env.example').includes('PI_EARNINGS_PAYOUT_EXECUTION_ENABLED=0')],
   ['Pi A2U remains testnet-only', read('.env.example').includes('PI_A2U_TESTNET_ONLY=true')],
   ['payout requests remain disabled in env template', read('.env.example').includes('PI_EARNINGS_PAYOUT_REQUESTS_ENABLED=0')],
-  ['release version synchronized', read('package.json').includes('"version": "0.338.96"') && read('package-lock.json').includes('"version": "0.338.96"') && read('lib/app-release.ts').includes('0.338.96')],
+  ['release version synchronized', JSON.parse(read('package.json')).version === JSON.parse(read('package-lock.json')).version && read('lib/app-release.ts').includes(`APP_RELEASE_VERSION = \"${JSON.parse(read('package.json')).version}\"`)],
 ]
 let failed = 0
 for (const [label, ok] of checks) {
