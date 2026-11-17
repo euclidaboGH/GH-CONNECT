@@ -41,7 +41,7 @@ test('discovery search control is at least 40px high and scales on larger screen
 test('discovery suggestions overlay results instead of increasing page height', discovery.includes('absolute left-3 right-3 top-full z-50'))
 test('discovery suggestions are independently scrollable and height bounded', discovery.includes('max-h-36') && discovery.includes('overflow-y-auto overscroll-contain'))
 test('global search result pane remains viewport-bounded and scroll-contained', globalSearch.includes('max-h-[82dvh]') && globalSearch.includes('overscroll-contain'))
-test('ecosystem directory search keeps a 44px target', ecosystem.includes('className="h-11 w-full'))
+test('ecosystem directory search keeps a 44px target', /className="h-(?:11|12) w-full/.test(ecosystem))
 test('settings search remains 44px and clear control remains 32px', settings.includes('min-h-11 w-full') && settings.includes('h-8 w-8'))
 test('share-sheet chat/community search meets the 40px touch target', shareSheet.includes('min-h-10 w-full'))
 test('conversation search clear affordance meets a 32px touch target', messageComponents.includes('h-8 w-8 items-center justify-center'))

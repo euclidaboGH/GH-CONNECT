@@ -10,6 +10,7 @@ const route = read("app/api/marketplace/listings/[listingId]/report/route.ts")
 const migration = read("supabase/migrations/20261106150001_marketplace_listing_report_intake.sql")
 const discovery = read("lib/marketplace/discovery-presentation.ts")
 const operatorReports = read("app/api/admin/marketplace/listing-reports/route.ts")
+const operatorKey = read("lib/server/security/operator-key.ts")
 const prebuild = pkg.scripts?.['prebuild:checks'] || ""
 const verify = pkg.scripts?.["verify:static"] || ""
 
@@ -34,7 +35,7 @@ const checks = [
   ["report migration binds reports to existing listings", /REFERENCES public\.gh_marketplace_listings\(id\) ON DELETE RESTRICT/.test(migration)],
   ["report migration prevents duplicate reports by one actor per listing", /UNIQUE \(listing_id, reporter_id\)/.test(migration) && /ON CONFLICT \(listing_id, reporter_id\) DO NOTHING/.test(migration)],
   ["report migration blocks client table access and grants service-role RPC only", /ENABLE ROW LEVEL SECURITY/.test(migration) && /USING \(false\) WITH CHECK \(false\)/.test(migration) && /GRANT EXECUTE ON FUNCTION public\.gh_marketplace_listing_report_create[\s\S]*TO service_role/.test(migration)],
-  ["operator queue is key-protected, rate-limited and supports durable review transitions", /timingSafeEqual/.test(operatorReports) && /checkDurableRateLimit[\s\S]*onUnavailable: \"deny\"/.test(operatorReports) && /gh_marketplace_listing_report_transition/.test(operatorReports)],
+  ["operator queue is key-protected, rate-limited and supports durable review transitions", /operatorDiagnosticsAuthorized\(request\)/.test(operatorReports) && /x-ghc-operator-key/.test(operatorKey) && /OPERATOR_KEY_MIN_BYTES\s*=\s*32/.test(operatorKey) && /timingSafeEqual/.test(operatorKey) && /checkDurableRateLimit[\s\S]*onUnavailable: "deny"/.test(operatorReports) && /gh_marketplace_listing_report_transition/.test(operatorReports)],
   ["report transition RPC prevents reopening terminal reports", /FOR UPDATE/.test(migration) && /REPORT_ALREADY_CLOSED/.test(migration) && /status IN \('resolved', 'dismissed'\)/.test(migration)],
   ["reporting does not alter wallet, payment, inventory or payout authority", !/ghc_ledger|ghc_user_accounts|pi_payment|payout_execute|gh_marketplace_order_transition/i.test(migration)],
   ["duplicate community recommendation sorting has been consolidated", !/\.sort\(\(a, b\) => b\.score - a\.score\)\s*\.sort\(/.test(discovery)],

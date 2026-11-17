@@ -395,6 +395,26 @@ const required = new Set([
   'docs/UPGRADE-WORKLOG-0.338.43.md',
   'docs/UPGRADE-WORKLOG-0.338.44.md',
   'docs/UPGRADE-WORKLOG-0.338.45.md',
+  'docs/ARCHIVE-HIDDEN-METADATA-GAP.md',
+  'docs/AUDIT-REPORT-0.338.92-2026-11-17.md',
+  'docs/FIELD-DESK-PUBLIC-ACCESS.md',
+  'docs/FIELD-RESEARCH-PLATFORM-UPGRADE-PLAN.md',
+  'docs/HARDENING-PHASE2-AUTH-SECRETS-PROGRESS.md',
+  'docs/HARDENING-PHASE3-VERIFICATION-SUPPLY-CHAIN-PROGRESS.md',
+  'docs/HARDENING-PHASE4-STRUCTURE-RELEASE-PROGRESS.md',
+  'docs/HARDENING-PROGRAM-4-PHASES.md',
+  'docs/QUIET-PREMIUM-TRANSFORMATION-0.338.93.md',
+  'docs/RESEARCH-EVIDENCE-USER-GUIDE.md',
+  'docs/RESEARCH-STUDIO-USER-GUIDE.md',
+  'docs/SCOPED-EVIDENCE-USER-GUIDE.md',
+  'docs/UPGRADE-WORKLOG-0.338.86.md',
+  'docs/UPGRADE-WORKLOG-0.338.88.md',
+  'docs/UPGRADE-WORKLOG-0.338.89.md',
+  'docs/UPGRADE-WORKLOG-0.338.90.md',
+  'docs/UPGRADE-WORKLOG-0.338.91.md',
+  'docs/UPGRADE-WORKLOG-0.338.92.md',
+  'docs/VERCEL-GITHUB-REMEDIATION-2026-11-17.md',
+  'docs/VERCEL-PREBUILD-FAILURE-REPAIR-2026-11-17.md',
 ])
 const failures=[]
 const walk=(dir)=>{
@@ -405,7 +425,8 @@ const walk=(dir)=>{
     else if(rel.endsWith('.md') || rel.endsWith('.json') || rel.endsWith('.csv')) {
       if(rel === 'docs/PHASE-03-RESTORE-EVIDENCE-TEMPLATE.json' || rel === 'docs/architecture/PRODUCTION_VERIFICATION_REPORT.json') continue
       const s=readFileSync(p,'utf8')
-      if(!required.has(rel) && !s.startsWith('> **LEGACY VERIFICATION FIXTURE')) {
+      const archivedWorklog = rel.startsWith('docs/archive/upgrade-worklogs/')
+      if(!archivedWorklog && !required.has(rel) && !s.startsWith('> **LEGACY VERIFICATION FIXTURE')) {
         // Non-required docs must be explicitly current; this prevents silent historical-document growth.
         // Allow: Pass48 baseline date, intermediate worklogs, and active Nov-2026 engineering notes.
         const currentWorklog = rel === `docs/UPGRADE-WORKLOG-${pkg.version}.md`
@@ -416,7 +437,13 @@ const walk=(dir)=>{
   }
 }
 walk(docsRoot)
-for(const p of required) if(!existsSync(join(root,p))) failures.push(`missing canonical document: ${p}`)
+for(const p of required) {
+  const rootPath = join(root,p)
+  const archivedPath = p.startsWith('docs/UPGRADE-WORKLOG-')
+    ? join(root,'docs/archive/upgrade-worklogs',p.slice('docs/'.length))
+    : null
+  if(!existsSync(rootPath) && !(archivedPath && existsSync(archivedPath))) failures.push(`missing canonical document: ${p}`)
+}
 if(!readFileSync(join(root,'README.md'),'utf8').includes(`Current source version:** \`${pkg.version}\``)) failures.push('README current version marker missing')
 if(!readFileSync(join(root,'docs/PROJECT_TRUTH.md'),'utf8').includes(`**Current source version:** \`${pkg.version}\``)) failures.push('PROJECT_TRUTH current version marker missing')
 if(!readFileSync(join(root,'docs/SOURCE_OF_TRUTH.md'),'utf8').includes('legacy documents')) failures.push('SOURCE_OF_TRUTH legacy-document rule missing')

@@ -1,9 +1,9 @@
-# GreenHaven source authority — 0.338.92 (2026-11-17)
+# GreenHaven source authority — 0.338.93 (2026-11-17)
 
-**Current source version:** `0.338.92`
+**Current source version:** `0.338.93`
 **SHA-256:** `90cb8260f2b5a7fdf345135c636c250b591eb4a0be625d86b61eae988e12b578`  
-**Authoritative archive:** `GREENHAVEN-0.338.92-TESTNET-QUARANTINE-ENV-PREP-2026-11-17-1.zip`  
-**Package identity:** `gh-connect@0.338.92` (user-facing brand: GREENHAVEN).
+**Authoritative parent archive:** `GREENHAVEN-0.338.92-TESTNET-QUARANTINE-ENV-PREP-2026-11-17-1.zip`  
+**Package identity:** `gh-connect@0.338.93` (user-facing brand: GREENHAVEN).
 
 This is the exact archive supplied by the user on 2026-11-17 and is the sole authoritative source for subsequent work. Its project history identifies it as an in-place derivative of the prior 0.338.90 source. Continue in place; use the existing GitHub repository and Vercel project. Preserve existing hidden CI files from the actual repository because the supplied archive omits `.github/workflows/ci.yml` and `.gitignore`.
 
@@ -14,6 +14,10 @@ Public respondent and field-session scoped evidence uploads are implemented in s
 ## Held migrations
 
 `20261116182000_gh_research_intelligence_platform_foundation.sql`, `20261116190000_gh_media_evidence_engine.sql` and `20261117010001_gh_evidence_scoped_upload_chain_of_custody.sql` are REVIEW_REQUIRED and unapplied. They must be applied in dependency order after target migration-history reconciliation and schema validation. Testnet's earlier Field Reports and Research Studio migrations remain applied. Mainnet untouched.
+
+## Legacy documents
+
+Superseded historical upgrade worklogs are retained under `docs/archive/upgrade-worklogs/` rather than duplicated in the active `docs/` root. These legacy documents preserve historical context only; they do not supersede this source-of-truth file, the current executable source, or the current release evidence.
 
 ## Release controls
 

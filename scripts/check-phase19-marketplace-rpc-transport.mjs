@@ -3,9 +3,10 @@
 import fs from 'node:fs'
 const store = fs.readFileSync('lib/server/marketplace/order-store.ts', 'utf8')
 const pay = fs.readFileSync('app/api/marketplace/orders/[orderId]/pay/route.ts', 'utf8')
+const restClient = fs.readFileSync('lib/server/supabase/rest-client.ts', 'utf8')
 const checks = [
-  ['durable marketplace RPCs have a bounded timeout', /signal:\s*AbortSignal\.timeout\(10_000\)/.test(store)],
-  ['durable marketplace RPC requests bypass caches', /cache:\s*"no-store"/.test(store) && /"Cache-Control":\s*"no-store"/.test(store)],
+  ['durable marketplace RPCs have a bounded timeout', /supabaseRpc\(fn, body, \{ timeoutMs: 10000 \}\)/.test(store) && /signal:\s*AbortSignal\.timeout\(options\.timeoutMs \?\? 15_000\)/.test(restClient)],
+  ['durable marketplace RPC requests bypass caches', /supabaseRpc\(fn, body, \{ timeoutMs: 10000 \}\)/.test(store) && /cache:\s*"no-store"/.test(restClient) && /cache:\s*"no-store"/.test(store) === false],
   ['non-empty malformed RPC responses fail closed', /catch\s*\{\s*return null\s*\}/.test(store)],
   ['empty PostgREST void RPC responses remain explicitly supported', /if \(!text\.trim\(\)\) return \{ ok: true \}/.test(store)],
   ['HTTP failures never become successful order mutations', /if \(!res\.ok\) return null/.test(store)],

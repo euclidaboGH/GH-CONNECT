@@ -4,7 +4,6 @@
  * Reports only evidence-backed cashback reconciliation and A2U exceptions. It does
  * not infer seller liabilities, GHC balances, or payout completion from missing data.
  */
-import { timingSafeEqual } from "node:crypto"
 import { NextResponse } from "next/server"
 import { operatorDiagnosticsAuthorized } from "@/lib/server/security/operator-key"
 import { reconcileCashbackPeriod } from "@/lib/server/revenue/cashback-attribution"

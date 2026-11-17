@@ -836,12 +836,12 @@ export async function executeDurableGhcSpend(input: {
     }, { timeoutMs: 10_000 })
     if (!result.ok) return { ok: false, error: "SPEND_FAILED" }
     const data = result.data
-    const result = parseGhcSpendRpcResult(data, { amount, referenceId: ref })
-    if (!result.ok) return { ok: false, error: result.error }
+    const parsedResult = parseGhcSpendRpcResult(data, { amount, referenceId: ref })
+    if (!parsedResult.ok) return { ok: false, error: parsedResult.error }
     return {
       ok: true,
-      tx: result.tx as GhcLedgerRow,
-      idempotent: result.idempotent,
+      tx: parsedResult.tx as GhcLedgerRow,
+      idempotent: parsedResult.idempotent,
       raw: data,
     }
   } catch (e) {

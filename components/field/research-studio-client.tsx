@@ -5,6 +5,7 @@ import Link from "next/link"
 import { isResearchQuestionVisible } from "@/lib/research/logic"
 import { uploadDurableMedia, mediaUploadErrorMessage } from "@/lib/media/upload-client"
 import { IdentityService } from "@/lib/identity/identity-service"
+import { promptDialog } from "@/lib/ui/global-interactions"
 
 type QType = "short_text" | "long_text" | "single_choice" | "multiple_choice" | "dropdown" | "rating" | "number" | "date"
 type Question = { id: string; type: QType; label: string; required: boolean; options?: string[]; showWhen?: { questionId: string; operator: "equals" | "not_equals" | "contains" | "greater_than" | "less_than" | "answered" | "not_answered"; value?: string | number } }
@@ -141,10 +142,27 @@ export function ResearchStudioClient() {
     setEvidence((rows) => rows.map((row) => row.id === evidenceId ? { ...row, verification_status: status } : row))
   }
 
+  async function showCopyLinkDialog(link: string, message: string) {
+    await promptDialog({
+      title: "Copy public research link",
+      message,
+      label: "Research link",
+      defaultValue: link,
+      confirmLabel: "Done",
+      cancelLabel: "Close",
+      maxLength: 2048,
+    })
+  }
+
   async function copyLink(project: Project) {
     const link = `${window.location.origin}/r/${project.slug}`
-    try { await navigator.clipboard.writeText(link); setNotice("Public link copied. Anyone with the link can respond in a browser.") }
-    catch { window.prompt("Copy this public research link", link) }
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("CLIPBOARD_UNAVAILABLE")
+      await navigator.clipboard.writeText(link)
+      setNotice("Public link copied. Anyone with the link can respond in a browser.")
+    } catch {
+      await showCopyLinkDialog(link, "Clipboard access is unavailable. Select and copy the link below.")
+    }
   }
 
   async function shareLink(project: Project, channel: "native" | "whatsapp" | "facebook" | "greenhaven") {
@@ -152,14 +170,14 @@ export function ResearchStudioClient() {
     const text = `Please participate in this GreenHaven research: ${project.title}`
     if (channel === "native") {
       if (navigator.share) { try { await navigator.share({ title: project.title, text, url: link }); return } catch { return } }
-      try { await navigator.clipboard.writeText(link); setNotice("Public link copied. Share it with any app or platform.") } catch { window.prompt("Copy this public research link", link) }
+      try { if (!navigator.clipboard?.writeText) throw new Error("CLIPBOARD_UNAVAILABLE"); await navigator.clipboard.writeText(link); setNotice("Public link copied. Share it with any app or platform.") } catch { await showCopyLinkDialog(link, "Clipboard access is unavailable. Select and copy the link below.") }
       return
     }
     if (channel === "whatsapp") { window.open(`https://wa.me/?text=${encodeURIComponent(`${text} ${link}`)}`, "_blank", "noopener,noreferrer"); return }
     if (channel === "facebook") { window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(link)}`, "_blank", "noopener,noreferrer"); return }
-    try { await navigator.clipboard.writeText(link) } catch { window.prompt("Copy this research link, then paste it into GreenHaven Chat", link) }
+    try { if (!navigator.clipboard?.writeText) throw new Error("CLIPBOARD_UNAVAILABLE"); await navigator.clipboard.writeText(link) } catch { await showCopyLinkDialog(link, "Copy the research link below, then paste it into GreenHaven Messages.") }
     window.open("/?tab=messages", "_blank", "noopener,noreferrer")
-    setNotice("Research link copied. GreenHaven Messages opened in a new tab; paste the link into your conversation.")
+    setNotice("Research link ready. GreenHaven Messages opened in a new tab; paste the link into your conversation.")
   }
 
   return <main className="mx-auto min-h-dvh w-full max-w-6xl px-4 pb-24 pt-6 text-foreground sm:px-6 lg:px-8">

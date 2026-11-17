@@ -9,6 +9,7 @@ const domain = read('lib/domains/marketplace-domain.ts')
 const reportRoute = read('app/api/marketplace/listings/[listingId]/report/route.ts')
 const reportMigration = read('supabase/migrations/20261106150001_marketplace_listing_report_intake.sql')
 const operatorReports = read('app/api/admin/marketplace/listing-reports/route.ts')
+const operatorKey = read('lib/server/security/operator-key.ts')
 const checks = []
 const test = (n, ok) => { checks.push(!!ok); console.log(`${ok ? 'PASS' : 'FAIL'} ${n}`) }
 
@@ -18,7 +19,7 @@ test('Listing reports use durable server intake instead of device-local queue', 
 test('Seller trust band uses getSellerProfile', /getSellerProfile/.test(screen) && /formatRating/.test(screen))
 test('Report listing UI confirms only durable server submission', /Report listing/.test(screen) && /result\?\.durable !== true/.test(screen) && /api\/marketplace\/listings/.test(screen))
 test('Marketplace report storage is RLS-protected and service-role-only', /gh_marketplace_listing_reports/.test(reportMigration) && /ENABLE ROW LEVEL SECURITY/.test(reportMigration) && /TO service_role/.test(reportMigration))
-test('Operator report queue and review transitions are protected', /timingSafeEqual/.test(operatorReports) && /checkDurableRateLimit/.test(operatorReports) && /gh_marketplace_listing_report_transition/.test(operatorReports))
+test('Operator report queue and review transitions are protected', /operatorDiagnosticsAuthorized\(request\)/.test(operatorReports) && /x-ghc-operator-key/.test(operatorKey) && /OPERATOR_KEY_MIN_BYTES\s*=\s*32/.test(operatorKey) && /timingSafeEqual/.test(operatorKey) && /checkDurableRateLimit/.test(operatorReports) && /gh_marketplace_listing_report_transition/.test(operatorReports))
 test('Delivery section on listing detail', /formatDeliveryLine/.test(screen) && /Delivery/.test(screen))
 test('Sell form delivery mode controls', /sellDeliveryMode/.test(screen) && /DELIVERY_MODE_LABELS/.test(screen))
 test('shippingInfo encoded on publish paths', (screen.match(/encodeShippingInfo\(sellDeliveryMode/g) || []).length >= 3)

@@ -10,6 +10,7 @@ const pkg = JSON.parse(read("package.json"))
 const lock = JSON.parse(read("package-lock.json"))
 const middleware = read("middleware.ts")
 const profile = read("lib/server/identity/public-profile-hydration.ts")
+const restClient = read("lib/server/supabase/rest-client.ts")
 const economy = read("lib/server/economy/store.ts")
 const pi = read("lib/domains/pi-transaction-normalizer.ts")
 const statics = read("scripts/verify-phase14-static.mjs")
@@ -25,7 +26,7 @@ const checks = [
   ["canonical identity prioritizes the current Pi UID over cached identity", /input\?\.piUid,\s*input\?\.explicitUserId/.test(identity)],
   ["navigation rejects unsafe externally supplied avatar URLs", /userPhoto: safePhoto\(options\.userPhoto\)/.test(navigation) && /parsed\.protocol === \"https:\"/.test(navigation)],
   ["readiness detects malformed explicit Pi network flags", /pi_sandbox_flag_schema/.test(readiness) && /invalidSandboxFlag/.test(readiness)],
-  ["profile hydration keeps its upstream deadline", /AbortSignal\.timeout\(5000\)/.test(profile)],
+  ["profile hydration keeps its upstream deadline", /timeoutMs:\s*5000/.test(profile) && /signal:\s*fetchInit\.signal \?\? AbortSignal\.timeout\(timeoutMs \?\? 15_000\)/.test(restClient)],
   ["profile hydration enforces a streaming 1 MiB response limit", /readBoundedProfileRows\(response, 1024 \* 1024\)/.test(profile) && /total > maxBytes/.test(profile)],
   ["profile hydration limits response rows and identity scope", /data\.length > ids\.length/.test(profile) && /requestedIds\.has\(id\)/.test(profile)],
   ["profile projection selects public fields only", /select: "gh_user_id,display_name,username,photos"/.test(profile) && !/select: "[^"]*(balance|membership|entitlement|wallet)/i.test(profile)],

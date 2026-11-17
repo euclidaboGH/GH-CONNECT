@@ -6,6 +6,7 @@ let passed = 0, failed = 0
 const check = (name, ok) => { if (ok) { passed++; console.log(`PASS ${name}`) } else { failed++; console.error(`FAIL ${name}`) } }
 const feed = read('app/api/social/feed/route.ts')
 const identity = read('lib/server/identity/public-profile-hydration.ts')
+const restClient = read('lib/server/supabase/rest-client.ts')
 const css = read('app/globals.css')
 const wrapper = read('components/app-wrapper.tsx')
 const collector = read('lib/web-vitals-collector.ts')
@@ -21,7 +22,7 @@ check('account identity comes from authenticated session, not query/body', /reso
 check('post and comment identity batches execute concurrently', /Promise\.all\(\[\s*hydratePublicProfileIdentity\(profilePosts\),\s*allComments\.length \? hydratePublicProfileIdentity\(allComments\)/s.test(feed))
 check('identity hydration remains bounded by row/depth/id caps', /MAX_NESTED_ROWS = 500/.test(identity) && /MAX_NESTED_DEPTH = 12/.test(identity) && /slice\(0, 100\)/.test(identity))
 check('identity hydration keeps public-field allowlist', /select: "gh_user_id,display_name,username,photos"/.test(identity))
-check('identity hydration upstream request has timeout', /AbortSignal\.timeout\(5000\)/.test(identity))
+check('identity hydration upstream request has timeout', /timeoutMs:\s*5000/.test(identity) && /signal:\s*fetchInit\.signal \?\? AbortSignal\.timeout\(timeoutMs \?\? 15_000\)/.test(restClient))
 check('feed cursor advances from raw canonical page after filters', /last = rawPagePosts\.length[\s\S]*?stableCursor: true/.test(feed))
 check('feed responses remain private no-store', /Cache-Control": "no-store"/.test(feed))
 check('core shell has visible keyboard focus treatment', /:where\(button, a, input, textarea, select, \[role="button"\]\):focus-visible/.test(css))

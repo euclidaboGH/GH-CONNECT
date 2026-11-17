@@ -7,6 +7,7 @@ const mig = read('supabase/migrations/20261029010012_gh_charity_utility_accounti
 const mod = read('lib/server/earnings/platform-utility.ts')
 const charityApi = read('app/api/economy/earnings/charity/route.ts')
 const platApi = read('app/api/economy/earnings/platform/route.ts')
+const operatorKey = read('lib/server/security/operator-key.ts')
 const dash = read('components/ghc/unified-earnings-dashboard.tsx')
 const checks = []
 const test = (n, ok) => { checks.push(!!ok); console.log(`${ok ? 'PASS' : 'FAIL'} ${n}`) }
@@ -18,7 +19,7 @@ test('Client RLS deny-all on both tables', /gh_platform_utility_no_client/.test(
 test('Charity never credits available balance (documented)', /never credits available balance/.test(mig) || /segregated from user withdrawable/.test(mig))
 test('postWithdrawalFee and recordCharityContribution helpers', /postWithdrawalFee/.test(mod) && /recordCharityContribution/.test(mod))
 test('Charity API authenticated GET/POST', /export async function GET/.test(charityApi) && /export async function POST/.test(charityApi))
-test('Platform summary requires operator key', /x-ghc-operator-key/.test(platApi) && /FORBIDDEN/.test(platApi))
+test('Platform summary requires operator key', /operatorDiagnosticsAuthorized\(request\)/.test(platApi) && /headers:\s*\[\"x-ghc-operator-key\"\]/.test(operatorKey) && /OPERATOR_KEY_MIN_BYTES\s*=\s*32/.test(operatorKey) && /timingSafeEqual/.test(operatorKey) && /FORBIDDEN/.test(platApi))
 test('Dashboard shows segregated charity', /charity/.test(dash) && /separate from withdrawable/.test(dash))
 test('Service-role grants on phase 9 RPCs', (mig.match(/GRANT EXECUTE ON FUNCTION public\.gh_/g) || []).length >= 4)
 

@@ -3,8 +3,9 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 const root = process.cwd()
 const route = readFileSync(join(root, "app/api/admin/treasury/summary/route.ts"), "utf8")
+const operatorKey = readFileSync(join(root, "lib/server/security/operator-key.ts"), "utf8")
 const checks = [
-  ["operator key requires high entropy and timing-safe comparison", /Buffer\.byteLength\(expectedRaw, "utf8"\) < 32/.test(route) && /timingSafeEqual/.test(route)],
+  ["operator key requires high entropy and timing-safe comparison", /OPERATOR_KEY_MIN_BYTES\s*=\s*32/.test(operatorKey) && /Buffer\.byteLength\(expected, "utf8"\) < minBytes/.test(operatorKey) && /timingSafeEqual\(digest\(supplied\), digest\(expected\)\)/.test(operatorKey) && /operatorDiagnosticsAuthorized\(request\)/.test(route)],
   ["report is GET-only and force dynamic", /export async function GET/.test(route) && /dynamic = "force-dynamic"/.test(route)],
   ["default reporting window is current UTC quarter", /utcQuarterWindow/.test(route) && /getUTCMonth/.test(route)],
   ["custom reporting windows are bounded", /93 \* 24 \* 60 \* 60 \* 1000/.test(route)],

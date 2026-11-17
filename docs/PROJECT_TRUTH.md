@@ -1,7 +1,7 @@
 # Current project truth — 0.338.92 (2026-11-17)
 
 **Current source version:** `0.338.93`  
-**Package identity:** `gh-connect@0.338.92`  
+**Package identity:** `gh-connect@0.338.93`  
 **Authoritative source archive:** `GREENHAVEN-0.338.92-TESTNET-QUARANTINE-ENV-PREP-2026-11-17-1.zip`  
 **SHA-256:** `90cb8260f2b5a7fdf345135c636c250b591eb4a0be625d86b61eae988e12b578`  
 **Current status:** **NOT APPROVED** for production.
@@ -31,6 +31,10 @@ The new evidence workflow depends on three additive migrations, all source-only 
 The existing Testnet migrations `20261116170409_gh_field_reports_public_intake` and `20261116171144_gh_research_studio_public_forms` remain applied and recorded. The three migrations above were not applied by this source upgrade. Mainnet was not changed.
 
 ## Verification limits
+
+The supported runtime requirement is Node.js `^24.15.0`. Full TypeScript, lint, and Next.js production build verification must run on that supported runtime with the locked dependencies installed. The current source-only workspace does not establish those dependency-backed checks.
+
+The source migration inventory is not evidence of applied migrations; it records repository SQL files and classifications only. Confirm applied state independently against the intended Supabase project migration history before any database operation.
 
 The source includes static contract checks and pure file-signature tests. Full Node 24.15.0 dependency-backed TypeScript, lint, production build and browser/device end-to-end acceptance remain outstanding because the available workspace is Node 22.16.0 and dependencies are not installed. Scanner provider execution, signed upload against Testnet, evidence chain postflight and geographic lookup against populated data are not runtime-verified.
 

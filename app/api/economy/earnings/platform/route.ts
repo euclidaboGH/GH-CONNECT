@@ -1,7 +1,6 @@
 /** Phase 9 — Operator platform utility summary (fees, charity, sinks). */
 import { NextResponse } from "next/server"
 import { operatorDiagnosticsAuthorized } from "@/lib/server/security/operator-key"
-import { timingSafeEqual } from "node:crypto"
 import { getPlatformUtilitySummary } from "@/lib/server/earnings/platform-utility"
 
 export const runtime = "nodejs"

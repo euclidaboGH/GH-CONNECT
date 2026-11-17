@@ -7,6 +7,10 @@ on:
     branches: [main, master, testnet]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -22,6 +26,12 @@ jobs:
         with:
           node-version: 24.15.0
           cache: npm
+
+      - name: Remove stale user-level npm cache-dir config
+        run: npm config delete cache-dir --location=user || true
+
+      - name: Record npm toolchain version
+        run: npm --version
 
       - name: Assert exact Node runtime
         run: node -e "if (process.versions.node !== '24.15.0') throw new Error('Expected Node 24.15.0; received ' + process.versions.node)"
@@ -54,6 +64,12 @@ jobs:
           node-version: 24.15.0
           cache: npm
 
+      - name: Remove stale user-level npm cache-dir config
+        run: npm config delete cache-dir --location=user || true
+
+      - name: Record npm toolchain version
+        run: npm --version
+
       - name: Assert exact Node runtime
         run: node -e "if (process.versions.node !== '24.15.0') throw new Error('Expected Node 24.15.0; received ' + process.versions.node)"
 
@@ -76,3 +92,15 @@ jobs:
         run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: "1"
+
+      - name: Preserve Next.js build diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: next-build-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .next/trace
+            .next/diagnostics/**
+            .next/server/**/*.js.nft.json
+          if-no-files-found: ignore
+          retention-days: 7

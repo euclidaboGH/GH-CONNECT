@@ -7,6 +7,7 @@ const mig = read('supabase/migrations/20261029010008_pi_cashback_phase5_attribut
 const attr = read('lib/server/revenue/cashback-attribution.ts')
 const rev = read('lib/server/revenue/revenue-event.ts')
 const api = read('app/api/economy/rewards/pi-cashback/reconcile/route.ts')
+const operatorKey = read('lib/server/security/operator-key.ts')
 const checks = []
 const test = (n, ok) => { checks.push(!!ok); console.log(`${ok ? 'PASS' : 'FAIL'} ${n}`) }
 
@@ -19,7 +20,7 @@ test('Reconcile reports by-source breakdown and liability', /bySource/.test(mig)
 test('Liability coverage compared to period totals', /liabilityCoverageOk/.test(mig))
 test('Attribution helper separates enabled and pending sources', /CASHBACK_SUPPORTED_SOURCES/.test(attr) && /CASHBACK_PENDING_SOURCES/.test(attr) && /attributeCashbackEligibleRevenue/.test(attr))
 test('Cashback rate is 50 bps (0.5%)', /CASHBACK_RATE_BPS = 50/.test(attr))
-test('Reconcile API requires operator key', /x-ghc-operator-key/.test(api) && /FORBIDDEN/.test(api))
+test('Reconcile API requires operator key', /operatorDiagnosticsAuthorized\(request\)/.test(api) && /headers:\s*\[\"x-ghc-operator-key\"\]/.test(operatorKey) && /OPERATOR_KEY_MIN_BYTES\s*=\s*32/.test(operatorKey) && /timingSafeEqual/.test(operatorKey) && /FORBIDDEN/.test(api))
 test('Reconcile API does not accept client-written balances', !/request\.json\(\)/.test(api))
 test('Service-role grant on reconcile RPC', /GRANT EXECUTE ON FUNCTION public\.gh_pi_cashback_reconcile_period/.test(mig))
 

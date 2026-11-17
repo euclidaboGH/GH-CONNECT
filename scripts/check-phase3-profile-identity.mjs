@@ -3,6 +3,7 @@ import path from 'node:path'
 
 const root = process.cwd()
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8')
+const restClient = read('lib/server/supabase/rest-client.ts')
 const checks = [
   ['canonical public profile hydration helper exists', fs.existsSync(path.join(root, 'lib/server/identity/public-profile-hydration.ts'))],
   ['helper reads only public identity columns', /select:\s*"gh_user_id,display_name,username,photos"/.test(read('lib/server/identity/public-profile-hydration.ts'))],
@@ -12,8 +13,8 @@ const checks = [
   ['comments rehydrate canonical authors', /hydratePublicProfileIdentity\(hydratedComments/.test(read('app/api/social/posts/[id]/comments/route.ts'))],
   ['profile timeline rehydrates canonical authors', /hydratePublicProfileIdentity\(visiblePosts/.test(read('app/api/social/profile/[userId]/posts/route.ts'))],
   ['stories rehydrate canonical owners', /hydratePublicProfileIdentity\(projectedStories/.test(read('app/api/social/stories/route.ts'))],
-  ['identity helper uses no-store fetch', /cache:\s*"no-store"/.test(read('lib/server/identity/public-profile-hydration.ts'))],
-  ['identity upstream request has a finite timeout', /signal:\s*AbortSignal\.timeout\(5000\)/.test(read('lib/server/identity/public-profile-hydration.ts'))],
+  ['identity helper uses no-store fetch', /supabaseRest\(/.test(read('lib/server/identity/public-profile-hydration.ts')) && /cache:\s*"no-store"/.test(restClient)],
+  ['identity upstream request has a finite timeout', /timeoutMs:\s*5000/.test(read('lib/server/identity/public-profile-hydration.ts')) && /signal:\s*fetchInit\.signal \?\? AbortSignal\.timeout\(timeoutMs \?\? 15_000\)/.test(restClient)],
   ['public photos reject protocol-relative and control-character URLs', /url\.startsWith\("\/\/"\)/.test(read('lib/server/identity/public-profile-hydration.ts')) && /\\u0000-\\u001f/.test(read('lib/server/identity/public-profile-hydration.ts'))],
   ['profile upstream JSON is streamed with a hard 1 MiB bound', /readBoundedProfileRows\(response, 1024 \* 1024\)/.test(read('lib/server/identity/public-profile-hydration.ts')) && /total > maxBytes/.test(read('lib/server/identity/public-profile-hydration.ts'))],
   ['profile rows are restricted to requested canonical identities', /requestedIds\.has\(id\)/.test(read('lib/server/identity/public-profile-hydration.ts')) && /data\.length > ids\.length/.test(read('lib/server/identity/public-profile-hydration.ts'))],

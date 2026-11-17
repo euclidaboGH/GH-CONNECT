@@ -4,7 +4,6 @@
  */
 import { NextResponse } from "next/server"
 import { operatorDiagnosticsAuthorized } from "@/lib/server/security/operator-key"
-import { createHash, timingSafeEqual } from "node:crypto"
 import {
   getCashbackAttributionPolicy,
   reconcileCashbackPeriod,

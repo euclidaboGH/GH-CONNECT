@@ -4,6 +4,7 @@ const read = p => readFileSync(p, 'utf8')
 const sql = read('supabase/migrations/20261030010012_phase23_treasury_community_reconciliation.sql')
 const summary = read('app/api/admin/treasury/summary/route.ts')
 const helper = read('lib/server/revenue/treasury-operations.ts')
+const restClient = read('lib/server/supabase/rest-client.ts')
 const dashboard = read('app/admin/treasury/page.tsx')
 const pkg = JSON.parse(read('package.json'))
 const checks = [
@@ -20,7 +21,7 @@ const checks = [
  ['membership reconciliation recognizes canonical product ids and completed states', /membership_\(vip\|vvip\)/.test(sql) && /COMPLETED','FULFILLED'/.test(sql)],
  ['treasury summary fetches and exposes membership reconciliation', /getMembershipReconciliationReport/.test(summary) && /communityMembershipReconciliation/.test(summary)],
  ['treasury dashboard renders per-asset net proceeds, historical discrepancies and membership exceptions', /Marketplace net proceeds reconciliation/.test(dashboard) && /Historical payout reconciliation/.test(dashboard) && /Community membership payment reconciliation/.test(dashboard)],
- ['treasury adapter uses privileged bounded RPC transport', /treasuryRpc/.test(helper) && /AbortSignal\.timeout\(10_000\)/.test(helper)],
+ ['treasury adapter uses privileged bounded RPC transport', /hasPrivilegedDatabase/.test(helper) && /supabaseRpc\(name, body, \{ timeoutMs: 10000 \}\)/.test(helper) && /serviceHeaders\(config\.serviceRoleKey/.test(restClient) && /AbortSignal\.timeout\(options\.timeoutMs \?\? 15_000\)/.test(restClient) && /cache:\s*"no-store"/.test(restClient)],
  ['release version is synchronized', /^\d+\.\d+\.\d+$/.test(pkg.version) && read('lib/app-release.ts').includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],
 ]
 let failed=0; for (const [name,ok] of checks) { console.log(`${ok?'PASS':'FAIL'} ${name}`); if(!ok) failed++ }

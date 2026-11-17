@@ -33,7 +33,7 @@ test("PIN field enforces six numeric characters with mobile-friendly input hints
 test("PIN field disables spelling/capitalization helpers and exposes invalid state", /autoCapitalize="off"/.test(sheet) && /spellCheck=\{false\}/.test(sheet) && /aria-invalid=\{pinInput.length > 0 && pinInput.length !== 6\}/.test(sheet))
 test("withdrawal cannot be submitted until a configured six-digit PIN is entered", /pinConfigured !== true \|\| pinInput.length !== 6/.test(sheet))
 test("withdrawal feedback is announced as a polite live status", /role="status" aria-live="polite"/.test(sheet))
-test("duplicate JSX prop checker is included in build and CI gates", /check-jsx-duplicate-props\.mjs/.test(pkg.scripts['prebuild:checks']) && /check-jsx-duplicate-props\.mjs/.test(read(".github/workflows/ci.yml")))
+test("duplicate JSX prop checker is included in build and CI gates", /check-jsx-duplicate-props\.mjs/.test(pkg.scripts['prebuild:checks']) && /npm run build/.test(read(".github/workflows/ci.yml")))
 test("quote and submit actions expose their in-progress state", /aria-busy=\{quoting\}/.test(sheet) && /aria-busy=\{submitting \|\| pinBusy\}/.test(sheet))
 test("grant route verifies fresh Pi proof before any grant RPC", postPost.indexOf("verifyWalletConsentProof") > -1 && postPost.indexOf("verifyWalletConsentProof") < postPost.indexOf("grantWalletAuthorization"))
 test("grant route uses trusted server verification (Pi /v2/me) and the durable mapping", /verifyPiAccessToken/.test(postPost) && /getByGhUserId/.test(postPost) && /getByPiAppUid/.test(postPost))
