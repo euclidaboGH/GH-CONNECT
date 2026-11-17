@@ -10,7 +10,7 @@ import { encryptPushSecret } from "@/lib/server/notifications/push-secrets"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
-const noStore = { "Cache-Control": "no-store" }
+const noStore = { "Cache-Control": "private, no-store" }
 
 export async function GET(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
@@ -34,10 +34,12 @@ export async function POST(request: Request) {
   if (!config.encryptionConfigured) return NextResponse.json({ ok: false, error: "PUSH_SUBSCRIPTION_ENCRYPTION_KEY_NOT_CONFIGURED" }, { status: 503, headers: noStore })
   const parsed = await readBoundedJson(request, 12 * 1024)
   if (!parsed.ok) return NextResponse.json({ ok: false, error: parsed.error }, { status: parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400, headers: noStore })
-  const input = parsed.value as Record<string, unknown>
-  const subscription = validatePushSubscription(input.subscription)
-  const deviceId = normalizePushDeviceId(input.deviceId)
-  const categoryPreferences = normalizePushCategoryPreferences(input.categoryPreferences)
+  const input = parsed.value
+  if (!input || typeof input !== "object" || Array.isArray(input)) return NextResponse.json({ ok: false, error: "INVALID_SUBSCRIPTION" }, { status: 400, headers: noStore })
+  const body = input as Record<string, unknown>
+  const subscription = validatePushSubscription(body.subscription)
+  const deviceId = normalizePushDeviceId(body.deviceId)
+  const categoryPreferences = normalizePushCategoryPreferences(body.categoryPreferences)
   if (!subscription || !deviceId || !categoryPreferences) return NextResponse.json({ ok: false, error: "INVALID_SUBSCRIPTION" }, { status: 400, headers: noStore })
   const endpointHash = hashPushEndpoint(subscription.endpoint)
   const result = await notificationPushRpc("gh_notification_push_subscription_upsert", {
@@ -51,7 +53,7 @@ export async function POST(request: Request) {
     p_category_preferences: categoryPreferences,
   })
   if (!result.ok) return NextResponse.json({ ok: false, error: result.error || "PUSH_SUBSCRIPTION_SAVE_FAILED" }, { status: 503, headers: noStore })
-  return NextResponse.json({ ok: true, durable: true, subscriptionId: result.data?.subscriptionId ?? null, remoteDeliveryEnabled: false, message: "Subscription registered; remote sender is not yet enabled." }, { headers: noStore })
+  return NextResponse.json({ ok: true, durable: true, subscriptionId: typeof result.data?.subscriptionId === "string" ? result.data.subscriptionId : null, remoteDeliveryEnabled: false, message: "Subscription registered; remote sender is not yet enabled." }, { headers: noStore })
 }
 
 export async function DELETE(request: Request) {
@@ -61,8 +63,10 @@ export async function DELETE(request: Request) {
   if (!rl.ok) return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: noStore })
   const parsed = await readBoundedJson(request, 4 * 1024)
   if (!parsed.ok) return NextResponse.json({ ok: false, error: parsed.error }, { status: parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400, headers: noStore })
-  const input = parsed.value as Record<string, unknown>
-  const endpoint = normalizePushEndpoint(input.endpoint)
+  const input = parsed.value
+  if (!input || typeof input !== "object" || Array.isArray(input)) return NextResponse.json({ ok: false, error: "INVALID_ENDPOINT" }, { status: 400, headers: noStore })
+  const body = input as Record<string, unknown>
+  const endpoint = normalizePushEndpoint(body.endpoint)
   const endpointHash = endpoint ? hashPushEndpoint(endpoint) : ""
   if (!endpointHash) return NextResponse.json({ ok: false, error: "INVALID_ENDPOINT" }, { status: 400, headers: noStore })
   const result = await notificationPushRpc("gh_notification_push_subscription_revoke", {

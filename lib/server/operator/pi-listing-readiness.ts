@@ -6,12 +6,11 @@
  */
 
 import { readGhcServerEnv } from "@/lib/server/economy/env"
-import { supabaseRest } from "@/lib/server/supabase/rest-client"
 import { isPiIdentityDurable } from "@/lib/server/identity/pi-identity-store"
 import { isSessionStoreDurable } from "@/lib/server/identity/session-store"
 import { isPiOnlyCommerceEnabled } from "@/lib/server/economy/pi-only-commerce"
 import { countEngagedPioneers } from "@/lib/server/engagement/pioneer-activity"
-import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
+import { supabaseRest } from "@/lib/server/supabase/rest-client"
 
 export type ChecklistItem = {
   id: string

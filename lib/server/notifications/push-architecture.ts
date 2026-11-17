@@ -26,16 +26,33 @@ export function getWebPushConfiguration() {
   }
 }
 
+function isRpcRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+}
+
 export async function notificationPushRpc(name: string, body: Record<string, unknown>) {
   const env = readGhcServerEnv()
-  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return { ok: false as const, data: null, error: "DB_UNAVAILABLE" }
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
+    return { ok: false as const, data: null, error: "DB_UNAVAILABLE" }
+  }
   const result = await supabaseRpc<unknown>(name, body, { timeoutMs: 15_000 })
-  if (!result.ok) return { ok: false as const, data: result.body ?? null, error: result.error }
+  if (!result.ok) {
+    return { ok: false as const, data: null, error: result.error || "PUSH_STORE_UNAVAILABLE" }
+  }
+  if (!isRpcRecord(result.data)) {
+    return { ok: false as const, data: null, error: "INVALID_PUSH_RPC_RESPONSE" }
+  }
   const data = result.data
-  const envelope = data && typeof data === "object" && !Array.isArray(data) ? data as Record<string, unknown> : null
+  if (data.ok !== true) {
+    return {
+      ok: false as const,
+      data,
+      error: typeof data.error === "string" ? data.error : "PUSH_RPC_REJECTED",
+    }
+  }
   return {
-    ok: envelope?.ok !== false,
+    ok: true as const,
     data,
-    error: typeof envelope?.error === "string" ? envelope.error : undefined,
+    error: typeof data.error === "string" ? data.error : undefined,
   }
 }

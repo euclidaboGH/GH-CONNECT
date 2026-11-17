@@ -25,19 +25,24 @@ This source-only repair addresses the TypeScript diagnostics reported by Run #31
 - Narrowed evidence fallback results and fixed the achievement-store stale variable reference.
 - Replaced notification/referral payload access on inferred `{}`/`unknown` values with explicit runtime object checks and typed result paths.
 - Replaced a relative server-side `fetch()` in Pi listing readiness with the canonical Supabase REST transport, preserving timeout, no-store, count, and range behavior.
-- Added a Run #312 source-contract checker to `pretypecheck` and `verify:static`.
+- Typed notification push RPC payloads as validated records and fail closed on malformed/non-object RPC responses; validate subscription identifiers before serialization.
+- Modeled unified-notification RPC outcomes as discriminated results and validated the distinct database return contracts: JSON object for list/create and integer scalars for unread count/mark-read. This preserves the SQL functions' actual return types instead of incorrectly treating every RPC as a JSON object.
+- Made all notification-center and push-subscription API responses explicitly `private, no-store`, including successful responses, errors, and rate-limit responses.
+- Rejected null, array, and primitive request JSON before property access; only string notification IDs are accepted for mark-read requests.
+- Removed the duplicate `supabaseRest` import in Pi listing readiness.
+- Expanded the Run #312 source-contract checker to 28 assertions; it remains registered in `pretypecheck` and `verify:static`.
 
 ## Verification
 
-- Run #312 source contract: 20/20 passed.
-- Phase 3 public profile identity contract: 16/16 passed.
-- Phase 6 cross-feature integration reliability: 28/28 passed.
-- Phase 1–12 hardening audit: 19/19 passed.
-- The full static verification log recorded `Static verification PASSED (63/63)` before the new 20-assertion Run #312 contract was registered. The new contract was run separately and passed 20/20.
-- Additional operator-readiness boundary check: 9/9 passed.
+- Run #312 source contract: 28/28 passed.
+- Phase 6 performance/accessibility gate: 23/23 passed.
+- Scoped Evidence Engine gate: 25/25 passed.
+- Vercel build-hygiene gate: 17/17 passed.
+- Changed TypeScript modules passed syntax transpilation; a focused strict TypeScript compile of the notification routes and notification RPC modules passed using temporary declarations for unavailable external dependencies.
+- `npm run verify:static` was attempted but exceeded the available five-minute execution window; it is not reported as a complete pass for this candidate.
 
 ## Verification limitations and release boundary
 
-The environment provides Node `v22.16.0`, while this project requires Node `^24.15.0`. A clean dependency installation could not complete because npm registry requests failed with DNS `EAI_AGAIN`; the local `node_modules` directory is therefore incomplete. Consequently, a trustworthy full `tsc --noEmit`, lint, Next.js production build, browser acceptance run, and full Node 24.15.0 prebuild have **not** been completed for this repair.
+The environment provides Node `v22.16.0`, while this project requires Node `^24.15.0`; the runtime gate rejects the available version. The supplied `node_modules` directory is incomplete (the TypeScript compiler and required type packages are absent locally), and no clean Node 24.15.0 dependency installation was available. Consequently, a trustworthy full-project `tsc --noEmit`, lint, Next.js production build, browser acceptance run, and full Node 24.15.0 prebuild have **not** been completed for this repair. The focused strict TypeScript check is useful evidence for the changed notification paths, but it is not a substitute for the complete project compiler run.
 
 No npm audit remediation or dependency force-upgrade is claimed. No GitHub push, Vercel deployment, Supabase migration, production database mutation, Mainnet action, financial mutation, scanner activation, or Coming Soon service activation was performed. All 30 Coming Soon services remain disabled and production remains **NOT APPROVED** pending the required Node 24.15.0 install and complete CI/build evidence.

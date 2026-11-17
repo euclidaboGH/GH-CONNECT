@@ -19,14 +19,31 @@ export type UnifiedNotificationRow = {
   expiresAt?: string | null
 }
 
-async function rpc(name: string, body: Record<string, unknown>) {
+function isRpcRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+}
+
+type RpcResult<T> =
+  | { ok: true; data: T; error?: undefined }
+  | { ok: false; data: null; error: string }
+
+async function rpc(name: string, body: Record<string, unknown>): Promise<RpcResult<unknown>> {
   const env = readGhcServerEnv()
-  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return { ok: false as const, data: null, error: "DB_UNAVAILABLE" }
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
+    return { ok: false, data: null, error: "DB_UNAVAILABLE" }
+  }
   const result = await supabaseRpc<unknown>(name, body, { timeoutMs: 15_000 })
-  if (!result.ok) return { ok: false as const, data: result.body ?? null, error: result.error }
-  const data = result.data
-  const envelope = data && typeof data === "object" && !Array.isArray(data) ? data as Record<string, unknown> : null
-  return { ok: envelope?.ok !== false, data, error: typeof envelope?.error === "string" ? envelope.error : undefined }
+  if (!result.ok) {
+    return { ok: false, data: null, error: result.error || "NOTIFICATION_STORE_UNAVAILABLE" }
+  }
+  const data: unknown = result.data
+  if (data === null || data === undefined || (isRpcRecord(data) && data.ok === false)) {
+    const error = isRpcRecord(data) && typeof data.error === "string"
+      ? data.error
+      : "NOTIFICATION_RPC_REJECTED"
+    return { ok: false, data: null, error }
+  }
+  return { ok: true, data }
 }
 
 export async function listUnifiedNotifications(userId: string, opts?: {
@@ -34,28 +51,45 @@ export async function listUnifiedNotifications(userId: string, opts?: {
   beforeCreatedAt?: string | null
   beforeId?: string | null
   unreadOnly?: boolean
-}) {
-  return rpc("gh_notification_inbox_list", {
+}): Promise<RpcResult<{ notifications: unknown[]; hasMore: boolean }>> {
+  const result = await rpc("gh_notification_inbox_list", {
     p_recipient_user_id: userId,
     p_limit: Math.min(Math.max(opts?.limit ?? 60, 1), 100),
     p_before_created_at: opts?.beforeCreatedAt ?? null,
     p_before_id: opts?.beforeId ?? null,
     p_unread_only: Boolean(opts?.unreadOnly),
   })
+  if (!result.ok) return result
+  if (!isRpcRecord(result.data) || !Array.isArray(result.data.notifications) || typeof result.data.hasMore !== "boolean") {
+    return { ok: false, data: null, error: "INVALID_NOTIFICATION_LIST_RESPONSE" }
+  }
+  return {
+    ok: true,
+    data: { notifications: result.data.notifications, hasMore: result.data.hasMore },
+  }
 }
 
-export async function unifiedUnreadCount(userId: string) {
-  return rpc("gh_notification_inbox_unread_count", { p_recipient_user_id: userId })
+export async function unifiedUnreadCount(userId: string): Promise<RpcResult<number>> {
+  const result = await rpc("gh_notification_inbox_unread_count", { p_recipient_user_id: userId })
+  if (!result.ok) return result
+  if (typeof result.data !== "number" || !Number.isSafeInteger(result.data) || result.data < 0) {
+    return { ok: false, data: null, error: "INVALID_NOTIFICATION_COUNT_RESPONSE" }
+  }
+  return { ok: true, data: result.data }
 }
 
-export async function markUnifiedNotificationsRead(userId: string, opts: { ids?: string[]; all?: boolean }) {
-  return rpc("gh_notification_inbox_mark_read", {
+export async function markUnifiedNotificationsRead(userId: string, opts: { ids?: string[]; all?: boolean }): Promise<RpcResult<number>> {
+  const result = await rpc("gh_notification_inbox_mark_read", {
     p_recipient_user_id: userId,
     p_ids: opts.ids?.slice(0, 100) ?? null,
     p_all: Boolean(opts.all),
   })
+  if (!result.ok) return result
+  if (typeof result.data !== "number" || !Number.isSafeInteger(result.data) || result.data < 0) {
+    return { ok: false, data: null, error: "INVALID_NOTIFICATION_UPDATE_RESPONSE" }
+  }
+  return { ok: true, data: result.data }
 }
-
 
 export async function createUnifiedNotification(input: {
   recipientUserId: string
@@ -91,10 +125,10 @@ export async function createUnifiedNotification(input: {
     p_dedupe_key: dedupeKey,
     p_expires_at: input.expiresAt ?? null,
   })
-  if (!result.ok || !result.data || result.data.ok !== true) return { ok: false }
+  if (!result.ok || !isRpcRecord(result.data) || result.data.ok !== true) return { ok: false }
   if (result.data.skipped === true) return { ok: true, idempotent: true }
   const savedId = typeof result.data.id === "string" ? result.data.id : id
-  const idempotent = Boolean(result.data.idempotent)
+  const idempotent = result.data.idempotent === true
   if (!idempotent) {
     await appendRealtimeEvent({
       eventId: `notification-created:${recipientUserId}:${dedupeKey}`,
