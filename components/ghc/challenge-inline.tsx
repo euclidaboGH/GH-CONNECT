@@ -4,7 +4,7 @@
  * Challenge card on a feed post — join tracks locally; GHC stays server-validated.
  */
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Trophy } from "lucide-react"
 import { navigateTo } from "@/lib/navigation/navigate"
 
@@ -57,34 +57,32 @@ export function resolvePostChallenge(post: { content?: string }): ChallengeView 
   return parseChallengeFromContent(String(post.content || ""))
 }
 
-const JOIN_KEY = "ghc.challenges.joined.v1"
-
-function loadJoined(): string[] {
-  try {
-    const raw = localStorage.getItem(JOIN_KEY)
-    const list = raw ? JSON.parse(raw) : []
-    return Array.isArray(list) ? list.map(String) : []
-  } catch {
-    return []
-  }
-}
-
-function saveJoined(ids: string[]) {
-  try {
-    localStorage.setItem(JOIN_KEY, JSON.stringify(ids.slice(0, 80)))
-  } catch {
-    /* */
-  }
-}
-
 export function ChallengeInline({ challenge, readOnly = false }: { challenge: ChallengeView; readOnly?: boolean }) {
-  const [joined, setJoined] = useState(() => loadJoined().includes(challenge.id))
+  const [joined, setJoined] = useState(false)
+  const [joining, setJoining] = useState(false)
+  useEffect(() => {
+    if (!durableId) return
+    let active = true
+    void fetch(`/api/social/challenges?challengeId=${encodeURIComponent(challenge.id)}`, { credentials: "include", cache: "no-store" }).then((r) => r.json()).then((d) => { if (active && d?.ok) setJoined(d.joined === true) }).catch(() => undefined)
+    return () => { active = false }
+  }, [challenge.id, durableId])
   const endsLabel = useMemo(() => `${challenge.days} day window`, [challenge.days])
+  const durableId = /^[0-9a-f-]{36}$/i.test(challenge.id)
 
-  const onJoin = () => {
-    const next = Array.from(new Set([...loadJoined(), challenge.id]))
-    saveJoined(next)
-    setJoined(true)
+  const onJoin = async () => {
+    if (joining) return
+    setJoining(true)
+    let succeeded = false
+    try {
+      const response = await fetch("/api/social/challenges", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "join", challengeId: challenge.id }) })
+      const data = await response.json()
+      if (!response.ok || !data?.ok) throw new Error(data?.error || "JOIN_FAILED")
+      setJoined(true)
+      succeeded = true
+    } catch {
+      window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "Could not join this challenge. Please try again.", type: "error" } }))
+    } finally { setJoining(false) }
+    if (!succeeded) return
     try {
       window.dispatchEvent(
         new CustomEvent("ghc:toast", {
@@ -117,13 +115,16 @@ export function ChallengeInline({ challenge, readOnly = false }: { challenge: Ch
       <div className="mt-2 flex flex-wrap gap-2">
         {readOnly ? (
           <span className="rounded-full border border-border px-3 py-1.5 text-[11px] font-semibold text-muted-foreground">Preview only · participation unavailable</span>
+        ) : !durableId ? (
+          <span className="rounded-full border border-border px-3 py-1.5 text-[11px] font-semibold text-muted-foreground">Legacy challenge · new participation unavailable</span>
         ) : !joined ? (
           <button
             type="button"
-            onClick={onJoin}
-            className="rounded-full bg-rose-600 px-3 py-1.5 text-[12px] font-bold text-white"
+            onClick={() => void onJoin()}
+            disabled={joining}
+            className="rounded-full bg-rose-600 px-3 py-1.5 text-[12px] font-bold text-white disabled:opacity-50"
           >
-            Join challenge
+            {joining ? "Joining…" : "Join challenge"}
           </button>
         ) : (
           <span className="rounded-full border border-rose-300 px-3 py-1.5 text-[12px] font-bold text-rose-800 dark:text-rose-200">

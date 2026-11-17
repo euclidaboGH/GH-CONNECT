@@ -51,7 +51,7 @@ export function ChallengeComposer({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
-  const { createPost, addToast, profile } = useGHC() as {
+  const { createPost, addToast } = useGHC() as {
     createPost?: (
       content: string,
       images: string[],
@@ -61,7 +61,6 @@ export function ChallengeComposer({
       audience?: "public" | "followers" | "mutuals" | "private",
     ) => Promise<boolean>
     addToast?: (m: string, t?: string) => void
-    profile?: { displayName?: string }
   }
 
   const [templateId, setTemplateId] = useState<(typeof TEMPLATES)[number]["id"]>("connect7")
@@ -88,7 +87,10 @@ export function ChallengeComposer({
     try {
       const title = templateId === "custom" ? customTitle.trim() || "Custom challenge" : tpl.title
       const blurb = templateId === "custom" ? customBlurb.trim() || tpl.blurb : tpl.blurb
-      const challengeId = `ch_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
+      const created = await fetch("/api/social/challenges", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create", title, description: blurb, metric: tpl.metric, target: tpl.target, durationDays: tpl.days, visibility: inviteNetwork ? "public" : "private" }) })
+      const createdData = await created.json()
+      if (!created.ok || !createdData.ok || !createdData.challenge?.id) throw new Error("Challenge storage is unavailable. Please try again.")
+      const challengeId = createdData.challenge.id as string
       const body = [
         `🏆 CHALLENGE · ${title}`,
         blurb,
@@ -97,34 +99,12 @@ export function ChallengeComposer({
         `📅 Window: ${tpl.days} days`,
         inviteNetwork ? "👥 Open invite — join from this post" : "Personal quest",
         "",
-        "Track progress in Rewards Centre. Completing challenges unlocks pending GHC only after validation.",
+        "Progress is recorded by GreenHaven. Rewards, if any, require separate server validation.",
         `challengeId:${challengeId}`,
       ].join("\n")
 
-      const ok = await createPost(body, [], null, null, null, "public")
+      const ok = await createPost(body, [], null, null, null, inviteNetwork ? "public" : "private")
       if (ok) {
-        try {
-          const key = "ghc.challenges.local.v1"
-          const raw = localStorage.getItem(key)
-          const list = raw ? JSON.parse(raw) : []
-          list.unshift({
-            id: challengeId,
-            templateId,
-            title,
-            blurb,
-            days: tpl.days,
-            metric: tpl.metric,
-            target: tpl.target,
-            progress: 0,
-            createdAt: Date.now(),
-            endsAt: Date.now() + tpl.days * 86400_000,
-            owner: profile?.displayName || "You",
-            joined: true,
-          })
-          localStorage.setItem(key, JSON.stringify(list.slice(0, 30)))
-        } catch {
-          /* local track only */
-        }
         try {
           window.dispatchEvent(
             new CustomEvent("ghc:post-engagement", {
@@ -139,8 +119,11 @@ export function ChallengeComposer({
         setCustomBlurb("")
         onOpenChange(false)
       } else {
+        await fetch("/api/social/challenges", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "cancel", challengeId }) }).catch(() => undefined)
         addToast?.("Could not publish challenge", "error")
       }
+    } catch (error) {
+      addToast?.(error instanceof Error ? error.message : "Could not create challenge", "error")
     } finally {
       setBusy(false)
     }

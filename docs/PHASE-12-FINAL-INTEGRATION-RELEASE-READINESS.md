@@ -1,3 +1,11 @@
+Release: `0.338.91`
+**Current source baseline:** `0.338.91`
+**Current status:** **NOT APPROVED** for production.
+
+Current 0.338.91 increment adds project/submission-key scoped public evidence uploads, field-session/report scoped evidence uploads, streamed SHA-256 hashing, magic-byte checks, quarantine-first content delivery, central evidence review workspace, scanner queue/HMAC callback contracts, active geographic-unit validation and append-only evidence hash-chain events. The scanner worker/provider is not configured, so uploaded files remain quarantined until a trusted scanner reports clean. Migrations `20261116182000`, `20261116190000` and `20261117010001` are REVIEW_REQUIRED and unapplied. Supported Node 24.15.0 build, disposable PostgreSQL rehearsal, scanner integration, browser/device acceptance and Preview end-to-end acceptance remain outstanding. No GitHub push, Vercel deployment or Mainnet change.
+
+---
+
 Release: `0.338.86`
 **Current source baseline:** `0.338.86`
 **Production status: NOT APPROVED for production**
@@ -163,7 +171,7 @@ Locale preference continuity now survives restricted embedded-browser storage du
 
 ## v0.299.0 Phase 13 social Stories and profile media update
 
-The current source replaces the decorative story-bubble rail with compact vertical story cards, resolves private Story media through the existing viewer-authorized media resolver, and separates full-size profile/cover viewing from edit/upload actions. The source UX contract gate passes 13/13. Supported-runtime build, TypeScript, lint, browser/device testing, private-media live checks, migration reconciliation, and operator approval remain required before production release. See `docs/SOCIAL_STORY_PROFILE_MEDIA_PHASE13_0.299.0.md`.
+The current source replaces the decorative story-bubble rail with compact vertical story cards, resolves private Story media through the existing viewer-authorized media resolver, and separates full-size profile/cover viewing from edit/upload actions. The source UX contract gate passes 23/23. Supported-runtime build, TypeScript, lint, browser/device testing, private-media live checks, migration reconciliation, and operator approval remain required before production release. See `docs/SOCIAL_STORY_PROFILE_MEDIA_PHASE13_0.299.0.md`.
 
 
 ## v0.300.0 Phase 14 creator media preview

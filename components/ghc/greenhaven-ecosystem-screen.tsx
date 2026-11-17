@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ArrowLeft,
   Search,
+  ClipboardList,
   ChevronRight,
   Users,
   MessageCircle,
@@ -58,6 +59,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   Heart,
   Coins,
   Search,
+  ClipboardList,
 }
 
 /** 2-col phones (≤640), 3-col tablet, 4-col desktop — fluid, no fixed desktop widths */
@@ -302,6 +304,10 @@ export function GreenHavenEcosystemScreen({
   }, [filtered, featured, isSearching])
 
   const handleSelect = useCallback((service: EcosystemService) => {
+    if (service.id === "field-research") {
+      window.location.assign("/field/studio")
+      return
+    }
     if (isInteractiveStatus(service.status)) {
       if (service.id === "marketplace") {
         setFocusId("marketplace")

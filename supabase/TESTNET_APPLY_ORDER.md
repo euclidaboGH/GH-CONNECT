@@ -1,7 +1,7 @@
 # GreenHaven Testnet migration review order
 
 **Generated from:** `supabase/migrations/*.sql` and the canonical classification policy in `scripts/generate-migration-inventory.mjs`.
-**Current source inventory:** 224 migrations.
+**Current source inventory:** 229 migrations.
 
 > **This is a review order, not permission to apply.** It does not prove remote migration history, database compatibility, or Testnet/Mainnet readiness. See docs/RUN278-SUPABASE-SOURCE-DRIFT-2026-11-11.md and docs/TESTNET-RECONCILIATION-2026-11-10.md for the latest source-drift and Testnet snapshots. Never run `supabase db push` while any pending migration is held for review, approval, validation, or marked proposal. Supabase CLI does not enforce these classifications.
 
@@ -244,6 +244,11 @@ The rows are sorted by the canonical migration identifier for review. Dependenci
 | 222 | `20261112100001_financial_stale_hold_reaper.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
 | 223 | `20261114100001_gh_feed_preferences_durable.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
 | 224 | `20261116045934_pi_wallet_scope_consent_provider_address_discovery.sql` | REVIEW_REQUIRED | APPLIED_TESTNET_ONLY_HOLD_OTHER_TARGETS |
+| 225 | `20261116170409_gh_field_reports_public_intake.sql` | REQUIRED | REVIEW_THEN_APPLY |
+| 226 | `20261116171144_gh_research_studio_public_forms.sql` | REVIEW_REQUIRED | APPLIED_TESTNET_ONLY_HOLD_OTHER_TARGETS |
+| 227 | `20261116182000_gh_research_intelligence_platform_foundation.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
+| 228 | `20261116190000_gh_media_evidence_engine.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
+| 229 | `20261117010001_gh_evidence_scoped_upload_chain_of_custody.sql` | REQUIRED | REVIEW_THEN_APPLY |
 
 ## Classification meanings
 

@@ -1,14 +1,23 @@
 # GreenHaven
 
-**Current source version:** `0.338.86`
+**Current source version:** `0.338.92`
 
 Production status: **NOT APPROVED** — supported Node 24.15.0 dependency-backed typecheck/lint/build, browser/device, live database/provider and operator acceptance remain outstanding.
 
 This repository is the canonical GreenHaven source tree. See `docs/SOURCE_OF_TRUTH.md` and `docs/CURRENT_BUILD_CONTEXT.md` before implementation or release work.
 
-## Latest implementation — 0.338.86 / CI Node assertion hygiene
+## Previous implementation — 0.338.87 / CI Node assertion hygiene
 
 Run #302 hardens Pi A2U wallet-scope consent and binds provider destination adoption to the exact Testnet payment and payout request. The prior CI Node 24.15.0 assertions and product improvements remain included. The current audit workspace is Node 22.16.0 without dependencies, so dependency-backed typecheck/lint/build are not claimed. Browser/device, authenticated cross-account, live Pi provider transfer, Mainnet migration reconciliation and Preview acceptance remain outstanding. Run #302 migration 20261116045934 was applied to Testnet only; no payout/ledger records were changed. No GitHub push or Vercel deployment was performed. Production remains NOT APPROVED.
+
+
+## Latest implementation — 0.338.92 / Scoped Evidence Intake & Chain of Custody
+
+Extends the private evidence engine with public respondent uploads scoped to a published project and unguessable submission key, and field-agent uploads scoped to the exact report plus field-session JTI. Uploads use short-lived signed Storage URLs, server-side streamed SHA-256 hashing, MIME magic-byte checks, and quarantine-first evidence records. A central administrator Evidence Review Centre lists Research and Field Desk evidence; signed content delivery remains blocked until a trusted scanner reports a matching SHA-256 digest as clean. Scanner queue and HMAC-authenticated result callback endpoints define the integration contract. Append-only database triggers record SHA-256 chained evidence creation, scan and review events. Optional geographic-unit IDs are checked against active configured hierarchy records; election-observation uploads require a `polling_unit` level when a geographic unit is supplied. No Nigeria hierarchy dataset, GPS capture, EXIF authenticity verification, or malware-scanning provider is included. New migration `20261117010001_gh_evidence_scoped_upload_chain_of_custody.sql` depends on `20261116182000` and `20261116190000`; all three are REVIEW_REQUIRED and unapplied. Static and pure runtime checks are not a substitute for supported Node 24.15.0 dependency-backed typecheck/lint/build and end-to-end Testnet/browser acceptance. No GitHub push or Vercel deployment was performed. Production remains NOT APPROVED.
+
+## Previous implementation — 0.338.89 / Research Studio & Research Intelligence Foundation
+
+Extends the authenticated Research Studio with previous-question conditional branching across owner editor, preview and server-side public submission validation. Challenge-on-Post creation and joining now use durable challenge and participant records, with a row-locked service-role-only participation RPC; canonical challenge state is no longer stored in browser localStorage. Adds an additive REVIEW_REQUIRED SQL foundation for evidence metadata, team roles, configurable geographic hierarchies, election contests/candidates/agent assignments/tallies, examination attempts, challenge events, poll policies and audit history. The earlier Research Studio migration `20261116171144_gh_research_studio_public_forms` remains applied on Testnet. New migration `20261116182000_gh_research_intelligence_platform_foundation` is source-only and unapplied. Source checks at that increment: Research Intelligence 20/20, logic runtime 8/8, Field Research 23/23, project truth 11/11 and migration inventory 227/227. Full Node 24.15.0 dependency-backed typecheck/lint/build and browser/device acceptance remain outstanding; the current workspace runs Node 22.16.0 and has no project dependencies. The supplied archive omits `.github/workflows/ci.yml` and `.gitignore`; preserve those hidden files from the existing repository when syncing this bundle (see `docs/ARCHIVE-HIDDEN-METADATA-GAP.md`). At that increment, the evidence upload-to-response workflow was outstanding; it is now partially implemented in 0.338.90. Full geographic import, election management UI/APIs, exam runtime/scoring, granular role authorization, advanced analytics, and the full 30-point Challenge/Polls transformations remain later stages. No GitHub push or Vercel deployment was performed. Production remains NOT APPROVED.
 
 ## Candidate addition — Marketplace Phase 3 (saved delivery addresses, foundation)
 
@@ -101,3 +110,8 @@ This release adds a responsive multi-line message composer, bounded recent-messa
 ## 0.338.13 — Phase 1 messaging contracts
 
 Adds durable conversation nicknames, quick-reaction/read-receipt preferences, read-receipt opt-out semantics, and GIN-indexed server-side full-history message search. Migration `20261109100001_gh_messaging_phase1_controls_search.sql` is REVIEW_REQUIRED and unapplied. See `docs/UPGRADE-WORKLOG-0.338.13.md`; Phase 1 cannot advance until remote history reconciliation, operator approval, Testnet PostgreSQL and two-account verification, plus contact-share/group-create acceptance.
+
+
+## Latest implementation — 0.338.87 / Field Research foundation
+
+Adds the Field Research Ecosystem destination, a redesigned public field-agent portal, dedicated field-session secret enforcement, 4+ character access-code compatibility, durable-storage fail-closed behavior, the reviewed Testnet field-report migration, and the 30-track Field Research / Challenge / Polls transformation plan. See `docs/FIELD-RESEARCH-PLATFORM-UPGRADE-PLAN.md`. Full public form authoring, anonymous public submissions, evidence media, analytics and in-app central notifications remain future implementation stages; this release does not claim those are shipped.

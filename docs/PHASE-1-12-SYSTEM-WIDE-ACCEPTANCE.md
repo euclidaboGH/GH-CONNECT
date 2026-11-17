@@ -1,3 +1,9 @@
+Current source baseline for this consolidated report: `0.338.91`
+- Current audit status (v0.338.91): scoped evidence source gate 25/25; file signature tests 16/16; Research Intelligence gate 20/20 and logic runtime 8/8; Field Research 23/23; media evidence 22/22; migration inventory 229/229. Three evidence/research foundation migrations are REVIEW_REQUIRED and unapplied. Scanner provider and live signed-upload/chain postflight remain outstanding; full Node 24.15.0 build and browser/device acceptance remain outstanding; production NOT APPROVED.
+- The historical phase snapshots below are preserved for audit context and are not evidence of current deployment or production acceptance.
+
+---
+
 Current source baseline for this consolidated report: `0.338.86`
 - Current audit status (v0.338.86): Run #302 Testnet migration applied; source verification only; production NOT APPROVED
 

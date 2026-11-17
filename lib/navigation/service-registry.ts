@@ -15,6 +15,7 @@ export type ServiceCategoryId =
   | "social"
   | "commerce"
   | "education"
+  | "research"
   | "transport"
   | "hospitality"
   | "finance"
@@ -66,12 +67,13 @@ export const SERVICE_CATEGORIES: readonly ServiceCategoryMeta[] = [
   { id: "social", label: "Social", order: 1 },
   { id: "commerce", label: "Commerce", order: 2 },
   { id: "education", label: "Education", order: 3 },
-  { id: "transport", label: "Transport & Logistics", order: 4 },
-  { id: "hospitality", label: "Hospitality", order: 5 },
-  { id: "finance", label: "Finance & Rewards", order: 6 },
-  { id: "charity", label: "Charity & Impact", order: 7 },
-  { id: "media", label: "Media & Entertainment", order: 8 },
-  { id: "ai", label: "AI & Intelligence", order: 9 },
+  { id: "research", label: "Research & Intelligence", order: 4 },
+  { id: "transport", label: "Transport & Logistics", order: 5 },
+  { id: "hospitality", label: "Hospitality", order: 6 },
+  { id: "finance", label: "Finance & Rewards", order: 7 },
+  { id: "charity", label: "Charity & Impact", order: 8 },
+  { id: "media", label: "Media & Entertainment", order: 9 },
+  { id: "ai", label: "AI & Intelligence", order: 10 },
 ] as const
 
 export const ECOSYSTEM_SERVICES: readonly EcosystemService[] = [
@@ -253,6 +255,19 @@ export const ECOSYSTEM_SERVICES: readonly EcosystemService[] = [
     destination: { kind: "none" },
     keywords: ["courses", "certificate"],
     roadmapNote: "Course catalogue will open with GH Education.",
+  },
+
+  // Research & Intelligence
+  {
+    id: "field-research",
+    title: "Field Research",
+    category: "research",
+    icon: "ClipboardList",
+    description: "Create surveys, collect field reports and review research responses",
+    status: "ACTIVE",
+    destination: { kind: "none" },
+    keywords: ["field research", "surveys", "forms", "elections", "polling", "examinations", "data collection", "research"],
+    featured: true,
   },
 
   // Transport

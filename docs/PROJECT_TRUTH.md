@@ -1,24 +1,36 @@
-**Production status:** NOT APPROVED
+# Current project truth — 0.338.92 (2026-11-17)
 
-# Current source increment — 0.338.86 (2026-11-16)
+**Current source version:** `0.338.92`  
+**Package identity:** `gh-connect@0.338.92`  
+**Authoritative source archive:** `GREENHAVEN-0.338.92-SCOPED-EVIDENCE-2026-11-17.zip`  
+**Current status:** **NOT APPROVED** for production.
 
-Current status:** **NOT APPROVED**
+## Source authority
 
-**Current source version:** `0.338.86`  
-**Package identity:** `gh-connect@0.338.86`  
-**Prior baseline:** `0.338.84` (feed / home / profile / community / post-card density improvements).
+This is an in-place derivative of the user's supplied `GREENHAVEN-0.338.90-MEDIA-EVIDENCE-2026-11-16.zip`. It supersedes earlier GreenHaven source archives wherever they conflict. Preserve the existing GitHub repository, Vercel project, Pi integrations, wallet and financial boundaries, and migration history. Do not rewrite the application.
 
-This increment hardens Pi A2U wallet-scope consent and provider destination adoption. Historical scope backfill requires explicit-consent provenance and a valid recognized wallet source. The adoption RPC verifies the current identity mapping, exact provider payment ID, Testnet network and executable payout state. Migration `20261116045934_pi_wallet_scope_consent_provider_address_discovery` is applied to Testnet only; Mainnet is untouched. No payout or ledger rows were changed. CALLS_PRODUCTION_ENABLED and REMOTE_PUSH_PRODUCTION_ENABLED remain fail-closed (require infrastructure + operator review).
+## 0.338.92 implementation
 
-**Phase 6 source gate and prior static suites retained.** Full static verification must re-run on supported Node 24.15.0 after deploy. Supported Node engine range is `^24.15.0`; Node.js 24.15.0 dependency-backed TypeScript, lint, and Next.js production build remain required. Source checks do not establish a successful supported-runtime build, real browser acceptance, live database readiness or production readiness; static verification does not establish runtime acceptance.
+- Public respondents can upload images, video, audio and PDF files to a published project using short-lived signed Storage URLs and a one-hour project/submission-key scoped upload session. Up to five files per submission key are accepted. Files attach to the response only when that exact submission key is submitted.
+- Field agents can upload evidence only to a durable report created by the same field-session JTI. Field-session codes do not become GreenHaven accounts or admin credentials.
+- The central administrator Evidence Review Centre lists Research and Field Desk evidence and records review decisions. Admin access is checked against `GHC_FIELD_ADMIN_USER_ID`.
+- Upload completion streams the object through SHA-256 hashing and checks basic file magic bytes against the claimed MIME type. This is MIME-spoofing resistance, not malware detection.
+- All new evidence enters `scan_status=pending` and `verification_status=quarantined`. Content delivery is denied until a trusted scanner reports a matching SHA-256 digest as clean. Scanner queue and HMAC-authenticated callback endpoints are implemented; a separate trusted scanning worker/provider and `GHC_EVIDENCE_SCANNER_SECRET` configuration are still required. No file is claimed to have been malware-scanned in this source-only increment.
+- Database triggers append evidence creation, scan and review changes to a restricted append-only SHA-256 hash chain. Hashes are evidence-integrity indicators, not a guarantee of physical authenticity or legal certification.
+- Optional geographic-unit references are checked against active `gh_research_geo_units` records. For election-observation projects, supplied geographic IDs must resolve to `level_key='polling_unit'`. No national Nigeria geography dataset, international data package, GPS capture, EXIF verification or polling-unit roster is imported in this increment.
 
-GHC and Pi pricing/settlement authorities remain separate. The source migration inventory is not evidence of applied migrations. The Testnet schema was updated by the single reviewed Run #302 migration. No payout, ledger, wallet balance, GHC or Pi financial records were changed. Production approval remains pending; production remains **NOT APPROVED**.
+## Migration status
 
-Production remains **NOT APPROVED**.
+The new evidence workflow depends on three additive migrations, all source-only and REVIEW_REQUIRED at packaging time:
 
-## Canonical navigation contract
+1. `20261116182000_gh_research_intelligence_platform_foundation.sql` — project roles, research evidence base, geographic hierarchy, election/exam/challenge/poll foundations and audit events. Its challenge participation function was reordered after the referenced tables to fix a forward type dependency.
+2. `20261116190000_gh_media_evidence_engine.sql` — media asset references and Field Desk evidence relation.
+3. `20261117010001_gh_evidence_scoped_upload_chain_of_custody.sql` — scoped upload sessions, scan/quarantine fields, field-session report binding, geographic metadata and append-only hash-chain events.
 
-Bottom navigation (five items): **Home · Messages · Communities · Cart · Profile**.
+The existing Testnet migrations `20261116170409_gh_field_reports_public_intake` and `20261116171144_gh_research_studio_public_forms` remain applied and recorded. The three migrations above were not applied by this source upgrade. Mainnet was not changed.
 
-Wallet remains an overlay surface and is not a primary bottom-nav destination.
+## Verification limits
 
+The source includes static contract checks and pure file-signature tests. Full Node 24.15.0 dependency-backed TypeScript, lint, production build and browser/device end-to-end acceptance remain outstanding because the available workspace is Node 22.16.0 and dependencies are not installed. Scanner provider execution, signed upload against Testnet, evidence chain postflight and geographic lookup against populated data are not runtime-verified.
+
+No GitHub push, Vercel deployment, Mainnet migration or financial state change was performed. Source presence does not establish database application, runtime success, scanner execution or test acceptance. Production remains NOT APPROVED.

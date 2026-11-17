@@ -32,6 +32,9 @@ export function LegalPage({
         <Link href="/support" className="text-muted-foreground hover:text-foreground">
           Support
         </Link>
+        <Link href="/field" className="text-muted-foreground hover:text-foreground">
+          Field Desk
+        </Link>
       </nav>
       <header className="mt-6 border-b border-border/60 pb-4">
         <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
