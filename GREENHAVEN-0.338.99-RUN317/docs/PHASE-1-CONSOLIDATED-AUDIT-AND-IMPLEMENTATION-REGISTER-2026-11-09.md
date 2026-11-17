@@ -3,15 +3,19 @@
 **Audit date:** 2026-11-09  
 **Last updated:** 2026-11-11  
 **Authoritative source archive:** `GREENHAVEN-0.338.55-RUN292-MOBILE-WALLET-AUDIT.zip`  
-**Current project package:** `gh-connect@0.338.98`
+**Current project package:** `gh-connect@0.338.99`
 
-**Current in-place maintenance derivative:** `gh-connect@0.338.98` (authoritative source archive dated 2026-11-17); the audit findings and historical baseline below remain preserved. Older Run #250–310 snapshots are historical references, not current release pointers.  
+**Current in-place maintenance derivative:** `gh-connect@0.338.99` (authoritative source archive dated 2026-11-17); the audit findings and historical baseline below remain preserved. Older Run #250–310 snapshots are historical references, not current release pointers.  
 **Phase:** 1 of the ten-phase completion roadmap — authoritative baseline and complete audit  
 **Disposition:** **Source inventory and selected contracts verified; Phase 1 is NOT fully closed. Production remains NOT APPROVED.**
 
-## Current source addendum — 0.338.98 (2026-11-17)
+## Current source addendum — 0.338.99 (2026-11-17)
 
-The user-designated source archive is `GREENHAVEN-0.338.93-RUN312-NOTIFICATION-RPC-FIX-2026-11-17.zip`; 0.338.98 is the current local working derivative (Run 315), built on the prior 0.338.96 candidate. Run 314 added 30 screen-level UI and interaction refinements; Run 315 repairs CI lint/build blockers and diagnostics handling; prior 0.338.95 adds scoped public and field evidence intake, quarantine-first delivery, SHA-256 evidence-chain events and scanner callback contracts. The trusted malware-scanner provider remains unconfigured; three evidence/research migrations remain REVIEW_REQUIRED and unapplied. This addendum supersedes only the current-release pointer above; dated Run #250–310 details below remain historical snapshots. The Testnet branch's `.github/workflows/ci.yml` was absent even though the repository default branch contains the workflow; the release repair restores that repository workflow to the Testnet candidate. No push, deployment, database mutation, scanner activation or Mainnet operation is claimed.
+The user-designated source archive is `GREENHAVEN-0.338.93-RUN312-NOTIFICATION-RPC-FIX-2026-11-17.zip`; 0.338.99 is the current local working derivative (Run 317), built on the 0.338.98 candidate. Run 317 removes Node-only crypto from shared browser modules, uses Web Crypto for secure IDs, isolates push endpoint hashing to a server-only module, and adds a regression gate. GitHub Actions run #317 on 0.338.98 confirmed typecheck and ESLint passed, while the production build failed with Webpack `UnhandledSchemeError` for `node:crypto`. Run 314 added 30 screen-level UI and interaction refinements; Run 315/316 repaired CI lint/build contracts and release-gate assertions; prior 0.338.95 adds scoped public and field evidence intake, quarantine-first delivery, SHA-256 evidence-chain events and scanner callback contracts. The trusted malware-scanner provider remains unconfigured; three evidence/research migrations remain REVIEW_REQUIRED and unapplied. This addendum supersedes only the current-release pointer above; dated Run #250–310 details below remain historical snapshots. The Testnet branch's `.github/workflows/ci.yml` was absent even though the repository default branch contains the workflow; the release repair restores that repository workflow to the Testnet candidate. No GitHub push, Vercel deployment, database mutation, scanner activation or Mainnet operation is claimed.
+
+## Run #317 addendum — 2026-11-17
+
+The connected GitHub Actions run #317 (`44117254191`) on `testnet` was inspected directly. Its TypeScript typecheck, ESLint, and all 362 prebuild checks passed; the production build then failed because `node:crypto` entered a Webpack browser compilation. The shared secure ID module used dynamic Node crypto fallbacks and was dynamically required from shared transaction/data modules. Run #317 replaces that pattern with static imports of a browser-safe Web Crypto helper, fails closed if secure randomness is unavailable, and moves push endpoint SHA-256 hashing into `lib/server/notifications/push-hash.ts`. The push contract runtime tests pass 19/19; the new browser-safe crypto boundary gate passes 9/9. A fresh Node.js 24.15.0 CI run is still required to confirm the full production build. No GitHub push, Vercel deployment, Supabase mutation, migration apply, financial operation or Mainnet action is claimed. Production remains NOT APPROVED.
 
 ## Run #291 addendum — 2026-11-11
 

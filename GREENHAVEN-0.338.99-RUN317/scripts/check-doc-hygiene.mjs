@@ -10,6 +10,7 @@ const required = new Set([
   'docs/FULL-PROJECT-AUDIT-0.338.95-2026-11-17.md',
   'docs/FULL-PROJECT-AUDIT-0.338.96-2026-11-17.md',
   'docs/FULL-PROJECT-AUDIT-0.338.98-2026-11-17.md',
+  'docs/FULL-PROJECT-AUDIT-0.338.99-2026-11-17.md',
   'docs/UPGRADE-WORKLOG-0.338.95.md',
   'docs/UPGRADE-WORKLOG-0.338.96.md',
   'docs/UPGRADE-WORKLOG-0.338.98.md',

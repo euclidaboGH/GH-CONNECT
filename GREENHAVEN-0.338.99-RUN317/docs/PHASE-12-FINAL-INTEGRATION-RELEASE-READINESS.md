@@ -1,8 +1,8 @@
-Release: `0.338.98`
-**Current source baseline:** `0.338.98`
+Release: `0.338.99`
+**Current source baseline:** `0.338.99`
 **Current status:** **NOT APPROVED** for production.
 
-Current 0.338.98 increment repairs CI lint/build source contracts and diagnostics handling. The 0.338.92 increment adds project/submission-key scoped public evidence uploads, field-session/report scoped evidence uploads, streamed SHA-256 hashing, magic-byte checks, quarantine-first content delivery, central evidence review workspace, scanner queue/HMAC callback contracts, active geographic-unit validation and append-only evidence hash-chain events. The scanner worker/provider is not configured, so uploaded files remain quarantined until a trusted scanner reports clean. Migrations `20261116182000`, `20261116190000` and `20261117010001` are REVIEW_REQUIRED and unapplied. Supported Node 24.15.0 build, disposable PostgreSQL rehearsal, scanner integration, browser/device acceptance and Preview end-to-end acceptance remain outstanding. No GitHub push, Vercel deployment or Mainnet change.
+Current 0.338.99 increment repairs CI lint/build source contracts and diagnostics handling. The 0.338.92 increment adds project/submission-key scoped public evidence uploads, field-session/report scoped evidence uploads, streamed SHA-256 hashing, magic-byte checks, quarantine-first content delivery, central evidence review workspace, scanner queue/HMAC callback contracts, active geographic-unit validation and append-only evidence hash-chain events. The scanner worker/provider is not configured, so uploaded files remain quarantined until a trusted scanner reports clean. Migrations `20261116182000`, `20261116190000` and `20261117010001` are REVIEW_REQUIRED and unapplied. Supported Node 24.15.0 build, disposable PostgreSQL rehearsal, scanner integration, browser/device acceptance and Preview end-to-end acceptance remain outstanding. No GitHub push, Vercel deployment or Mainnet change.
 
 ---
 

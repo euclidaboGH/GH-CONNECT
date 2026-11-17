@@ -1,5 +1,5 @@
-Current source baseline for this consolidated report: `0.338.98`
-- Current audit status (v0.338.98): Run 316 Run #299 build-contract regression 20/20; Maintenance 30 30/30; Run 315 CI lint/build remediation gate 9/9; Run 314 screen-experience gate 15/15; JSX safety 1,154 files; full static verification passed. Node 24.15.0 dependency-backed lint/build and browser/device acceptance remain outstanding. Full Node 24.15.0 build and browser/device acceptance remain outstanding. Scoped evidence source gate 25/25; file signature tests 16/16; Research Intelligence gate 20/20 and logic runtime 8/8; Field Research 23/23; media evidence 22/22; migration inventory 229/229. Three evidence/research foundation migrations are REVIEW_REQUIRED and unapplied. Scanner provider and live signed-upload/chain postflight remain outstanding; full Node 24.15.0 build and browser/device acceptance remain outstanding; production NOT APPROVED.
+Current source baseline for this consolidated report: `0.338.99`
+- Current audit status (v0.338.99): Run 317 browser-safe crypto boundary 9/9; push contract runtime 19/19; Run #299 build-contract 20/20; Run #301 release gate remains explicit; production typecheck/lint passed on the previous 0.338.98 GitHub run, but Next.js build failed on `node:crypto`; 0.338.99 requires a fresh Node 24.15.0 CI build. Production NOT APPROVED.
 - The historical phase snapshots below are preserved for audit context and are not evidence of current deployment or production acceptance.
 
 ---

@@ -1,14 +1,14 @@
-# Current project truth — 0.338.98 (2026-11-17)
+# Current project truth — 0.338.99 (2026-11-17)
 
-**Current source version:** `0.338.98`  
-**Package identity:** `gh-connect@0.338.98`  
+**Current source version:** `0.338.99`  
+**Package identity:** `gh-connect@0.338.99`  
 **Authoritative source archive:** `GREENHAVEN-0.338.93-RUN312-NOTIFICATION-RPC-FIX-2026-11-17.zip`  
 **SHA-256:** `dcab57c8f9b43d6f9476745fa8d862b3d26ab33938e00b0bea67132ca2e523ec`  
 **Current status:** **NOT APPROVED** for production.
 
 ## Source authority
 
-The supplied 0.338.93 RUN312 archive is the exact user-designated source of truth and supersedes every earlier archive wherever they conflict. Version 0.338.98 is a local remediation derivative of that archive; it does not replace the user-designated source archive. Preserve the existing GitHub repository, Vercel project, Pi integrations, wallet and financial boundaries, and migration history.
+The supplied 0.338.93 RUN312 archive is the exact user-designated source of truth and supersedes every earlier archive wherever they conflict. Version 0.338.99 is a local remediation derivative of that archive; it does not replace the user-designated source archive. Preserve the existing GitHub repository, Vercel project, Pi integrations, wallet and financial boundaries, and migration history.
 
 ## 0.338.92 implementation
 

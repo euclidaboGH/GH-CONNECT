@@ -1,7 +1,7 @@
-# CURRENT BUILD CONTEXT — 0.338.98 (2026-11-17)
+# CURRENT BUILD CONTEXT — 0.338.99 (2026-11-17)
 
-- **User-designated source baseline:** `GREENHAVEN-0.338.93-RUN312-NOTIFICATION-RPC-FIX-2026-11-17.zip`; current local remediation derivative: `gh-connect@0.338.98`, a source-only derivative of the 0.338.93 candidate, itself derived from the supplied authoritative 0.338.92 baseline.
-- **Package:** `gh-connect@0.338.98`; package, lockfile and in-app release identity are synchronized.
+- **User-designated source baseline:** `GREENHAVEN-0.338.93-RUN312-NOTIFICATION-RPC-FIX-2026-11-17.zip`; current local remediation derivative: `gh-connect@0.338.99`, a source-only derivative of the 0.338.93 candidate, itself derived from the supplied authoritative 0.338.92 baseline.
+- **Package:** `gh-connect@0.338.99`; package, lockfile and in-app release identity are synchronized.
 - **Baseline authority:** the supplied `GREENHAVEN-0.338.92-TESTNET-QUARANTINE-ENV-PREP-2026-11-17-1.zip` remains the authoritative parent archive. The candidate does not replace the user's baseline until accepted.
 - **Latest work:** Quiet Premium shared interface layer; CI workflow and release-gate corrections; bounded server-side Supabase RPC/REST transport contracts; Run #312 TypeScript and notification RPC repairs; explicit private no-store notification responses; static gate alignment with the centralized transport and operator-key helpers; research evidence workflows retained in quarantine-first mode.
 - **Coming Soon boundary:** the 30 unreleased ecosystem services remain `COMING_SOON` with no destination. Their 30-track upgrade plans are planning objectives, not completed feature implementations or permission to activate them.
@@ -49,3 +49,8 @@ The current local candidate adds 30 responsive layout, focus, safe-area, touch a
 
 ## 0.338.98 Run 315 CI remediation
 The latest local derivative fixes the exact CI lint failures, the missing React hook dependency warning, the stale Pass 14 product-design build gate, and early-failure diagnostics artifact handling. A nine-check source gate is registered in prelint, prebuild checks and static verification. Node 24.15.0 dependency-backed lint/build still needs to run in CI.
+
+
+## 0.338.99 Run 317 — browser-safe crypto build repair
+
+GitHub Actions on 0.338.98 confirmed typecheck and lint passed and all 362 prebuild checks passed; the production build failed with Webpack `UnhandledSchemeError` for `node:crypto`. Run 317 replaces shared dynamic Node crypto imports with Web Crypto, isolates push endpoint hashing in the server-only layer, and adds a 9/9 regression gate. Push contract tests pass 19/19. A fresh Node 24.15.0 CI run must still confirm the production build. No GitHub push, Vercel deployment, Supabase mutation, migration apply, financial operation or Mainnet action occurred.

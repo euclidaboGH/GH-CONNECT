@@ -1,3 +1,5 @@
+import { securePrefixedId } from "./secure-id.ts"
+
 /**
  * In-memory transaction workflow coordinator.
  *
@@ -162,16 +164,8 @@ export class TransactionManager {
   }
 
   protected generateId(prefix = "tx"): string {
-    try {
-      const { securePrefixedId } = require("@/lib/secure-id") as typeof import("@/lib/secure-id")
-      return securePrefixedId(prefix)
-    } catch {
-      if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-        return `${prefix}_${crypto.randomUUID()}`
-      }
-      // Non-security-critical in-memory correlation fallback only.
-      return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
-    }
+    // IDs are generated with Web Crypto; do not downgrade to Math.random().
+    return securePrefixedId(prefix)
   }
 
   clearHistory(): void {

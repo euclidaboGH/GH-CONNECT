@@ -1,8 +1,10 @@
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { hashPushEndpoint } from "@/lib/server/notifications/push-hash"
 import { hasPushSubscriptionEncryptionKey, validateVapidConfiguration } from "@/lib/server/notifications/push-secrets"
 import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
 
-export { hashPushEndpoint, normalizePushCategoryPreferences, normalizePushDeviceId, normalizePushEndpoint, validatePushSubscription } from "@/lib/notification-push-contract"
+export { hashPushEndpoint }
+export { normalizePushCategoryPreferences, normalizePushDeviceId, normalizePushEndpoint, validatePushSubscription } from "@/lib/notification-push-contract"
 
 export function getWebPushConfiguration() {
   const env = readGhcServerEnv()

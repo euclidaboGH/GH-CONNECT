@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto"
-
 export const PUSH_CATEGORIES = [
   "messages", "matches", "connections", "comments", "mentions", "communities",
   "stories", "marketplace", "rewards", "wallet", "premium", "profile_views",
@@ -36,10 +34,6 @@ export function validatePushSubscription(value: unknown): {
   const expirationTime = typeof input.expirationTime === "number" && Number.isFinite(input.expirationTime)
     ? Math.max(0, Math.floor(input.expirationTime)) : null
   return { endpoint, p256dh, auth, expirationTime }
-}
-
-export function hashPushEndpoint(endpoint: string): string {
-  return createHash("sha256").update(endpoint).digest("hex")
 }
 
 export function normalizePushDeviceId(value: unknown): string | null {

@@ -1,3 +1,4 @@
+import { secureHex } from "./secure-id.ts"
 import { isDemoDataAllowed } from "@/lib/demo-data-policy"
 import type { Profile, Settings, Candidate, Post, StoryItem } from "./ghc-types"
 
@@ -437,7 +438,7 @@ export function timeAgo(timestamp: number): string {
 }
 
 export function generateId(): string {
-  try { const { secureHex } = require("@/lib/secure-id"); return secureHex(8) } catch { return typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID().replace(/-/g,"").slice(0,16) : Math.random().toString(36).substring(2, 11) }
+  return secureHex(8)
 }
 
 /** @deprecated Prefer purpose-aware helpers from @/lib/media/compress-image */
