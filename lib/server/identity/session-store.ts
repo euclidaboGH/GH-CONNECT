@@ -9,7 +9,7 @@
 
 import { createHash, randomBytes } from "crypto"
 import { readGhcServerEnv, hasPrivilegedDatabase } from "@/lib/server/economy/env"
-import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
+import { supabaseRest } from "@/lib/server/supabase/rest-client"
 
 /** Cookie name for GH server session */
 export const GH_SESSION_COOKIE = "gh_session"
@@ -157,12 +157,25 @@ async function dbInsert(rec: SessionRecord): Promise<boolean> {
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return false
   try {
-    const restResult = await supabaseRest(`gh_sessions`, { method: "POST", body: JSON.stringify({, timeoutMs: 10000 })
-    const res = { ok: restResult.ok, status: restResult.status, json: async () => restResult.ok ? restResult.data : restResult.body, text: async () => JSON.stringify(restResult.ok ? restResult.data : restResult.body) },
-      cache: "no-store",
+    const result = await supabaseRest("gh_sessions", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({
+        id: rec.id,
+        token_hash: rec.tokenHash,
+        gh_user_id: rec.ghUserId,
+        created_at: new Date(rec.createdAt).toISOString(),
+        last_seen_at: new Date(rec.lastSeenAt).toISOString(),
+        expires_at: new Date(rec.expiresAt).toISOString(),
+        absolute_expires_at: new Date(rec.absoluteExpiresAt).toISOString(),
+        revoked_at: rec.revokedAt == null ? null : new Date(rec.revokedAt).toISOString(),
+        user_agent_hash: rec.userAgentHash,
+        meta: rec.deviceLabel ? { deviceLabel: rec.deviceLabel } : {},
+      }),
+      timeoutMs: 10_000,
     })
-    if (!res.ok) {
-      console.error("[session] dbInsert failed", res.status)
+    if (!result.ok) {
+      console.error("[session] dbInsert failed", result.status)
       return false
     }
     return true
@@ -419,11 +432,12 @@ export async function revokeAllSessionsForUser(ghUserId: string): Promise<number
       throw new Error("SESSION_REVOCATION_UNAVAILABLE")
     }
     try {
-      const restResult = await supabaseRest(`gh_sessions?gh_user_id=eq.${encodeURIComponent(uid)}&revoked_at=is.null`, { method: "PATCH", body: JSON.stringify({ revoked_at: new Date(t).toISOString(), timeoutMs: 10000 })
-    const response = { ok: restResult.ok, status: restResult.status, json: async () => restResult.ok ? restResult.data : restResult.body, text: async () => JSON.stringify(restResult.ok ? restResult.data : restResult.body) },
-        cache: "no-store",
+      const result = await supabaseRest(`gh_sessions?gh_user_id=eq.${encodeURIComponent(uid)}&revoked_at=is.null`, {
+        method: "PATCH",
+        body: JSON.stringify({ revoked_at: new Date(t).toISOString() }),
+        timeoutMs: 10_000,
       })
-      if (!response.ok) throw new Error("durable revoke returned non-success")
+      if (!result.ok) throw new Error("durable revoke returned non-success")
     } catch {
       // Do not mutate the local cache or claim success if the shared store did
       // not confirm revocation. Other app instances rely on this durable state.

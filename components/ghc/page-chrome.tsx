@@ -26,7 +26,7 @@ export function PageChrome({
 }) {
   return (
     <header
-      className={`gh-page-chrome flex shrink-0 items-center gap-2 px-3 py-2.5 ${className}`}
+      className={`gh-page-chrome flex min-h-[3.75rem] shrink-0 items-center gap-3 border-b border-[var(--gh-ref-line)] px-4 py-3 ${className}`}
     >
       {onBack ? (
         <button
@@ -39,9 +39,9 @@ export function PageChrome({
         </button>
       ) : null}
       <div className="min-w-0 flex-1">
-        <h1 className="truncate text-[15px] font-extrabold leading-tight tracking-[-0.02em] text-foreground">{title}</h1>
+        <h1 className="truncate text-base font-bold leading-tight tracking-[-0.025em] text-foreground sm:text-[17px]">{title}</h1>
         {subtitle ? (
-          <p className="mt-0.5 truncate text-[11px] leading-tight text-muted-foreground">{subtitle}</p>
+          <p className="mt-1 truncate text-xs leading-snug text-muted-foreground">{subtitle}</p>
         ) : null}
       </div>
       {trailing}

@@ -21,15 +21,15 @@ export function SurfaceIntro({
 }) {
   const toneCls =
     tone === "emerald"
-      ? "border-emerald-200/80 bg-gradient-to-br from-emerald-50/90 to-card dark:border-emerald-900 dark:from-emerald-950/40"
+      ? "border-emerald-200/70 bg-emerald-50/45 dark:border-emerald-900/70 dark:bg-emerald-950/20"
       : tone === "violet"
-        ? "border-violet-200/80 bg-gradient-to-br from-violet-50/90 to-card dark:border-violet-900 dark:from-violet-950/40"
+        ? "border-primary/20 bg-primary/5 dark:border-primary/25 dark:bg-primary/10"
         : tone === "amber"
-          ? "border-amber-200/80 bg-gradient-to-br from-amber-50/90 to-card dark:border-amber-900 dark:from-amber-950/40"
+          ? "border-amber-200/70 bg-amber-50/45 dark:border-amber-900/70 dark:bg-amber-950/20"
           : "border-border/70 bg-card"
 
   return (
-    <div className={`mx-3 mt-3 rounded-2xl border p-3.5 shadow-[var(--gh-card-shadow)] ${toneCls}`}>
+    <div className={`mx-3 mt-3 rounded-[1.2rem] border p-4 shadow-[var(--gh-card-shadow)] ${toneCls}`}>
       {kicker ? (
         <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{kicker}</p>
       ) : null}

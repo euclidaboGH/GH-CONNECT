@@ -1284,7 +1284,7 @@ export function MessageScreen() {
 
 
   return (
-    <div className="gh-world-messages gh-world-inbox flex h-full min-h-0 flex-col bg-background text-foreground contain-content" role="region" aria-label={msg("messagesTitle")}>
+    <div className="gh-world-messages gh-world-inbox flex h-full min-h-0 flex-col bg-background text-foreground contain-content" data-gh-module="messages" role="region" aria-label={msg("messagesTitle")}>
       <div className="px-3 pt-2" role="status">
         {isOffline ? (
           <p className="rounded-[1.25rem] border border-amber-200/80 bg-amber-50/90 px-3.5 py-2 text-[11px] leading-snug text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">

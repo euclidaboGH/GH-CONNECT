@@ -6,7 +6,7 @@ async function treasuryRpc<T>(name: string, body: Record<string, unknown>): Prom
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return null
   try {
-    const response = await (async () => { const r = await supabaseRpc('${name}', typeof JSON.stringify(body) === "string" ? JSON.parse(JSON.stringify(body)) : JSON.stringify(body), { timeoutMs: 10000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
+    const response = await (async () => { const r = await supabaseRpc(name, body, { timeoutMs: 10000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
     if (!response.ok) return null
     return await response.json() as T
   } catch { return null }

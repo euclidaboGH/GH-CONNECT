@@ -94,7 +94,7 @@ export default function ProfileStorySection({ scope = "profile", creatorHost = f
     .sort((a, b) => b.createdAt - a.createdAt) : []
 
   // One tray card per creator; each creator's stories play in chronological order.
-  const otherStoryGroups = Array.from(otherStories.reduce((groups, story) => {
+  const otherStoryGroups = Array.from<StoryItem[]>(otherStories.reduce((groups, story) => {
     const key = String(story.ownerId || story.id)
     const group = groups.get(key) || []
     group.push(story)

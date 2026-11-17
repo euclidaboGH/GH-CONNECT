@@ -1,10 +1,14 @@
 # GreenHaven
 
-**Current source version:** `0.338.92`
+**Current source version:** `0.338.93`
 
 Production status: **NOT APPROVED** — supported Node 24.15.0 dependency-backed typecheck/lint/build, browser/device, live database/provider and operator acceptance remain outstanding.
 
 This repository is the canonical GreenHaven source tree. See `docs/SOURCE_OF_TRUTH.md` and `docs/CURRENT_BUILD_CONTEXT.md` before implementation or release work.
+
+## Latest implementation — 0.338.93 / Quiet Premium Product Transformation
+
+Applies one coordinated visual system to Feed, Wallet, Rewards, Membership, Profile, Settings, Communities, Messages, Marketplace, Filters and Notifications. The Ecosystem catalogue now presents each Coming Soon service as an in-development brief with its thirty tailored preparation tracks and launch gates. The 12 Active / 30 Coming Soon registry statuses are unchanged; all Coming Soon destinations remain disabled. This source-only increment has not been run through the full Node 24.15.0 install/typecheck/lint/build or browser/device acceptance. GitHub write authorization is still blocked, so no push or Vercel deployment is claimed. Production remains NOT APPROVED.
 
 ## Previous implementation — 0.338.87 / CI Node assertion hygiene
 

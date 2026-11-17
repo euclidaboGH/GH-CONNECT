@@ -47,7 +47,7 @@ for (const source of sources) {
     const searchPath = /\bSET\s+search_path\s*(?:=|TO)\s*[^\n,;]+/i.test(header)
     // Function signatures may be overloaded. Require at least one explicit PUBLIC revoke for this routine name;
     // detailed overload/grant equivalence still requires live catalog verification.
-    const publicRevoke = new RegExp(`\\bREVOKE\\s+(?:ALL|EXECUTE)\\s+ON\\s+FUNCTION\\s+(?:public\\.)?${name.replace(/[$]/g, '\\$')}\\s*\\([\\s\\S]*?\\)\\s+FROM\\s+[^;]*\\bPUBLIC\\b`, 'i').test(allSql)
+    const publicRevoke = new RegExp(`\\bREVOKE\\s+(?:ALL|EXECUTE)\\s+ON\\s+FUNCTION\\s+(?:public\\.)?${name.replace(/[$]/g, '\\$')}(?:\\s*\\([\\s\\S]*?\\))?\\s+FROM\\s+[^;]*\\bPUBLIC\\b`, 'i').test(allSql)
     routines.push({ file: source.file, name, searchPath, publicRevoke })
   }
 }

@@ -98,7 +98,7 @@ async function rpcJson(
     return { ok: false, error: "DB_UNAVAILABLE" }
   }
   try {
-    const res = await (async () => { const r = await supabaseRpc('${fn}', typeof JSON.stringify(args) === "string" ? JSON.parse(JSON.stringify(args)) : JSON.stringify(args), { timeoutMs: 8000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
+    const res = await (async () => { const r = await supabaseRpc(fn, args, { timeoutMs: 8000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
     const data = (await res.json().catch(() => null)) as unknown
     if (!res.ok) {
       const errObj = data && typeof data === "object" ? (data as Record<string, unknown>) : {}

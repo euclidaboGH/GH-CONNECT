@@ -5,12 +5,12 @@
 import { randomUUID } from "node:crypto"
 import { isAllowedPaymentTransition } from "@/lib/server/payments/intent-transition-policy.mjs"
 import type {
-import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
   PaymentIntent,
   PaymentIntentStatus,
   CreatePaymentIntentInput,
   PaymentIntentAuditEvent,
 } from "./intent-types"
+import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
 
 export type { PaymentIntent, PaymentIntentStatus, CreatePaymentIntentInput } from "./intent-types"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
@@ -77,7 +77,7 @@ async function rpcJson(
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return null
   try {
-    const res = await (async () => { const r = await supabaseRpc('${fn}', typeof JSON.stringify(body) === "string" ? JSON.parse(JSON.stringify(body)) : JSON.stringify(body), { timeoutMs: 8000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
+    const res = await (async () => { const r = await supabaseRpc(fn, body, { timeoutMs: 8000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
     if (!res.ok) return null
     const text = await res.text()
     if (!text || text === "null") return null

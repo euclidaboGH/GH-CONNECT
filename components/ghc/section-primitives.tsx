@@ -20,7 +20,7 @@ export function SegmentedPills({
   ariaLabel: string
   size?: "sm" | "md"
 }) {
-  const pad = size === "sm" ? "px-3 py-1.5 text-[11px]" : "px-3.5 py-2 text-xs"
+  const pad = size === "sm" ? "px-3 py-2 text-xs" : "px-3.5 py-2.5 text-[13px]"
   return (
     <div
       className="flex snap-x snap-mandatory gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide"
@@ -37,10 +37,10 @@ export function SegmentedPills({
             aria-selected={selected}
             title={item.hint}
             onClick={() => onChange(item.id)}
-            className={`flex min-h-9 shrink-0 snap-start items-center gap-1.5 whitespace-nowrap rounded-full font-semibold transition-all active:scale-[0.97] ${pad} ${
+            className={`flex min-h-10 shrink-0 snap-start items-center gap-1.5 whitespace-nowrap rounded-xl border font-semibold transition-colors active:scale-[0.985] ${pad} ${
               selected
-                ? "bg-primary text-primary-foreground shadow-md shadow-primary/20 ring-1 ring-primary/30"
-                : "bg-muted/80 text-muted-foreground ring-1 ring-border/60 hover:bg-primary/10 hover:text-primary"
+                ? "border-primary/25 bg-primary/10 text-primary"
+                : "border-transparent bg-muted/65 text-muted-foreground hover:border-border hover:bg-card hover:text-foreground"
             }`}
           >
             {item.icon ? (

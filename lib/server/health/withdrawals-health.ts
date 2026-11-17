@@ -374,7 +374,7 @@ async function probeEarningsWithdrawableRpc(): Promise<WithdrawalsHealthComponen
 
     for (const probe of probes) {
       const { result, latencyMs } = await timed(async () => {
-        const res = await (async () => { const r = await supabaseRpc('${probe.name}', typeof JSON.stringify(probe.body) === "string" ? JSON.parse(JSON.stringify(probe.body)) : JSON.stringify(probe.body), { timeoutMs: 8000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
+        const res = await (async () => { const r = await supabaseRpc(probe.name, probe.body, { timeoutMs: 8000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
         const body = await res.text().catch(() => "")
         return { status: res.status, body }
       })
@@ -487,7 +487,7 @@ async function probeWithdrawalSupportRpc(input: {
   const base = env.supabaseUrl.replace(/\/$/, "")
   try {
     const { result, latencyMs } = await timed(async () => {
-      const response = await (async () => { const r = await supabaseRpc('${input.functionName}', typeof JSON.stringify(input.body) === "string" ? JSON.parse(JSON.stringify(input.body)) : JSON.stringify(input.body), { timeoutMs: 8000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
+      const response = await (async () => { const r = await supabaseRpc(input.functionName, input.body, { timeoutMs: 8000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
       const body = await response.json().catch(() => null)
       return { status: response.status, body: body && typeof body === "object" ? body as Record<string, unknown> : null }
     })

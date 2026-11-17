@@ -22,8 +22,6 @@ No migration was applied by this source increment. The connected GitHub `testnet
 ## Deployment status
 
 No GitHub commit, Vercel deployment, Mainnet change, or scanner activation was performed.
-<<<<<<< Updated upstream
-=======
 
 
 ## Vercel and GitHub release-integrity remediation
@@ -53,7 +51,7 @@ No GitHub push, Vercel deployment, database migration, financial mutation, scann
 
 ## Verification results for the remediation candidate
 
-- Run #300 release integrity: 20/20 passed.
+- Run #300 release integrity: 22/22 passed.
 - Run #301 release gate: 20/20 passed.
 - Phase 1–10 upgrade pack: 20/20 passed.
 - Project truth: 11/11 passed.
@@ -64,4 +62,17 @@ No GitHub push, Vercel deployment, database migration, financial mutation, scann
 - Profile identity snapshot source contract: 8/8 passed; runtime test: 13 assertions passed.
 - Dependency lock coverage and root version: passed.
 - Node runtime gate correctly rejected the local Node.js 22.16.0 runtime because the project requires Node.js ^24.15.0. The required-runtime prebuild and dependency-backed build were therefore not run locally.
->>>>>>> Stashed changes
+
+## Follow-up audit of Vercel commit `cecff93` — 2026-11-17
+
+The newer Vercel log is from `testnet` commit `cecff93b5995a10665bb893fa6f70826a6830533`, not the earlier `f4ef11f` log. It confirms the same missing-CI-workflow failure and four failed Run #300 assertions. The connected GitHub write request returned HTTP 403 (`Resource not accessible by integration`), so this source candidate could not be committed to the live branch.
+
+The commit diff also exposed unresolved merge-conflict markers in 14 release/source files, including the migration manifest, verified manifest, source-of-truth and release docs, service registry, social RPC transport, migration inventory generator and Testnet apply-order guide. The archive-derived candidate is reconciled against the authoritative 0.338.92 source and passes a strict conflict-marker scan. Replace the conflicted branch copies from the authoritative candidate; do not choose one side of the conflict by hand.
+
+A deeper static source review found malformed Supabase RPC/REST call expressions in identity, session, step-up, WebAuthn, withdrawal PIN, messaging, membership, media authorization, cashback and ledger helpers. Repairs restore typed shared `supabaseRpc`/`supabaseRest` calls and explicit parameter objects based on the checked-in SQL function signatures. Variable RPC names are now passed as variables rather than the literal strings `'${fn}'`, `'${name}'`, etc. This matters at runtime even where the previous source parsed successfully. The repair preserves identity insert-only behavior, session revocation ordering, server-side ownership checks, message membership checks and the non-spending membership orphan-recovery boundary.
+
+The static RLS coverage checker now recognizes the reviewed Research/Field/Evidence migration's explicit `FOREACH` table list only when the same loop enables RLS, revokes PUBLIC/anon/authenticated access and grants service_role. The SECURITY DEFINER source checker now recognizes valid name-level PUBLIC revokes where PostgreSQL migration SQL intentionally omits an argument signature. This is source-analysis coverage only, not live database policy proof.
+
+Additional local checks now pass: Run #250 identity integrity 10/10; database RLS source coverage 174 table names; SECURITY DEFINER source audit 481 declarations; migration source manifest 229/229; Run #300 20/20; Run #301 20/20; project truth 11/11; Vercel hygiene 17/17; Phase 4 identity snapshot 8/8 and 13 runtime assertions. TypeScript syntax parsing reports no TS1005/TS1136/TS1128/TS1472/TS1109 syntax diagnostics after repairs.
+
+The full dependency-backed typecheck, lint and Next build remain unverified because this environment has no installed `node_modules` and cannot complete a registry-connected Node 24 clean install. A local global `tsc` invocation without project dependencies reports expected missing React/Next/Node package types and is not a valid substitute for the required clean build. npm's 22 reported vulnerabilities and the package deprecation warnings remain unresolved pending a current registry-connected audit and tested lockfile regeneration.

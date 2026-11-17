@@ -1412,16 +1412,12 @@ export async function editMessage(input: {
     if (env.supabaseUrl && env.supabaseServiceRoleKey) {
       // Prefer RPC when migration 55 applied
       try {
-        const rpcRes = await (async () => { const r = await supabaseRpc('gh_edit_message', typeof JSON.stringify({ === "string" ? JSON.parse(JSON.stringify({) : JSON.stringify({, { timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })(),
-            cache: "no-store",
-          }
+        const rpcRes = await supabaseRpc<{ ok?: boolean; error?: string; body?: string; edited_at?: string }>(
+          "gh_edit_message",
+          { p_message_id: mid, p_actor_id: uid, p_body: body },
+          { timeoutMs: 15_000 },
         )
-        const rpcData = (await rpcRes.json().catch(() => null)) as {
-          ok?: boolean
-          error?: string
-          body?: string
-          edited_at?: string
-        } | null
+        const rpcData = rpcRes.ok ? rpcRes.data : rpcRes.body as { ok?: boolean; error?: string; body?: string; edited_at?: string } | undefined
         if (rpcRes.ok && rpcData && rpcData.ok === true) {
           const q = `gh_messages?id=eq.${encodeURIComponent(mid)}&select=*&limit=1`
           const fetched = await rest<Array<Record<string, unknown>>>(q)
@@ -1504,14 +1500,12 @@ export async function pinMessage(input: {
     const env = readGhcServerEnv()
     if (env.supabaseUrl && env.supabaseServiceRoleKey) {
       try {
-        const rpcRes = await (async () => { const r = await supabaseRpc('gh_pin_message', typeof JSON.stringify({ === "string" ? JSON.parse(JSON.stringify({) : JSON.stringify({, { timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })(),
-            cache: "no-store",
-          }
+        const rpcRes = await supabaseRpc<{ ok?: boolean; error?: string }>(
+          "gh_pin_message",
+          { p_message_id: mid, p_actor_id: uid, p_pinned: Boolean(input.pinned) },
+          { timeoutMs: 15_000 },
         )
-        const rpcData = (await rpcRes.json().catch(() => null)) as {
-          ok?: boolean
-          error?: string
-        } | null
+        const rpcData = rpcRes.ok ? rpcRes.data : rpcRes.body as { ok?: boolean; error?: string } | undefined
         if (rpcRes.ok && rpcData?.ok === true) return { ok: true, durable: true }
         if (rpcData?.ok === false) return { ok: false, error: String(rpcData.error || "PIN_FAILED") }
       } catch {
@@ -1556,14 +1550,19 @@ export async function setConversationPrefs(input: {
     const env = readGhcServerEnv()
     if (env.supabaseUrl && env.supabaseServiceRoleKey) {
       try {
-        const rpcRes = await (async () => { const r = await supabaseRpc('gh_set_conversation_prefs', typeof JSON.stringify({ === "string" ? JSON.parse(JSON.stringify({) : JSON.stringify({, { timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })(),
-            cache: "no-store",
-          }
+        const rpcRes = await supabaseRpc<{ ok?: boolean; error?: string }>(
+          "gh_set_conversation_prefs",
+          {
+            p_conversation_id: cid,
+            p_actor_id: uid,
+            p_is_pinned: typeof input.isPinned === "boolean" ? input.isPinned : null,
+            p_is_archived: typeof input.isArchived === "boolean" ? input.isArchived : null,
+            p_muted_until: typeof input.mutedUntil === "number" ? new Date(input.mutedUntil).toISOString() : null,
+            p_clear_mute: input.mutedUntil === null,
+          },
+          { timeoutMs: 15_000 },
         )
-        const rpcData = (await rpcRes.json().catch(() => null)) as {
-          ok?: boolean
-          error?: string
-        } | null
+        const rpcData = rpcRes.ok ? rpcRes.data : rpcRes.body as { ok?: boolean; error?: string } | undefined
         if (rpcRes.ok && rpcData?.ok === true) return { ok: true, durable: true }
         if (rpcData?.ok === false) {
           return { ok: false, error: String(rpcData.error || "PREFS_FAILED") }

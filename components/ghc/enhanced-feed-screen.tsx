@@ -633,7 +633,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (containerRef.current && containerRef.current.scrollTop === 0 && touchIdentifierRef.current !== null) {
-      const touch = Array.from(e.touches).find((t) => t.identifier === touchIdentifierRef.current)
+      const touch = Array.from<Touch>(e.touches).find((t) => t.identifier === touchIdentifierRef.current)
       if (touch) {
         const distance = Math.max(0, touch.clientY - startYRef.current)
         setPullDistance(Math.min(distance, 120))
@@ -1000,7 +1000,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
   const hasRealPosts = useMemo(() => posts.some((post) => !seedPostIds.has(post.id)), [posts, seedPostIds])
 
   return (
-    <div className="gh-world-feed gh-feed-shell relative flex h-full min-h-0 flex-col bg-background text-foreground" role="region" aria-label={t("feed")}>
+    <div className="gh-world-feed gh-feed-shell relative flex h-full min-h-0 flex-col bg-background text-foreground" data-gh-module="feed" role="region" aria-label={t("feed")}>
       {/* Pull-to-refresh indicator */}
       {pullDistance > 0 && (
         <div className="absolute top-0 left-0 right-0 h-20 flex items-center justify-center z-30">

@@ -2746,7 +2746,7 @@ export function MarketplaceScreen({
   }
 
   return (
-    <div className="gh-marketplace-shell gh-world-marketplace flex h-full min-h-0 flex-col bg-background text-foreground" role="region" aria-label={msg("marketplaceTitle")}>
+    <div className="gh-marketplace-shell gh-world-marketplace flex h-full min-h-0 flex-col bg-background text-foreground" data-gh-module="marketplace" role="region" aria-label={msg("marketplaceTitle")}>
       <header className="gh-marketplace-header flex shrink-0 flex-col gap-1 border-b border-border/50 px-3 pb-1 pt-[max(0.25rem,env(safe-area-inset-top,0px))]">
         <div className="flex items-center gap-2">
           <button

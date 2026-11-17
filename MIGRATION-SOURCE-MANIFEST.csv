@@ -227,8 +227,4 @@ filename,classification,bytes
 20261116171144_gh_research_studio_public_forms.sql,REVIEW_REQUIRED,3058
 20261116182000_gh_research_intelligence_platform_foundation.sql,REVIEW_REQUIRED,20908
 20261116190000_gh_media_evidence_engine.sql,REVIEW_REQUIRED,2576
-<<<<<<< Updated upstream
-20261117010001_gh_evidence_scoped_upload_chain_of_custody.sql,REQUIRED,10231
-=======
 20261117010001_gh_evidence_scoped_upload_chain_of_custody.sql,REVIEW_REQUIRED,10235
->>>>>>> Stashed changes

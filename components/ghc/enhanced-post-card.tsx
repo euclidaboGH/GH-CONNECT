@@ -736,7 +736,7 @@ function EnhancedPostCardInner({
                   void (async () => {
                     setEditMediaBusy(true)
                     try {
-                      for (const file of Array.from(files).slice(0, 10 - draftImages.length)) {
+                      for (const file of Array.from<File>(files).slice(0, 10 - draftImages.length)) {
                         if (file.type.startsWith("video/")) {
                           const res = await uploadDurableMedia(file, { fileName: file.name, category: file.type.startsWith("video/") ? "videos" : "images" })
                           const url =
@@ -1163,7 +1163,7 @@ export function VisibilityReasonTooltip({
   useEffect(() => {
     const previousActiveElement = document.activeElement instanceof HTMLElement ? document.activeElement : null
     const dialog = dialogRef.current
-    const getFocusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>(
+    const getFocusable = (): HTMLElement[] => Array.from<HTMLElement>(dialog?.querySelectorAll<HTMLElement>(
       'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
     ) || [])
     getFocusable()[0]?.focus()

@@ -64,7 +64,16 @@ const ICON_MAP: Record<string, LucideIcon> = {
 
 /** 2-col phones (≤640), 3-col tablet, 4-col desktop — fluid, no fixed desktop widths */
 const GRID_CLASS =
-  "grid grid-cols-2 gap-2.5 min-[640px]:grid-cols-3 min-[1024px]:grid-cols-4"
+  "grid grid-cols-2 gap-3 min-[640px]:grid-cols-3 min-[1024px]:grid-cols-4"
+
+const UPGRADE_WORKSTREAMS = [
+  "Product foundation",
+  "Trust, safety & operations",
+  "Discovery & user experience",
+  "Lifecycle & integrations",
+  "Resilience & quality",
+  "Governance & continuity",
+] as const
 
 function ServiceIcon({ name, size = 20 }: { name: string; size?: number }) {
   const Icon = ICON_MAP[name] || Sparkles
@@ -124,38 +133,38 @@ function ServiceCard({
           ? `Open ${service.title}`
           : `${service.title}, ${badge?.label || service.status}`
       }
-      className={`flex min-h-[44px] w-full min-w-0 flex-col items-start gap-1.5 rounded-xl border p-2.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:p-3 ${
+      className={`group flex min-h-[7.25rem] w-full min-w-0 flex-col items-start gap-2 rounded-[1.15rem] border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:min-h-[7.75rem] sm:p-3.5 ${
         highlighted
-          ? "border-emerald-500 bg-emerald-50/90 shadow-sm dark:border-emerald-400 dark:bg-emerald-950/50"
+          ? "border-primary/35 bg-primary/5 shadow-[var(--gh-card-shadow)] dark:bg-primary/10"
           : interactive
-            ? "border-border/70 bg-card hover:border-emerald-300/80 hover:bg-emerald-50/40 active:scale-[0.99] dark:hover:bg-emerald-950/25"
-            : "border-border/50 bg-muted/30"
+            ? "border-[var(--gh-ref-line)] bg-card shadow-[var(--gh-card-shadow)] hover:border-primary/30 hover:bg-primary/[0.025]"
+            : "border-[var(--gh-ref-line)] bg-card/75 hover:border-primary/25 hover:bg-card"
       } ${service.status === "UNAVAILABLE" ? "cursor-not-allowed opacity-60" : ""}`}
     >
       <div className="flex w-full min-w-0 items-start gap-2">
         <span
-          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl sm:h-10 sm:w-10 ${
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.9rem] sm:h-11 sm:w-11 ${
             interactive
-              ? "bg-emerald-500/12 text-emerald-700 dark:text-emerald-300"
-              : "bg-muted text-muted-foreground"
+              ? "bg-primary/10 text-primary"
+              : "bg-muted/75 text-muted-foreground"
           }`}
         >
           <ServiceIcon name={service.icon} size={18} />
         </span>
         <span className="min-w-0 flex-1 overflow-hidden">
           <span className="flex flex-wrap items-center gap-1">
-            <span className="truncate text-[12px] font-bold leading-tight text-foreground sm:text-[13px]">
+            <span className="truncate text-[13px] font-bold leading-snug tracking-[-0.01em] text-foreground sm:text-sm">
               {service.title}
             </span>
             {badge ? (
               <span
-                className={`shrink-0 rounded-full px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide sm:text-[9px] ${badge.className}`}
+                className={`shrink-0 rounded-full px-2 py-1 text-[9px] font-bold tracking-wide sm:text-[10px] ${badge.className}`}
               >
                 {badge.label}
               </span>
             ) : null}
           </span>
-          <span className="mt-0.5 line-clamp-2 block text-[10px] leading-snug text-muted-foreground sm:text-[11px]">
+          <span className="mt-1 line-clamp-2 block text-[11px] leading-relaxed text-muted-foreground sm:text-xs">
             {service.description}
           </span>
         </span>
@@ -179,69 +188,106 @@ function ComingSoonPanel({
   onBack: () => void
 }) {
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-x-hidden bg-background">
-      <header className="flex shrink-0 items-center gap-2 border-b border-border/60 px-3 pb-3 pt-[max(0.75rem,env(safe-area-inset-top,0px))]">
+    <div className="gh-upcoming-service flex h-full min-h-0 flex-col overflow-x-hidden bg-[var(--gh-ref-canvas)]" data-release-status="coming-soon">
+      <header className="flex min-h-[4.25rem] shrink-0 items-center gap-3 border-b border-[var(--gh-ref-line)] bg-[var(--gh-ref-surface)]/95 px-4 py-3 backdrop-blur-xl">
         <button
           type="button"
           onClick={onBack}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[var(--gh-ref-line)] bg-card text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           aria-label="Back to directory"
         >
           <ArrowLeft size={18} />
         </button>
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-sm font-bold">{service.title}</h1>
-          <p className="text-[11px] text-muted-foreground">Coming soon</p>
+          <h1 className="truncate text-base font-bold tracking-tight text-foreground">{service.title}</h1>
+          <p className="mt-0.5 text-xs text-muted-foreground">GreenHaven service development</p>
         </div>
+        <span className="shrink-0 rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-1.5 text-[10px] font-bold text-amber-800 dark:text-amber-200">
+          Coming soon
+        </span>
       </header>
       <div
-        className="min-h-0 flex-1 overflow-y-auto px-4 py-6 scrollbar-hide"
+        className="min-h-0 flex-1 overflow-y-auto px-4 py-5 scrollbar-hide sm:px-6 sm:py-7"
         style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom, 0px))" }}
       >
-        <div className="mx-auto w-full max-w-md rounded-2xl border border-border/70 bg-card p-5 text-center shadow-sm">
-          <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/12 text-emerald-700 dark:text-emerald-300">
-            <ServiceIcon name={service.icon} size={28} />
-          </span>
-          <h2 className="mt-4 text-lg font-black tracking-tight text-foreground">
-            {service.title}
-          </h2>
-          <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
-            {service.description}
-          </p>
-          <p className="mt-4 rounded-xl bg-muted/60 px-3 py-2.5 text-left text-[12px] leading-relaxed text-foreground">
-            {service.roadmapNote ||
-              "This service is on the GreenHaven roadmap. It is not available yet — no actions can be taken here."}
-          </p>
-          <p className="mt-3 text-[11px] text-muted-foreground">
-            Status: <strong>Coming soon</strong> · Not a live product surface
-          </p>
-          <details className="mt-4 rounded-xl border border-border/70 bg-background text-left">
-            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-[12px] font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-              <span>30 upgrade tracks in preparation</span>
-              <span className="text-[10px] font-semibold text-muted-foreground">View plan</span>
-            </summary>
-            <ol className="space-y-3 border-t border-border/60 px-3 py-3">
+        <div className="mx-auto w-full max-w-3xl space-y-5">
+          <section className="overflow-hidden rounded-[1.65rem] border border-[var(--gh-ref-line)] bg-[var(--gh-ref-surface)] p-5 shadow-[var(--gh-ref-shadow)] sm:p-7" aria-labelledby="upcoming-service-title">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/15 sm:h-16 sm:w-16">
+                <ServiceIcon name={service.icon} size={29} />
+              </span>
+              <span className="inline-flex items-center gap-2 rounded-full border border-amber-500/25 bg-amber-500/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-amber-800 dark:text-amber-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden />
+                In development
+              </span>
+            </div>
+            <p className="mt-5 text-[10px] font-bold uppercase tracking-[0.16em] text-primary">GreenHaven Ecosystem</p>
+            <h2 id="upcoming-service-title" className="mt-1 text-2xl font-bold leading-tight tracking-[-0.035em] text-foreground sm:text-3xl">
+              {service.title}
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-[15px]">
+              {service.description}
+            </p>
+            <p className="mt-4 max-w-2xl text-sm leading-6 text-foreground/85">
+              {service.roadmapNote || "This service is part of the GreenHaven product roadmap. Its experience and supporting systems are being prepared before a separate release review."}
+            </p>
+            <div className="mt-6 grid grid-cols-3 gap-2 border-t border-[var(--gh-ref-line)] pt-4 sm:gap-3">
+              <div className="rounded-xl bg-muted/55 px-3 py-3">
+                <p className="text-lg font-bold tabular-nums text-foreground">30</p>
+                <p className="mt-0.5 text-[10px] font-semibold leading-snug text-muted-foreground">Upgrade tracks</p>
+              </div>
+              <div className="rounded-xl bg-muted/55 px-3 py-3">
+                <p className="text-lg font-bold tabular-nums text-foreground">6</p>
+                <p className="mt-0.5 text-[10px] font-semibold leading-snug text-muted-foreground">Workstreams</p>
+              </div>
+              <div className="rounded-xl bg-muted/55 px-3 py-3">
+                <p className="text-lg font-bold text-amber-700 dark:text-amber-300">Off</p>
+                <p className="mt-0.5 text-[10px] font-semibold leading-snug text-muted-foreground">Service access</p>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+              <span className="rounded-full border border-[var(--gh-ref-line)] px-2.5 py-1">Status: <strong className="text-foreground">Coming Soon</strong></span>
+              <span className="rounded-full border border-[var(--gh-ref-line)] px-2.5 py-1">No live actions or transactions</span>
+            </div>
+          </section>
+
+          <section className="rounded-[1.5rem] border border-[var(--gh-ref-line)] bg-[var(--gh-ref-surface)] p-4 shadow-[var(--gh-ref-shadow)] sm:p-5" aria-labelledby="upcoming-plan-title">
+            <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--gh-ref-line)] pb-4">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-primary">Preparation roadmap</p>
+                <h3 id="upcoming-plan-title" className="mt-1 text-lg font-bold tracking-tight text-foreground">The work behind this service</h3>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">30 upgrade tracks in preparation — service-specific objectives grouped into six engineering workstreams.</p>
+              </div>
+              <span className="rounded-full bg-muted px-3 py-1.5 text-[10px] font-bold text-muted-foreground">Plan · not completion</span>
+            </div>
+            <ol className="mt-4 grid gap-3 sm:grid-cols-2" aria-label="Thirty upgrade tracks in preparation">
               {getServiceUpgradePlan(service).map((track, index) => (
-                <li key={track.id} className="flex gap-2.5">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-[10px] font-bold text-emerald-800 dark:text-emerald-200">
-                    {index + 1}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-[11px] font-bold text-foreground">{track.title}</span>
-                    <span className="mt-0.5 block text-[10px] leading-relaxed text-muted-foreground">{track.objective}</span>
-                    <span className="mt-1 block text-[10px] leading-relaxed text-foreground/80">Launch gate: {track.launchGate}</span>
-                  </span>
+                <li key={track.id} className="min-w-0 rounded-xl border border-[var(--gh-ref-line)] bg-card p-3">
+                  {index % 5 === 0 ? (
+                    <p className="mb-2 text-[9px] font-bold uppercase tracking-[0.12em] text-primary">{UPGRADE_WORKSTREAMS[Math.floor(index / 5)]}</p>
+                  ) : null}
+                  <div className="flex items-start gap-2.5">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted text-[10px] font-bold tabular-nums text-foreground">{String(index + 1).padStart(2, "0")}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-xs font-bold leading-snug text-foreground">{track.title}</span>
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-[9px] font-semibold text-muted-foreground">Planned</span>
+                      </span>
+                      <span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">{track.objective}</span>
+                      <span className="mt-2 block border-t border-[var(--gh-ref-line)] pt-2 text-[10px] leading-relaxed text-foreground/80"><strong>Release gate:</strong> {track.launchGate}</span>
+                    </span>
+                  </div>
                 </li>
               ))}
             </ol>
-            <p className="border-t border-border/60 px-3 py-2 text-[10px] leading-relaxed text-muted-foreground">
-              Preparation roadmap only. These tracks are not represented as completed. This service remains Coming Soon and unavailable until separately reviewed and explicitly released.
+            <p className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-3.5 py-3 text-xs leading-relaxed text-foreground/85">
+              <strong>Availability stays off.</strong> This is a development preview only. The service remains Coming Soon, its destination remains disabled, and these planned tracks are not represented as completed features. It stays unavailable until separately reviewed and explicitly released after security, data, accessibility and release checks.
             </p>
-          </details>
+          </section>
           <button
             type="button"
             onClick={onBack}
-            className="mt-5 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground transition hover:brightness-[.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
           >
             Back to Ecosystem
           </button>
@@ -325,8 +371,8 @@ export function GreenHavenEcosystemScreen({
   }
 
   return (
-    <div className="flex h-full min-h-0 w-full max-w-full flex-col overflow-x-hidden bg-background text-foreground">
-      <header className="flex shrink-0 flex-col gap-2 border-b border-border/60 px-3 pb-3 pt-[max(0.75rem,env(safe-area-inset-top,0px))]">
+    <div className="gh-ecosystem-directory flex h-full min-h-0 w-full max-w-full flex-col overflow-x-hidden bg-[var(--gh-ref-canvas)] text-foreground" data-gh-module="ecosystem">
+      <header className="flex shrink-0 flex-col gap-3 border-b border-[var(--gh-ref-line)] bg-[var(--gh-ref-surface)]/95 px-4 pb-4 pt-[max(0.85rem,env(safe-area-inset-top,0px))] backdrop-blur-xl sm:px-6">
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -337,8 +383,8 @@ export function GreenHavenEcosystemScreen({
             <ArrowLeft size={18} />
           </button>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-sm font-bold">GreenHaven Ecosystem</h1>
-            <p className="truncate text-[11px] text-muted-foreground">Service directory</p>
+            <h1 className="truncate text-base font-bold tracking-tight">GreenHaven Ecosystem</h1>
+            <p className="truncate text-xs text-muted-foreground">Explore active services and what is in development</p>
           </div>
         </div>
         <label className="relative block w-full">
@@ -353,7 +399,7 @@ export function GreenHavenEcosystemScreen({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search services"
-            className="h-11 w-full min-w-0 rounded-xl border border-border/70 bg-muted/40 pl-9 pr-3 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="h-12 w-full min-w-0 rounded-xl border border-[var(--gh-ref-line)] bg-muted/35 pl-10 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/40 focus:bg-card focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             autoComplete="off"
             enterKeyHint="search"
           />
@@ -389,9 +435,10 @@ export function GreenHavenEcosystemScreen({
 
         {!isSearching ? (
           <section className="mt-4 px-3 min-[640px]:px-4" aria-label="Featured services">
-            <p className="mb-2 mt-1 px-0.5 text-[12px] font-bold tracking-wide text-foreground">
-              Featured
-            </p>
+            <div className="mb-3 mt-1 flex items-center justify-between gap-3">
+              <h2 className="text-sm font-bold tracking-tight text-foreground">Featured services</h2>
+              <span className="text-[10px] font-semibold text-muted-foreground">Selected across GreenHaven</span>
+            </div>
             <div className={GRID_CLASS}>
               {featured.map((s) => (
                 <ServiceCard
@@ -416,7 +463,7 @@ export function GreenHavenEcosystemScreen({
             <section key={cat.id} aria-labelledby={`eco-cat-${cat.id}`}>
               <h2
                 id={`eco-cat-${cat.id}`}
-                className="mb-2 text-[12px] font-bold text-foreground"
+                className="mb-3 text-sm font-bold tracking-tight text-foreground"
               >
                 {cat.label}
               </h2>
@@ -454,7 +501,7 @@ export function GreenHavenEcosystemScreen({
           ) : null}
         </div>
 
-        <p className="mx-3 mb-6 rounded-xl bg-emerald-50/80 px-3 py-2.5 text-[11px] leading-relaxed text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100 min-[640px]:mx-4">
+        <p className="mx-4 mb-6 rounded-xl border border-[var(--gh-ref-line)] bg-[var(--gh-ref-surface)] px-4 py-3 text-xs leading-relaxed text-muted-foreground sm:mx-6">
           <strong>GHC</strong> is GreenHaven&apos;s internal utility — earned through participation,
           never mixed with Pi. Active services open real product surfaces; Coming soon cards are
           informational only.

@@ -70,7 +70,7 @@ async function rpc<T extends Record<string, unknown>>(
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return null
   try {
-    const response = await (async () => { const r = await supabaseRpc('${name}', typeof JSON.stringify(body) === "string" ? JSON.parse(JSON.stringify(body)) : JSON.stringify(body), { timeoutMs: 10000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
+    const response = await (async () => { const r = await supabaseRpc(name, body, { timeoutMs: 10000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
     const result = (await response.json().catch(() => null)) as T | null
     if (!response.ok || result === null) return null
     return result

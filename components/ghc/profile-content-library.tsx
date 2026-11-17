@@ -106,7 +106,7 @@ export function ProfileContentLibrary({
     previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = "hidden"
-    const focusables = () => Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
+    const focusables = () => Array.from<HTMLElement>(dialogRef.current?.querySelectorAll<HTMLElement>(
       'button:not([disabled]), input:not([disabled]), a[href], video[controls], [tabindex]:not([tabindex="-1"])'
     ) || []).filter((node) => node.offsetParent !== null)
     closeButtonRef.current?.focus()

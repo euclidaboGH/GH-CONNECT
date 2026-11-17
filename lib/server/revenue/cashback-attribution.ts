@@ -3,8 +3,8 @@
  * Only verified PI company revenue with explicit eligibility enters cashback.
  * Never trusts client amounts. Refunds/chargebacks require related source events.
  */
+import { supabaseRpc } from "@/lib/server/supabase/rest-client"
 import {
-import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
   appendVerifiedCompanyRevenueEvent,
   type CompanyRevenueEventType,
   type CompanyRevenueAppendResult,
@@ -120,14 +120,13 @@ export async function reconcileCashbackPeriod(input: {
     return { ok: false, error: "DATABASE_UNAVAILABLE" }
   }
   try {
-    const response = await (async () => { const r = await supabaseRpc('gh_pi_cashback_reconcile_period', typeof JSON.stringify({ === "string" ? JSON.parse(JSON.stringify({) : JSON.stringify({, { timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })(),
-        cache: "no-store",
-        signal: AbortSignal.timeout(15_000),
-      },
-    )
-    const result = (await response.json().catch(() => null)) as CashbackReconcileReport | null
-    if (!response.ok || !result) return { ok: false, error: `HTTP_${response.status}` }
-    return result
+    const response = await supabaseRpc<CashbackReconcileReport>("gh_pi_cashback_reconcile_period", {
+      p_starts_at: input.startsAt,
+      p_ends_at: input.endsAt,
+    }, { timeoutMs: 15_000 })
+    if (!response.ok) return { ok: false, error: response.error }
+    if (!response.data) return { ok: false, error: "EMPTY_RECONCILIATION_RESPONSE" }
+    return response.data
   } catch {
     return { ok: false, error: "RECONCILE_UNAVAILABLE" }
   }

@@ -164,16 +164,22 @@ async function dbUpdateExisting(rec: PiIdentityRecord): Promise<PiIdentityRecord
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
     throw new Error("PI_IDENTITY_DATABASE_UNAVAILABLE")
   }
-  const restResult = await supabaseRest(`gh_pi_identities?pi_app_uid=eq.${encodeURIComponent(rec.piAppUid)}`, { method: "PATCH", body: JSON.stringify({, timeoutMs: 10000 })
-    const res = { ok: restResult.ok, status: restResult.status, json: async () => restResult.ok ? restResult.data : restResult.body, text: async () => JSON.stringify(restResult.ok ? restResult.data : restResult.body) },
-    cache: "no-store",
-    signal: AbortSignal.timeout(10_000),
+  const result = await supabaseRest<DbRow[]>(`gh_pi_identities?pi_app_uid=eq.${encodeURIComponent(rec.piAppUid)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({
+      pi_username: rec.piUsername,
+      updated_at: new Date().toISOString(),
+      last_seen_at: new Date(rec.lastSeenAt).toISOString(),
+      verified_at: new Date(rec.verifiedAt).toISOString(),
+    }),
+    timeoutMs: 10_000,
   })
-  if (!res.ok) {
-    console.error("[pi-identity] dbUpdateExisting failed", res.status)
+  if (!result.ok) {
+    console.error("[pi-identity] dbUpdateExisting failed", result.status)
     throw new Error("PI_IDENTITY_UPDATE_FAILED")
   }
-  const rows = (await res.json()) as DbRow[]
+  const rows = result.data
   if (!Array.isArray(rows) || rows.length !== 1) {
     throw new Error("PI_IDENTITY_MAPPING_DISAPPEARED")
   }
@@ -190,16 +196,27 @@ async function dbInsertNew(rec: PiIdentityRecord): Promise<{ record: PiIdentityR
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
     throw new Error("PI_IDENTITY_DATABASE_UNAVAILABLE")
   }
-  const restResult = await supabaseRest(`gh_pi_identities`, { method: "POST", body: JSON.stringify({, timeoutMs: 10000 })
-    const res = { ok: restResult.ok, status: restResult.status, json: async () => restResult.ok ? restResult.data : restResult.body, text: async () => JSON.stringify(restResult.ok ? restResult.data : restResult.body) },
-    cache: "no-store",
-    signal: AbortSignal.timeout(10_000),
+  const result = await supabaseRest<DbRow[]>("gh_pi_identities", {
+    method: "POST",
+    headers: { Prefer: "resolution=ignore-duplicates,return=representation" },
+    body: JSON.stringify({
+      pi_app_uid: rec.piAppUid,
+      gh_user_id: rec.ghUserId,
+      pi_username: rec.piUsername,
+      onboarding_completed: rec.onboardingCompleted,
+      created_at: new Date(rec.createdAt).toISOString(),
+      updated_at: new Date().toISOString(),
+      last_seen_at: new Date(rec.lastSeenAt).toISOString(),
+      verified_at: new Date(rec.verifiedAt).toISOString(),
+      greenhaven_profile_id: rec.greenhavenProfileId ?? null,
+    }),
+    timeoutMs: 10_000,
   })
-  if (!res.ok) {
-    console.error("[pi-identity] dbInsertNew failed", res.status)
+  if (!result.ok) {
+    console.error("[pi-identity] dbInsertNew failed", result.status)
     throw new Error("PI_IDENTITY_INSERT_FAILED")
   }
-  const rows = (await res.json()) as DbRow[]
+  const rows = result.data
   if (Array.isArray(rows) && rows.length === 1) {
     const saved = rowToRecord(rows[0])
     if (saved.ghUserId !== rec.ghUserId || saved.piAppUid !== rec.piAppUid) {
@@ -216,15 +233,17 @@ async function dbMarkOnboarding(ghUserId: string): Promise<PiIdentityRecord | nu
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return null
   try {
-    const restResult = await supabaseRest(`gh_pi_identities?gh_user_id=eq.${encodeURIComponent(ghUserId)}`, { method: "PATCH", body: JSON.stringify({, timeoutMs: 10000 })
-    const res = { ok: restResult.ok, status: restResult.status, json: async () => restResult.ok ? restResult.data : restResult.body, text: async () => JSON.stringify(restResult.ok ? restResult.data : restResult.body) },
-      cache: "no-store",
+    const result = await supabaseRest<DbRow[]>(`gh_pi_identities?gh_user_id=eq.${encodeURIComponent(ghUserId)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({ onboarding_completed: true, updated_at: new Date().toISOString() }),
+      timeoutMs: 10_000,
     })
-    if (!res.ok) {
-      console.error("[pi-identity] dbMarkOnboarding failed", res.status)
+    if (!result.ok) {
+      console.error("[pi-identity] dbMarkOnboarding failed", result.status)
       return null
     }
-    const rows = (await res.json()) as DbRow[]
+    const rows = result.data
     if (!Array.isArray(rows) || rows.length === 0) return null
     return rowToRecord(rows[0])
   } catch (err) {

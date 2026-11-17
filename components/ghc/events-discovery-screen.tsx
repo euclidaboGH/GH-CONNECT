@@ -54,7 +54,7 @@ export function EventsDiscoveryScreen({ onBack }: { onBack?: () => void }) {
     }
     setEvents((current) => {
       if (!append) return payload.events || []
-      const merged = new Map(current.map((event) => [event.id, event]))
+      const merged = new Map<string, CommunityEventCard>(current.map((event): [string, CommunityEventCard] => [event.id, event]))
       for (const event of payload.events || []) merged.set(event.id, event)
       return [...merged.values()].sort((a, b) => a.startsAt.localeCompare(b.startsAt))
     })

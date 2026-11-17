@@ -12,7 +12,7 @@ async function rpc(name: string, body: Record<string, unknown>): Promise<unknown
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return null
   try {
-    const res = await (async () => { const r = await supabaseRpc('${name}', typeof JSON.stringify(body) === "string" ? JSON.parse(JSON.stringify(body)) : JSON.stringify(body), { timeoutMs: 5000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
+    const res = await (async () => { const r = await supabaseRpc(name, body, { timeoutMs: 5000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
     if (!res.ok) return null
     return await res.json().catch(() => null)
   } catch { return null }

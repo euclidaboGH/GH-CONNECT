@@ -7,8 +7,8 @@
 
 import { getReputationState } from "@/lib/server/reputation/store"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
-import {
 import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
+import {
   computeCurationPower,
   DEFAULT_INTEGRITY,
   DEFAULT_JCS,

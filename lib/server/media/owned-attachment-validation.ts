@@ -1,6 +1,6 @@
 import { readGhcServerEnv } from "@/lib/server/economy/env"
-import {
 import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
+import {
   reconcileAttachmentWithAsset, sanitizeAttachmentFileName, type DurableAttachment,
 } from "@/lib/server/media/message-attachment-policy"
 
@@ -61,26 +61,40 @@ export async function validateOwnedMediaAttachments(input: {
 
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return { ok: false, error: "MEDIA_AUTHORIZATION_UNAVAILABLE" }
-  const base = env.supabaseUrl.replace(/\/$/, "")
-  const headers = {
-    "Content-Type": "application/json",
-    apikey: env.supabaseServiceRoleKey,
-    Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-  }
   const reconciled = new Map<string, DurableAttachment>()
   const uniqueIds = [...new Set(parsed.map((attachment) => attachment.id))]
   for (const mediaId of uniqueIds) {
     try {
-      const response = await (async () => { const r = await supabaseRpc('gh_media_authorize_viewer', typeof JSON.stringify({ p_media_id: mediaId === "string" ? JSON.parse(JSON.stringify({ p_media_id: mediaId) : JSON.stringify({ p_media_id: mediaId, { timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })(),
-        cache: "no-store",
-        signal: AbortSignal.timeout(8_000),
-      })
-      if (!response.ok) return { ok: false, error: "MEDIA_AUTHORIZATION_UNAVAILABLE" }
-      const asset = await response.json() as { ok?: boolean; mediaId?: string; ownerId?: string }
+      const authorization = await supabaseRpc<{ ok?: boolean; mediaId?: string; ownerId?: string }>("gh_media_authorize_viewer", {
+        p_media_id: mediaId,
+        p_viewer_id: ownerId,
+      }, { timeoutMs: 8_000 })
+      if (!authorization.ok) return { ok: false, error: "MEDIA_AUTHORIZATION_UNAVAILABLE" }
+      const asset = authorization.data
       if (asset?.ok !== true || asset.mediaId !== mediaId || asset.ownerId !== ownerId) {
         return { ok: false, error: "ATTACHMENT_NOT_OWNED" }
       }
       // Re-read the stored record for authoritative MIME type, kind and size.
-      const rowResponse = await (async () => { const r = await supabaseRest(`gh_media_assets?id=eq.${encodeURIComponent(mediaId)}&select=owner_id,mime_type,byte_size,media_kind,status,deleted_at&limit=1`, { method: "GET", timeoutMs: 8000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })(),
+      const rowResult = await supabaseRest<Array<Record<string, unknown>>>(
+        `gh_media_assets?id=eq.${encodeURIComponent(mediaId)}&select=owner_id,mime_type,byte_size,media_kind,status,deleted_at&limit=1`,
+        { method: "GET", timeoutMs: 8_000 },
+      )
+      if (!rowResult.ok) return { ok: false, error: "MEDIA_AUTHORIZATION_UNAVAILABLE" }
+      const row = rowResult.data?.[0]
+      if (!row || typeof row !== "object") return { ok: false, error: "ATTACHMENT_NOT_OWNED" }
+      const declared = parsed.find((attachment) => attachment.id === mediaId)!
+      const result = reconcileAttachmentWithAsset(declared, row, ownerId)
+      if (!result.ok) return result
+      reconciled.set(mediaId, result.attachment)
+    } catch {
+      return { ok: false, error: "MEDIA_AUTHORIZATION_UNAVAILABLE" }
+    }
+  }
+  return {
+    ok: true,
+    attachments: parsed.map((attachment) => {
+      const server = reconciled.get(attachment.id)!
+      return { ...attachment, type: server.type, mimeType: server.mimeType, sizeBytes: server.sizeBytes }
+    }),
   }
 }

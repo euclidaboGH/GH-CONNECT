@@ -827,11 +827,15 @@ export async function executeDurableGhcSpend(input: {
   if (!ref) return { ok: false, error: "REFERENCE_REQUIRED" }
 
   try {
-    const res = await (async () => { const r = await supabaseRpc('ghc_execute_spend', typeof JSON.stringify({ === "string" ? JSON.parse(JSON.stringify({) : JSON.stringify({, { timeoutMs: 10000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })(),
-      }
-    )
-    const data = await res.json().catch(() => null)
-    if (!res.ok) return { ok: false, error: "SPEND_FAILED" }
+    const result = await supabaseRpc("ghc_execute_spend", {
+      p_user_id: input.userId,
+      p_amount: amount,
+      p_reference_id: ref,
+      p_reason: input.reason,
+      p_source_event: input.sourceEvent || "SYSTEM",
+    }, { timeoutMs: 10_000 })
+    if (!result.ok) return { ok: false, error: "SPEND_FAILED" }
+    const data = result.data
     const result = parseGhcSpendRpcResult(data, { amount, referenceId: ref })
     if (!result.ok) return { ok: false, error: result.error }
     return {

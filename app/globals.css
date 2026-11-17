@@ -4204,3 +4204,162 @@ nav[aria-label="Primary"] [aria-current="page"] {
   .gh-community-post-list .gh-post-card[data-post-surface],
   .gh-premium-feed-list .gh-post-card[data-post-surface] { transition: none !important; }
 }
+
+
+/* ========================================================================
+   GREENHAVEN 0.338.93 — QUIET PREMIUM PRODUCT SYSTEM
+   A single calm visual language for the eleven approved product priorities.
+   Presentation-only: no route, entitlement, financial or authorization changes.
+   ======================================================================== */
+:root {
+  --gh-premium-canvas: var(--gh-ref-canvas, #f6f8f7);
+  --gh-premium-surface: var(--gh-ref-surface, #ffffff);
+  --gh-premium-line: var(--gh-ref-line, rgba(18, 61, 43, .105));
+  --gh-premium-shadow: var(--gh-ref-shadow, 0 1px 2px rgba(15, 45, 31, .025), 0 8px 24px rgba(15, 45, 31, .045));
+  --gh-premium-shadow-hover: var(--gh-ref-shadow-float, 0 4px 14px rgba(15, 45, 31, .045), 0 16px 34px rgba(15, 45, 31, .075));
+  --gh-premium-radius: 1.15rem;
+  --gh-premium-radius-large: 1.5rem;
+  --gh-premium-control: .9rem;
+}
+.dark {
+  --gh-premium-canvas: var(--gh-ref-canvas, #0a100d);
+  --gh-premium-surface: var(--gh-ref-surface, #111a15);
+  --gh-premium-line: var(--gh-ref-line, rgba(173, 213, 188, .13));
+  --gh-premium-shadow: var(--gh-ref-shadow, 0 1px 2px rgba(0, 0, 0, .18), 0 10px 26px rgba(0, 0, 0, .15));
+  --gh-premium-shadow-hover: var(--gh-ref-shadow-float, 0 5px 18px rgba(0, 0, 0, .22), 0 18px 38px rgba(0, 0, 0, .22));
+}
+
+body { background: var(--gh-premium-canvas); letter-spacing: -.008em; }
+.gh-app-shell { background: var(--gh-premium-canvas) !important; }
+.gh-world-feed, .gh-world-wallet, .gh-world-rewards, .gh-world-membership,
+.gh-world-profile, .gh-world-settings, .gh-world-community, .gh-world-messages,
+.gh-world-marketplace, .gh-world-notifications, .gh-ecosystem-directory, .gh-upcoming-service {
+  color: var(--foreground);
+  background-color: var(--gh-premium-canvas);
+  font-family: var(--gh-font, var(--font-sans));
+  letter-spacing: -.008em;
+}
+.dark .gh-world-feed, .dark .gh-world-wallet, .dark .gh-world-rewards,
+.dark .gh-world-membership, .dark .gh-world-profile, .dark .gh-world-settings,
+.dark .gh-world-community, .dark .gh-world-messages, .dark .gh-world-marketplace,
+.dark .gh-world-notifications, .dark .gh-ecosystem-directory, .dark .gh-upcoming-service {
+  background-color: var(--gh-premium-canvas);
+}
+
+/* Consistent readable type scale; metadata remains secondary, never tiny body copy. */
+[data-gh-module] :where(h1) { font-size: clamp(1rem, 2.2vw, 1.25rem); line-height: 1.2; font-weight: 760; letter-spacing: -.03em; }
+[data-gh-module] :where(h2) { letter-spacing: -.022em; }
+[data-gh-module] :where(p) { text-wrap: pretty; }
+[data-gh-module] :where(button, a, input, textarea, select) { font-family: inherit; }
+[data-gh-module] :where(button, [role="button"]) { -webkit-tap-highlight-color: transparent; }
+[data-gh-module] :where(input:not([type="checkbox"]):not([type="radio"]), textarea, select) {
+  border-radius: var(--gh-premium-control);
+  border-color: var(--gh-premium-line);
+}
+[data-gh-module] :where(button, a, input, textarea, select, [role="button"]):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary) 68%, transparent);
+  outline-offset: 3px;
+}
+
+/* One surface language across all eleven priority modules. */
+[data-gh-module] :where(.gh-card, .gh-card-surface, .gh-reference-panel, .gh-premium-surface, [data-surface="card"]) {
+  border-color: var(--gh-premium-line) !important;
+  border-radius: var(--gh-premium-radius) !important;
+  box-shadow: var(--gh-premium-shadow) !important;
+}
+[data-gh-module] :where(.gh-section-heading, [data-section-heading]) { margin-block: .35rem .75rem; }
+[data-gh-module] :where([role="tablist"]) { scrollbar-width: none; }
+[data-gh-module] :where([role="tablist"])::-webkit-scrollbar { display: none; }
+[data-gh-module] :where([role="tab"]) { min-height: 2.65rem; }
+
+/* Feed: editorial content column, calm post cards, and no legacy purple chrome. */
+[data-gh-module="feed"] .gh-feed-column { width: min(100%, 50rem); }
+[data-gh-module="feed"] .gh-post-card[data-post-surface] {
+  border: 1px solid var(--gh-premium-line) !important;
+  border-radius: var(--gh-premium-radius) !important;
+  box-shadow: var(--gh-premium-shadow) !important;
+}
+[data-gh-module="feed"] .gh-premium-feed-list { gap: .9rem; }
+[data-gh-module="feed"] .gh-standard-search { background: var(--gh-premium-surface) !important; }
+
+/* Wallet and Rewards: factual balances and progress remain the visual priority. */
+[data-gh-module="wallet"], [data-gh-module="rewards"] { --gh-module-content-width: 68rem; }
+[data-gh-module="wallet"] > :last-child, [data-gh-module="rewards"] > :last-child {
+  width: min(100%, var(--gh-module-content-width)); margin-inline: auto;
+}
+[data-gh-module="wallet"] .gh-balance-hero { border-radius: var(--gh-premium-radius-large) !important; }
+[data-gh-module="rewards"] .gh-rewards-shell { min-width: 0; }
+
+/* Membership: restrained premium tiers; status remains server-authoritative. */
+[data-gh-module="membership"] .gh-premium-membership-content { width: min(100%, 68rem); margin-inline: auto; }
+[data-gh-module="membership"] .gh-membership-shell > header { min-height: 3.65rem; padding-inline: 1rem; }
+
+/* Profile and Settings: generous reading width and neutral control surfaces. */
+[data-gh-module="profile"] .gh-world-profile-header { padding-inline: clamp(1rem, 3vw, 1.5rem) !important; }
+[data-gh-module="profile"] .gh-world-profile-cover {
+  background: linear-gradient(120deg, color-mix(in srgb, var(--primary) 18%, var(--gh-premium-surface)), color-mix(in srgb, var(--primary) 7%, var(--gh-premium-canvas))) !important;
+}
+[data-gh-module="settings"] > :last-child, [data-gh-module="settings"] > :nth-child(2) > div {
+  width: min(100%, 58rem); margin-inline: auto;
+}
+[data-gh-module="settings"] section > h3 { letter-spacing: .09em; }
+
+/* Communities and Messages: stable content rails, clearer conversation hierarchy. */
+[data-gh-module="communities"] > :not(header) { width: min(100%, 74rem); margin-inline: auto; }
+[data-gh-module="messages"] .gh-world-inbox > :last-child { width: min(100%, 58rem); margin-inline: auto; }
+[data-gh-module="messages"] [role="log"] { line-height: 1.58; }
+
+/* Marketplace: product imagery and commerce actions stay clear and grounded. */
+[data-gh-module="marketplace"] .gh-marketplace-content { width: min(100%, 78rem); margin-inline: auto; }
+[data-gh-module="marketplace"] .gh-listing-detail-grid > :first-child,
+[data-gh-module="marketplace"] .gh-listing-purchase-panel { border-radius: var(--gh-premium-radius-large) !important; }
+
+/* Filters and Notifications: compact, legible utility surfaces. */
+[data-gh-module="filters"] {
+  border-color: var(--gh-premium-line) !important;
+  border-radius: var(--gh-premium-radius) !important;
+  background: var(--gh-premium-surface) !important;
+  box-shadow: var(--gh-premium-shadow) !important;
+}
+[data-gh-module="filters"] button { min-height: 2.65rem; }
+[data-gh-module="notifications"] > div:last-child {
+  border-color: var(--gh-premium-line) !important;
+  border-radius: var(--gh-premium-radius-large) !important;
+  background: var(--gh-premium-surface) !important;
+  box-shadow: var(--gh-premium-shadow-hover) !important;
+}
+
+/* Remove inconsistent legacy gradients from shared chrome without removing user theme choices. */
+.gh-standard-search { background: var(--gh-premium-surface) !important; }
+.gh-post-card { border-color: var(--gh-premium-line) !important; }
+.gh-create-fab { background: var(--primary) !important; box-shadow: 0 5px 16px color-mix(in srgb, var(--primary) 24%, transparent) !important; border-color: var(--gh-premium-surface) !important; }
+.gh-bottom-nav {
+  background: color-mix(in srgb, var(--gh-premium-surface) 96%, transparent) !important;
+  border-top: 1px solid var(--gh-premium-line) !important;
+  box-shadow: none !important;
+}
+.gh-bottom-nav button[aria-current="page"] > span:first-child { box-shadow: none !important; }
+.gh-page-chrome { background: color-mix(in srgb, var(--gh-premium-surface) 96%, transparent); }
+.gh-page-chrome h1 { font-size: 1rem; font-weight: 760; letter-spacing: -.025em; }
+
+/* Ecosystem directory: a true product catalogue, not a dense prototype grid. */
+.gh-ecosystem-directory > header { box-shadow: 0 1px 0 var(--gh-premium-line); }
+.gh-ecosystem-directory [aria-label="Featured services"],
+.gh-ecosystem-directory > div > section { width: min(100%, 78rem); margin-inline: auto; }
+.gh-upcoming-service { isolation: isolate; }
+.gh-upcoming-service :where(summary, button) { -webkit-tap-highlight-color: transparent; }
+.gh-upcoming-service li { min-width: 0; }
+.gh-upcoming-service strong { font-weight: 750; }
+
+@media (min-width: 760px) {
+  [data-gh-module="feed"] { padding-inline: 1rem; }
+  [data-gh-module="wallet"], [data-gh-module="rewards"], [data-gh-module="membership"], [data-gh-module="settings"] { padding-inline: 1rem; }
+  [data-gh-module="messages"] { padding-inline: .5rem; }
+}
+@media (max-width: 380px) {
+  .gh-upcoming-service .grid-cols-3 > div { padding-inline: .55rem; }
+  .gh-upcoming-service .grid-cols-3 p:first-child { font-size: 1rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-gh-module] *, .gh-upcoming-service * { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+}

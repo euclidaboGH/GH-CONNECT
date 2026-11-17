@@ -17,7 +17,7 @@ async function rpc(name: string, body: Record<string, unknown>): Promise<Record<
   const e = env()
   if (!e.supabaseUrl || !e.supabaseServiceRoleKey) return null
   try {
-    const res = await (async () => { const r = await supabaseRpc('${name}', typeof JSON.stringify(body) === "string" ? JSON.parse(JSON.stringify(body)) : JSON.stringify(body), { timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
+    const res = await (async () => { const r = await supabaseRpc(name, body, { timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
     const data = await res.json().catch(() => null)
     if (!res.ok) return { ok: false, error: String(data?.message || data?.error || res.status) }
     return data && typeof data === "object" ? (data as Record<string, unknown>) : null

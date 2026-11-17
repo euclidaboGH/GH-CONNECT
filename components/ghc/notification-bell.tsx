@@ -837,7 +837,7 @@ export function NotificationBell({
 
       {open && typeof document !== "undefined"
         ? createPortal(
-        <div ref={dialogRef} className="gh-world-notifications fixed inset-0 z-[200] isolate" role="dialog" aria-modal="true" aria-label={t("notifications")}>
+        <div ref={dialogRef} className="gh-world-notifications fixed inset-0 z-[200] isolate" data-gh-module="notifications" role="dialog" aria-modal="true" aria-label={t("notifications")}>
           <button type="button" data-dialog-dismiss="true" className="absolute inset-0 bg-black/55 backdrop-blur-[2px]" aria-label={t("closeNotifications")} onClick={closePanel} />
           <div className="absolute inset-0 flex flex-col bg-background sm:inset-x-auto sm:left-1/2 sm:top-0 sm:h-full sm:w-full sm:max-w-[28rem] sm:-translate-x-1/2 sm:border-x sm:border-border sm:shadow-2xl">
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border/50 bg-background/95 px-4 py-3.5 backdrop-blur-xl">

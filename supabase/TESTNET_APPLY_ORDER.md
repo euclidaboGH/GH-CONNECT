@@ -248,11 +248,7 @@ The rows are sorted by the canonical migration identifier for review. Dependenci
 | 226 | `20261116171144_gh_research_studio_public_forms.sql` | REVIEW_REQUIRED | APPLIED_TESTNET_ONLY_HOLD_OTHER_TARGETS |
 | 227 | `20261116182000_gh_research_intelligence_platform_foundation.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
 | 228 | `20261116190000_gh_media_evidence_engine.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
-<<<<<<< Updated upstream
-| 229 | `20261117010001_gh_evidence_scoped_upload_chain_of_custody.sql` | REQUIRED | REVIEW_THEN_APPLY |
-=======
 | 229 | `20261117010001_gh_evidence_scoped_upload_chain_of_custody.sql` | REVIEW_REQUIRED | HOLD_VALIDATION |
->>>>>>> Stashed changes
 
 ## Classification meanings
 

@@ -32,7 +32,7 @@ async function rpcDetailed<T extends Record<string, unknown>>(
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return { ok: false, status: 0, code: "DB_NOT_CONFIGURED", message: "Supabase URL or service key missing" }
   try {
-    const response = await (async () => { const r = await supabaseRpc('${name}', typeof JSON.stringify(body) === "string" ? JSON.parse(JSON.stringify(body)) : JSON.stringify(body), { timeoutMs: 12000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
+    const response = await (async () => { const r = await supabaseRpc(name, body, { timeoutMs: 12000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
     const parsed = (await response.json().catch(() => null)) as (T & { code?: string; message?: string }) | null
     if (!response.ok || parsed === null) {
       return {

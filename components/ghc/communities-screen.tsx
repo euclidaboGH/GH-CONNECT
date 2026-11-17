@@ -1261,7 +1261,7 @@ export function CommunitiesScreen() {
   }
 
   return (
-    <div className="gh-communities-shell gh-world-community flex h-full min-h-0 flex-col overscroll-y-contain bg-background" role="region" aria-label={msg("communityTitle")}>
+    <div className="gh-communities-shell gh-world-community flex h-full min-h-0 flex-col overscroll-y-contain bg-background" data-gh-module="communities" role="region" aria-label={msg("communityTitle")}>
       <CollapsingAppHeader
         title={msg("communityTitle")}
         compact={headerCompact}

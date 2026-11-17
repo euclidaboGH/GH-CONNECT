@@ -145,7 +145,7 @@ async function rest<T>(
         data,
         error: typeof data === "object" && data && "message" in (data as object)
           ? String((data as { message?: string }).message)
-          : text.slice(0, 200) || res.statusText,
+          : text.slice(0, 200) || `HTTP_${res.status}`,
       }
     }
     return { ok: true, status: res.status, data }

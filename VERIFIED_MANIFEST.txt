@@ -2,23 +2,13 @@ GH-CONNECT VERIFIED SOURCE MANIFEST
 ==================================
 inventory_status=OK
 duplicate_version_prefixes=
-<<<<<<< Updated upstream
-project_version=0.338.91
-manifest_format_version=1
-canonical_migrations=229
-classification_required=121
-classification_requires_approval=1
-classification_proposal=2
-classification_review_required=105
-=======
-project_version=0.338.92
+project_version=0.338.93
 manifest_format_version=1
 canonical_migrations=229
 classification_required=120
 classification_requires_approval=1
 classification_proposal=2
 classification_review_required=106
->>>>>>> Stashed changes
 source=supabase/migrations/*.sql
 
 IMPORTANT: This manifest inventories repository files only. It does NOT prove migrations are applied to any Supabase project.
@@ -260,8 +250,4 @@ ALL_MIGRATIONS_ORDERED_FOR_REVIEW:
 [REVIEW_REQUIRED] size=3058 path=supabase/migrations/20261116171144_gh_research_studio_public_forms.sql
 [REVIEW_REQUIRED] size=20908 path=supabase/migrations/20261116182000_gh_research_intelligence_platform_foundation.sql
 [REVIEW_REQUIRED] size=2576 path=supabase/migrations/20261116190000_gh_media_evidence_engine.sql
-<<<<<<< Updated upstream
-[REQUIRED] size=10231 path=supabase/migrations/20261117010001_gh_evidence_scoped_upload_chain_of_custody.sql
-=======
 [REVIEW_REQUIRED] size=10235 path=supabase/migrations/20261117010001_gh_evidence_scoped_upload_chain_of_custody.sql
->>>>>>> Stashed changes

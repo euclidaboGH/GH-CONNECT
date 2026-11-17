@@ -1203,7 +1203,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
                 if (Array.isArray(follows.followers)) next.followers = follows.followers.map(String)
               }
               if (convs && convs.ok && convs.durable && Array.isArray(convs.conversations)) {
-                const byId = new Map((next.conversations || []).map((c) => [c.id, c]))
+                const byId = new Map<string, Conversation>((next.conversations || []).map((c): [string, Conversation] => [c.id, c]))
                 for (const r of convs.conversations) {
                   const id = String(r.id || "")
                   if (!id) continue
@@ -1245,7 +1245,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
               }
 
             if (people && people.ok && Array.isArray(people.people) && people.people.length > 0) {
-              const byId = new Map((next.candidates || []).map((c) => [c.id, c]))
+              const byId = new Map<string, Candidate>((next.candidates || []).map((c): [string, Candidate] => [c.id, c]))
               for (const p of people.people) {
                 if (!p.userId || p.userId === s.profile?.id) continue
                 const existing = byId.get(p.userId)
@@ -1378,7 +1378,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
               }
             }
             if (convs && convs.ok && convs.durable && Array.isArray(convs.conversations)) {
-              const byId = new Map((next.conversations || []).map((c) => [c.id, c]))
+              const byId = new Map<string, Conversation>((next.conversations || []).map((c): [string, Conversation] => [c.id, c]))
               for (const r of convs.conversations) {
                 const id = String(r.id || "")
                 if (!id) continue
@@ -1424,7 +1424,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
             }
 
             if (people && people.ok && Array.isArray(people.people) && people.people.length > 0) {
-              const byId = new Map((next.candidates || []).map((c) => [c.id, c]))
+              const byId = new Map<string, Candidate>((next.candidates || []).map((c): [string, Candidate] => [c.id, c]))
               for (const p of people.people) {
                 if (!p.userId || p.userId === s.profile?.id) continue
                 const existing = byId.get(p.userId)
@@ -1765,7 +1765,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         const remote = await socialDiscoverPeople(40)
         if (cancelled || !remote.ok || !remote.people.length) return
         setState((s) => {
-          const byId = new Map(s.candidates.map((c) => [c.id, c]))
+          const byId = new Map<string, Candidate>(s.candidates.map((c): [string, Candidate] => [c.id, c]))
           for (const p of remote.people) {
             if (!p.userId || p.userId === s.profile?.id) continue
             const existing = byId.get(p.userId)
@@ -1820,7 +1820,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         if (cancelled || !remote.ok || !Array.isArray(remote.communities)) return
         if (!remote.communities.length) return
         setState((s) => {
-          const byId = new Map(s.conversations.map((c) => [c.id, c]))
+          const byId = new Map<string, Conversation>(s.conversations.map((c): [string, Conversation] => [c.id, c]))
           for (const raw of remote.communities) {
             const row = raw as Record<string, unknown>
             const id = String(row.id || row.community_id || "")
@@ -1873,7 +1873,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         const remote = Array.isArray(res.conversations) ? res.conversations : []
         if (!remote.length) return
         setState((s) => {
-          const byId = new Map(s.conversations.map((c) => [c.id, c]))
+          const byId = new Map<string, Conversation>(s.conversations.map((c): [string, Conversation] => [c.id, c]))
           for (const r of remote) {
             const id = String(r.id || "")
             if (!id) continue
@@ -2024,7 +2024,7 @@ export function GHCProvider({ children }: { children: ReactNode }) {
         const result = await apiListConversations(40)
         if (cancelled || !result?.ok || !result.durable || !Array.isArray(result.conversations) || !result.conversations.length) return
         setState((current) => {
-          const byId = new Map(current.conversations.map((conversation) => [conversation.id, conversation]))
+          const byId = new Map<string, Conversation>(current.conversations.map((conversation): [string, Conversation] => [conversation.id, conversation]))
           for (const remote of result.conversations as Array<Record<string, unknown>>) {
             const id = String(remote.id || "")
             if (!id) continue

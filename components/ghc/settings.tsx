@@ -1594,7 +1594,7 @@ export function SettingsScreen({
   ]
 
   return (
-    <div className="gh-world-settings flex h-full min-h-0 flex-col bg-background" role="region" aria-label={msg("settingsTitle")}>
+    <div className="gh-world-settings flex h-full min-h-0 flex-col bg-background" data-gh-module="settings" role="region" aria-label={msg("settingsTitle")}>
       <div className="flex shrink-0 items-center gap-3 border-b border-border/50 bg-card/95 p-4 backdrop-blur-md">
         <button
           type="button"
@@ -1631,7 +1631,7 @@ export function SettingsScreen({
         <div className="space-y-5 px-4 py-4">
           {!settingsQuery.trim() ? (
             <section aria-labelledby="settings-overview-title" className="space-y-3">
-              <div className="rounded-[1.5rem] border border-border/60 bg-gradient-to-br from-primary/10 via-card to-card p-4 shadow-[var(--gh-card-shadow)]">
+              <div className="rounded-[1.35rem] border border-[var(--gh-ref-line)] bg-card p-4 shadow-[var(--gh-card-shadow)]">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary">Your control centre</p>

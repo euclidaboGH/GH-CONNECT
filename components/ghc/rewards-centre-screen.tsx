@@ -770,7 +770,7 @@ const claimPendingReward = useCallback(
   )
 
   return (
-    <div className="gh-world-rewards gh-rewards-shell flex h-full min-w-0 max-w-full min-h-0 flex-col bg-background text-foreground" role="region" aria-label={msg("rewardsTitle")}>
+    <div className="gh-world-rewards gh-rewards-shell flex h-full min-w-0 max-w-full min-h-0 flex-col bg-background text-foreground" data-gh-module="rewards" role="region" aria-label={msg("rewardsTitle")}>
 
       <header className="flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-2.5 py-1 backdrop-blur-md">
         <button

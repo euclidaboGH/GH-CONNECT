@@ -75,13 +75,7 @@ async function socialRpcOnce(
     return { ok: false, data: null, error: "DB_UNAVAILABLE", status: 503, fn }
   }
   try {
-<<<<<<< Updated upstream
-    const res = await (async () => { const r = await supabaseRpc('${encodeURIComponent(fn)}', typeof JSON.stringify(body) === "string" ? JSON.parse(JSON.stringify(body)) : JSON.stringify(body), { timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
-    const text = await res.text()
-    const parsed = parsePostgrestBody(text)
-=======
     const res = await supabaseRpc(fn, body, { timeoutMs: SOCIAL_UPSTREAM_TIMEOUT_MS })
->>>>>>> Stashed changes
     if (!res.ok) {
       const parsed = parsePostgrestBody(JSON.stringify(res.body ?? null))
       logRpcFailure({ fn, status: res.status, code: parsed.code, message: parsed.message })
@@ -134,23 +128,10 @@ export async function socialRest<T = unknown>(
     return { ok: false, data: null, error: "DB_UNAVAILABLE", status: 503 }
   }
   try {
-<<<<<<< Updated upstream
-    const res = await (async () => { const r = await supabaseRest(`${pathAndQuery.replace(/^\//, "")}`, { method: "GET", timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
-    const text = await res.text()
-    let data: T | null = null
-    if (text && text !== "null") {
-      try {
-        data = JSON.parse(text) as T
-      } catch {
-        data = null
-      }
-    }
-=======
     const res = await supabaseRest<T>(pathAndQuery.replace(/^\//, ""), {
       method: "GET",
       timeoutMs: SOCIAL_UPSTREAM_TIMEOUT_MS,
     })
->>>>>>> Stashed changes
     if (!res.ok) {
       return { ok: false, data: null, error: res.error || `REST_HTTP_${res.status}`, status: res.status }
     }

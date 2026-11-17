@@ -1348,7 +1348,7 @@ const lowBalance = balance === 0 && displayPending === 0
   }
 
   return (
-    <div className="gh-wallet-shell gh-world-wallet flex h-full min-h-0 flex-col bg-background text-foreground" role="region" aria-label="GHC wallet">
+    <div className="gh-wallet-shell gh-world-wallet flex h-full min-h-0 flex-col bg-background text-foreground" data-gh-module="wallet" role="region" aria-label="GHC wallet">
       <WalletHeader
         onBack={onBack}
         onRefresh={() => void refresh()}

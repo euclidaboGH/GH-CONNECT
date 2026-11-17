@@ -172,7 +172,7 @@ export function PostRewardPanel({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") { event.preventDefault(); setOpen(false); return }
       if (event.key !== "Tab" || !dialogRef.current) return
-      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
+      const focusable = Array.from<HTMLElement>(dialogRef.current.querySelectorAll<HTMLElement>(
         'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
       )).filter((element) => element.offsetParent !== null)
       if (!focusable.length) { event.preventDefault(); return }

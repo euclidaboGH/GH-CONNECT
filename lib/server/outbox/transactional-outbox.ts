@@ -30,7 +30,7 @@ async function rpc<T>(name: string, body: Record<string, unknown>): Promise<RpcR
     return { ok: false, code: "OUTBOX_DATABASE_UNAVAILABLE" }
   }
   try {
-    const response = await (async () => { const r = await supabaseRpc('${name}', typeof JSON.stringify(body) === "string" ? JSON.parse(JSON.stringify(body)) : JSON.stringify(body), { timeoutMs: 12000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
+    const response = await (async () => { const r = await supabaseRpc(name, body, { timeoutMs: 12000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
     if (!response.ok) return { ok: false, code: `OUTBOX_RPC_${response.status}` }
     return { ok: true, data: (await response.json()) as T }
   } catch {

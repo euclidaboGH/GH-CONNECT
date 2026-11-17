@@ -5,7 +5,7 @@
 
 import { randomBytes } from "crypto"
 import { readGhcServerEnv, hasPrivilegedDatabase } from "@/lib/server/economy/env"
-import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
+import { supabaseRest } from "@/lib/server/supabase/rest-client"
 
 export type StoredCredential = {
   id: string
@@ -216,8 +216,19 @@ async function dbInsertChallenge(rec: StoredChallenge) {
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return
   try {
-    await (async () => { const r = await supabaseRest(`gh_webauthn_challenges`, { method: "POST", body: JSON.stringify({, timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })(),
-      cache: "no-store",
+    await supabaseRest("gh_webauthn_challenges", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({
+        id: rec.id,
+        gh_user_id: rec.ghUserId,
+        session_id: rec.sessionId,
+        challenge: rec.challenge,
+        purpose: rec.purpose,
+        expires_at: new Date(rec.expiresAt).toISOString(),
+        used_at: rec.usedAt == null ? null : new Date(rec.usedAt).toISOString(),
+      }),
+      timeoutMs: 15_000,
     })
   } catch {
     /* */
@@ -256,10 +267,11 @@ async function dbMarkChallengeUsed(id: string) {
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return
   try {
-    await (async () => { const r = await supabaseRest(`gh_webauthn_challenges?id=eq.${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ used_at: new Date().toISOString(), timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })(),
-        cache: "no-store",
-      }
-    )
+    await supabaseRest(`gh_webauthn_challenges?id=eq.${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ used_at: new Date().toISOString() }),
+      timeoutMs: 15_000,
+    })
   } catch {
     /* */
   }
@@ -269,8 +281,24 @@ async function dbInsertCredential(rec: StoredCredential) {
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return
   try {
-    await (async () => { const r = await supabaseRest(`gh_webauthn_credentials`, { method: "POST", body: JSON.stringify({, timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })(),
-      cache: "no-store",
+    await supabaseRest("gh_webauthn_credentials", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({
+        id: rec.id,
+        gh_user_id: rec.ghUserId,
+        credential_id: rec.credentialId,
+        public_key: rec.publicKey,
+        counter: rec.counter,
+        transports: rec.transports,
+        device_type: rec.deviceType,
+        backed_up: rec.backedUp,
+        label: rec.label,
+        created_at: new Date(rec.createdAt).toISOString(),
+        last_used_at: rec.lastUsedAt == null ? null : new Date(rec.lastUsedAt).toISOString(),
+        revoked_at: rec.revokedAt == null ? null : new Date(rec.revokedAt).toISOString(),
+      }),
+      timeoutMs: 15_000,
     })
   } catch {
     /* */
@@ -347,10 +375,11 @@ async function dbUpdateCounter(credentialId: string, counter: number) {
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return
   try {
-    await (async () => { const r = await supabaseRest(`gh_webauthn_credentials?credential_id=eq.${encodeURIComponent(credentialId)}`, { method: "PATCH", body: JSON.stringify({, timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })(),
-        cache: "no-store",
-      }
-    )
+    await supabaseRest(`gh_webauthn_credentials?credential_id=eq.${encodeURIComponent(credentialId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ counter, last_used_at: new Date().toISOString() }),
+      timeoutMs: 15_000,
+    })
   } catch {
     /* */
   }
@@ -360,10 +389,11 @@ async function dbRevoke(id: string) {
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return
   try {
-    await (async () => { const r = await supabaseRest(`gh_webauthn_credentials?id=eq.${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ revoked_at: new Date().toISOString(), timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })(),
-        cache: "no-store",
-      }
-    )
+    await supabaseRest(`gh_webauthn_credentials?id=eq.${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ revoked_at: new Date().toISOString() }),
+      timeoutMs: 15_000,
+    })
   } catch {
     /* */
   }

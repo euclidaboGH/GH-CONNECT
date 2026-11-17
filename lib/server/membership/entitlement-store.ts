@@ -478,11 +478,13 @@ export async function listOrphanMembershipPurchaseCandidates(
     return { ok: false, candidates: [], error: "SERVER_UNAVAILABLE" }
   }
   try {
-    const res = await (async () => { const r = await supabaseRpc('ghc_membership_list_orphan_purchase_candidates', typeof JSON.stringify({ p_limit: limit === "string" ? JSON.parse(JSON.stringify({ p_limit: limit) : JSON.stringify({ p_limit: limit, { timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })(),
-      }
+    const result = await supabaseRpc<{ ok?: boolean; candidates?: unknown[]; error?: string }>(
+      "ghc_membership_list_orphan_purchase_candidates",
+      { p_limit: Math.min(100, Math.max(1, Math.trunc(Number(limit) || 50))) },
+      { timeoutMs: 15_000 },
     )
-    const data = await res.json().catch(() => null)
-    if (!res.ok || !data?.ok) {
+    const data = result.ok ? result.data : result.body as { ok?: boolean; candidates?: unknown[]; error?: string } | undefined
+    if (!result.ok || !data?.ok) {
       return { ok: false, candidates: [], error: String(data?.error || "LIST_FAILED") }
     }
     return { ok: true, candidates: Array.isArray(data.candidates) ? data.candidates : [] }
@@ -509,11 +511,18 @@ export async function completeOrphanedMembershipPurchase(input: {
     return { ok: false, error: "SERVER_UNAVAILABLE" }
   }
   try {
-    const res = await (async () => { const r = await supabaseRpc('ghc_membership_complete_orphaned_purchase', typeof JSON.stringify({ === "string" ? JSON.parse(JSON.stringify({) : JSON.stringify({, { timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })(),
-      }
+    const result = await supabaseRpc<{ ok?: boolean; error?: string; idempotent?: boolean }>(
+      "ghc_membership_complete_orphaned_purchase",
+      {
+        p_user_id: input.userId,
+        p_reference_id: input.referenceId,
+        p_row: input.row,
+        p_operator_note: input.operatorNote || "ops_orphan_entitlement_complete",
+      },
+      { timeoutMs: 15_000 },
     )
-    const data = await res.json().catch(() => null)
-    if (!res.ok || !data?.ok) {
+    const data = result.ok ? result.data : result.body as { ok?: boolean; error?: string; idempotent?: boolean } | undefined
+    if (!result.ok || !data?.ok) {
       return { ok: false, error: String(data?.error || "RECONCILE_FAILED") }
     }
     return { ok: true, idempotent: Boolean(data.idempotent) }

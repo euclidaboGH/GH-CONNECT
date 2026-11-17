@@ -5,7 +5,7 @@
  */
 
 import { readGhcServerEnv, hasPrivilegedDatabase } from "@/lib/server/economy/env"
-import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
+import { supabaseRest } from "@/lib/server/supabase/rest-client"
 
 export type ServerAchievementUnlock = {
   ghUserId: string
@@ -99,12 +99,19 @@ export async function unlockAchievement(input: {
     const env = readGhcServerEnv()
     if (env.supabaseUrl && env.supabaseServiceRoleKey) {
       try {
-        const restResult = await supabaseRest(`gh_user_achievements`, { method: "POST", body: JSON.stringify({, timeoutMs: 10000 })
-    const res = { ok: restResult.ok, status: restResult.status, json: async () => restResult.ok ? restResult.data : restResult.body, text: async () => JSON.stringify(restResult.ok ? restResult.data : restResult.body) },
-          cache: "no-store",
+        const result = await supabaseRest<Array<Record<string, unknown>>>("gh_user_achievements", {
+          method: "POST",
+          headers: { Prefer: "resolution=ignore-duplicates,return=representation" },
+          body: JSON.stringify({
+            gh_user_id: uid,
+            achievement_id: aid,
+            unlocked_at: new Date(row.unlockedAt).toISOString(),
+            source_event: row.sourceEvent,
+          }),
+          timeoutMs: 10_000,
         })
-        if (res.ok) {
-          const rows = (await res.json()) as Array<Record<string, unknown>>
+        if (result.ok) {
+          const rows = result.data
           if (Array.isArray(rows) && rows[0]) {
             const r = rows[0]
             const saved: ServerAchievementUnlock = {

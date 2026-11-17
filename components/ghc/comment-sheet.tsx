@@ -206,7 +206,7 @@ useEffect(() => {
       if (event.key !== "Tab") return
       const root = mediaPreviewRef.current
       if (!root) return
-      const focusable = Array.from(root.querySelectorAll<HTMLElement>(
+      const focusable = Array.from<HTMLElement>(root.querySelectorAll<HTMLElement>(
         'button:not([disabled]), video[controls], [tabindex]:not([tabindex="-1"])'
       )).filter((element) => element.getClientRects().length > 0)
       if (!focusable.length) { event.preventDefault(); return }
@@ -241,7 +241,7 @@ useEffect(() => {
       if (event.key !== "Tab" || mediaPreview) return
       const root = dialogRef.current
       if (!root) return
-      const focusable = Array.from(root.querySelectorAll<HTMLElement>(
+      const focusable = Array.from<HTMLElement>(root.querySelectorAll<HTMLElement>(
         'button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
       )).filter((element) => element.getClientRects().length > 0)
       if (!focusable.length) { event.preventDefault(); root.focus(); return }

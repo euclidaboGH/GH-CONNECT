@@ -751,7 +751,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
   }, [confirmTier, successStatus])
 
   return (
-    <div id="gh-membership-root" className="gh-world-membership gh-membership-shell relative flex h-full min-h-0 flex-col bg-background text-foreground">
+    <div id="gh-membership-root" className="gh-world-membership gh-membership-shell relative flex h-full min-h-0 flex-col bg-background text-foreground" data-gh-module="membership">
       <header className="gh-page-header-slim flex shrink-0 items-center gap-2 border-b border-border/50 bg-card/95 px-2.5 py-1 backdrop-blur-md">
         <button
           type="button"
@@ -799,7 +799,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
         kicker="Premium"
         title="Upgrade on this screen only"
         body="Pay VIP / VVIP with π or GHC here — not from Wallet. Profile boosts and other tools live under Settings → Account & economy."
-        tone="violet"
+        tone="emerald"
       />
 
 
@@ -973,9 +973,9 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
           <div
             className={`mb-3 overflow-hidden rounded-[1.25rem] border shadow-[var(--gh-card-shadow)] ${
               currentTier === "vvip"
-                ? "border-amber-300/80 bg-gradient-to-br from-amber-50 via-card to-violet-50 dark:border-amber-800 dark:from-amber-950/40"
+                ? "border-amber-300/70 bg-amber-50/45 dark:border-amber-800/70 dark:bg-amber-950/20"
                 : currentTier === "vip"
-                  ? "border-violet-300/80 bg-gradient-to-br from-violet-50 via-card to-emerald-50 dark:border-violet-800 dark:from-violet-950/40"
+                  ? "border-emerald-300/70 bg-emerald-50/45 dark:border-emerald-800/70 dark:bg-emerald-950/20"
                   : "border-border bg-card"
             }`}
           >
@@ -991,7 +991,7 @@ export function PremiumMembershipScreen({ onBack }: { onBack: () => void }) {
                       currentTier === "vvip"
                         ? "text-amber-600"
                         : currentTier === "vip"
-                          ? "text-violet-600"
+                          ? "text-emerald-700"
                           : "text-muted-foreground"
                     }
                   />
