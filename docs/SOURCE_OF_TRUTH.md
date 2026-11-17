@@ -1,9 +1,9 @@
-# GreenHaven source authority — 0.338.97 remediation candidate (2026-11-17)
+# GreenHaven source authority — 0.338.98 remediation candidate (2026-11-17)
 
-**Current source version:** `0.338.97`
+**Current source version:** `0.338.98`
 **SHA-256:** `dcab57c8f9b43d6f9476745fa8d862b3d26ab33938e00b0bea67132ca2e523ec`  
 **User-designated source archive:** `GREENHAVEN-0.338.93-RUN312-NOTIFICATION-RPC-FIX-2026-11-17.zip`  
-**Package identity:** `gh-connect@0.338.97` (user-facing brand: GREENHAVEN).
+**Package identity:** `gh-connect@0.338.98` (user-facing brand: GREENHAVEN).
 
 This is the exact archive supplied by the user on 2026-11-17 and is the sole authoritative source for subsequent work. Its project history identifies it as an in-place derivative of the prior 0.338.90 source. Continue in place; use the existing GitHub repository and Vercel project. Preserve existing hidden CI files from the actual repository because the supplied archive omits `.github/workflows/ci.yml` and `.gitignore`.
 
@@ -131,5 +131,5 @@ The current local candidate advances the 0.338.94 remediation derivative with ex
 ## 0.338.96 Run 314 working derivative
 Run 314 adds 30 screen-level UI and interaction refinements across active modules, with responsive rails and grids, improved message composer and bubble sizing, wallet/payment sheet safe areas, and profile/feed/rewards content hierarchy. These are presentation-level changes only. The user-designated 0.338.93 archive remains the authoritative starting archive; this derivative is not pushed or deployed.
 
-## 0.338.97 Run 315 working derivative
-This candidate fixes the supplied CI lint/build errors and warning, corrects the stale product-design gate, and ensures a diagnostics artifact exists after early build failure. The user's uploaded 0.338.93 archive remains the authoritative baseline; 0.338.97 is a local working derivative only. No GitHub push, Vercel deployment, Supabase mutation, or financial operation was performed.
+## 0.338.98 Run 315 working derivative
+This candidate fixes the supplied CI lint/build errors and warning, corrects the stale product-design gate, and ensures a diagnostics artifact exists after early build failure. The user's uploaded 0.338.93 archive remains the authoritative baseline; 0.338.98 is a local working derivative only. No GitHub push, Vercel deployment, Supabase mutation, or financial operation was performed.

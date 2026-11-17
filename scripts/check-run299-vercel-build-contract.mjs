@@ -34,7 +34,7 @@ const checks = [
   ['Vercel upload excludes generated build/cache trees', ['.next', '.next/**', '.cache', '.cache/**', '.turbo', '.turbo/**'].every((item) => ignore.includes(item))],
   ['Vercel upload excludes archives and local env files', ignore.includes('*.zip') && ignore.includes('.env*') && ignore.includes('!.env.example')],
   ['Build cache cleanup rejects paths outside project root and symlinks', prep.includes('target.startsWith(`${root}${sep}`)') && prep.includes('isSymbolicLink()')],
-  ['Release gate remains explicitly not approved', truth.includes('Production status:** NOT APPROVED') || truth.includes('Production remains **NOT APPROVED**')],
+  ['Release gate remains explicitly not approved', truth.includes('Current status:** **NOT APPROVED**') || truth.includes('Production status:** NOT APPROVED') || truth.includes('Production remains **NOT APPROVED**')],
 ]
 let failed = 0
 for (const [label, ok] of checks) {

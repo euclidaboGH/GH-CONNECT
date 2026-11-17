@@ -3,15 +3,15 @@
 **Audit date:** 2026-11-09  
 **Last updated:** 2026-11-11  
 **Authoritative source archive:** `GREENHAVEN-0.338.55-RUN292-MOBILE-WALLET-AUDIT.zip`  
-**Current project package:** `gh-connect@0.338.97`
+**Current project package:** `gh-connect@0.338.98`
 
-**Current in-place maintenance derivative:** `gh-connect@0.338.97` (authoritative source archive dated 2026-11-17); the audit findings and historical baseline below remain preserved. Older Run #250–310 snapshots are historical references, not current release pointers.  
+**Current in-place maintenance derivative:** `gh-connect@0.338.98` (authoritative source archive dated 2026-11-17); the audit findings and historical baseline below remain preserved. Older Run #250–310 snapshots are historical references, not current release pointers.  
 **Phase:** 1 of the ten-phase completion roadmap — authoritative baseline and complete audit  
 **Disposition:** **Source inventory and selected contracts verified; Phase 1 is NOT fully closed. Production remains NOT APPROVED.**
 
-## Current source addendum — 0.338.97 (2026-11-17)
+## Current source addendum — 0.338.98 (2026-11-17)
 
-The user-designated source archive is `GREENHAVEN-0.338.93-RUN312-NOTIFICATION-RPC-FIX-2026-11-17.zip`; 0.338.97 is the current local working derivative (Run 315), built on the prior 0.338.96 candidate. Run 314 added 30 screen-level UI and interaction refinements; Run 315 repairs CI lint/build blockers and diagnostics handling; prior 0.338.95 adds scoped public and field evidence intake, quarantine-first delivery, SHA-256 evidence-chain events and scanner callback contracts. The trusted malware-scanner provider remains unconfigured; three evidence/research migrations remain REVIEW_REQUIRED and unapplied. This addendum supersedes only the current-release pointer above; dated Run #250–310 details below remain historical snapshots. The Testnet branch's `.github/workflows/ci.yml` was absent even though the repository default branch contains the workflow; the release repair restores that repository workflow to the Testnet candidate. No push, deployment, database mutation, scanner activation or Mainnet operation is claimed.
+The user-designated source archive is `GREENHAVEN-0.338.93-RUN312-NOTIFICATION-RPC-FIX-2026-11-17.zip`; 0.338.98 is the current local working derivative (Run 315), built on the prior 0.338.96 candidate. Run 314 added 30 screen-level UI and interaction refinements; Run 315 repairs CI lint/build blockers and diagnostics handling; prior 0.338.95 adds scoped public and field evidence intake, quarantine-first delivery, SHA-256 evidence-chain events and scanner callback contracts. The trusted malware-scanner provider remains unconfigured; three evidence/research migrations remain REVIEW_REQUIRED and unapplied. This addendum supersedes only the current-release pointer above; dated Run #250–310 details below remain historical snapshots. The Testnet branch's `.github/workflows/ci.yml` was absent even though the repository default branch contains the workflow; the release repair restores that repository workflow to the Testnet candidate. No push, deployment, database mutation, scanner activation or Mainnet operation is claimed.
 
 ## Run #291 addendum — 2026-11-11
 
