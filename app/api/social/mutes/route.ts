@@ -1,0 +1,49 @@
+/** POST /api/social/mutes — { targetUserId, mute: boolean } */
+import { NextResponse } from "next/server"
+import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
+import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
+import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/production-guard"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+import { checkDurableRateLimit, appendSecurityEvent, requestCorrelationId, durableRateLimitStatus, durableRateLimitCode } from "@/lib/server/security/control-plane"
+
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
+
+export async function POST(request: Request) {
+  const auth = await resolveAuthenticatedUser(request.headers)
+  if (!auth) {
+    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+  }
+  const rate = await checkDurableRateLimit(`social-write:${auth.userId}:mute`, 60, 60_000, { onUnavailable: "deny" })
+  const correlationId = requestCorrelationId(request)
+  if (!rate.ok) {
+    void appendSecurityEvent({ eventType: "social.mute.rate_limited", outcome: "blocked", reasonCode: durableRateLimitCode(rate), actorUserId: auth.userId, correlationId })
+    return NextResponse.json({ ok: false, error: durableRateLimitCode(rate), retryAfterSec: rate.retryAfterSec }, { status: durableRateLimitStatus(rate) })
+  }
+  const parsedBody = await readBoundedJson(request, 4096)
+  if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400, headers: { "Cache-Control": "no-store" } })
+  const body = parsedBody.value
+  const targetUserId = (typeof body.targetUserId === "string" ? body.targetUserId : "").trim()
+  if (!targetUserId || targetUserId === auth.userId) {
+    return NextResponse.json({ ok: false, error: "INVALID_TARGET" }, { status: 400 })
+  }
+  const mute = body.mute !== false && body.mute !== "false"
+  if (!socialDbConfigured()) {
+    const nd = nonDurableWriteResponse("Mute", { extra: { muted: mute } })
+    return NextResponse.json(nd.body, { status: nd.status })
+  }
+  const result = await socialRpc("gh_mute_set", {
+    p_muter: auth.userId,
+    p_muted: targetUserId,
+    p_mute: mute,
+  })
+  const data = result.data as { ok?: boolean; error?: string }
+  if (!result.ok || data?.ok === false) {
+    return NextResponse.json(
+      { ok: false, error: data?.error || result.error || "MUTE_FAILED" },
+      { status: 503 }
+    )
+  }
+  void appendSecurityEvent({ eventType: "social.mute", outcome: "allowed", actorUserId: auth.userId, targetUserId, correlationId, metadata: { muted: mute } })
+  return NextResponse.json({ ok: true, durable: true, muted: mute })
+}

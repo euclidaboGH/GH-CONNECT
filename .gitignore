@@ -1,0 +1,33 @@
+# Dependencies and framework output
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# Local tooling and caches
+.vercel/
+.turbo/
+.cache/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Logs and operating-system files
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Local archives and generated reports
+*.zip
+*.tar
+*.tar.gz

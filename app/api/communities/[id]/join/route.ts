@@ -1,0 +1,87 @@
+/**
+ * POST /api/communities/[id]/join — join or request (session user)
+ * DELETE /api/communities/[id]/join — leave (session user; not owner)
+ */
+import { NextResponse } from "next/server"
+import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
+import { socialDbConfigured, socialRpc } from "@/lib/server/social/rpc"
+import { nonDurableWriteResponse } from "@/lib/server/production-guard"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
+import {
+  mapJoinStatus,
+  sanitizeCommunityId,
+} from "@/lib/server/community/community-integrity"
+
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
+
+type Ctx = { params: Promise<{ id: string }> }
+
+export async function POST(_request: Request, ctx: Ctx) {
+  const auth = await resolveAuthenticatedUser(_request.headers)
+  if (!auth) {
+    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+  }
+  const { id } = await ctx.params
+  const communityId = sanitizeCommunityId(id)
+  if (!communityId) {
+    return NextResponse.json({ ok: false, error: "INVALID_ID" }, { status: 400, headers: { "Cache-Control": "no-store, private" } })
+  }
+  const rateLimited = await enforceUserMutationRateLimit(auth.userId, "communities/[id]/join:POST", 20, 60_000, { failClosed: true })
+  if (rateLimited) return rateLimited
+  if (!socialDbConfigured()) {
+    const nd = nonDurableWriteResponse("Community join", { extra: { status: "unavailable" } })
+    return NextResponse.json(nd.body, { status: nd.status })
+  }
+  const result = await socialRpc("gh_community_join", {
+    p_community_id: communityId,
+    p_user_id: auth.userId,
+  })
+  const data = result.data as { ok?: boolean; status?: string; error?: string }
+  if (!result.ok || data?.ok === false) {
+    const code = data?.error || result.error || "JOIN_FAILED"
+    const status =
+      code === "BANNED" ? 403 : code === "NOT_FOUND" ? 404 : 503
+    return NextResponse.json({ ok: false, error: code }, { status })
+  }
+  const status = data?.status || "active"
+  const mapped = mapJoinStatus(status)
+  return NextResponse.json({
+    ok: true,
+    durable: true,
+    status: mapped.status,
+    joinLabel: mapped.joinLabel,
+    isMember: mapped.isMember,
+    pendingApproval: mapped.pendingApproval,
+  }, { headers: { "Cache-Control": "no-store, private" } })
+}
+
+export async function DELETE(_request: Request, ctx: Ctx) {
+  const auth = await resolveAuthenticatedUser(_request.headers)
+  if (!auth) {
+    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+  }
+  const { id } = await ctx.params
+  const communityId = sanitizeCommunityId(id)
+  if (!communityId) {
+    return NextResponse.json({ ok: false, error: "INVALID_ID" }, { status: 400, headers: { "Cache-Control": "no-store, private" } })
+  }
+  const rateLimited = await enforceUserMutationRateLimit(auth.userId, "communities/[id]/join:DELETE", 20, 60_000, { failClosed: true })
+  if (rateLimited) return rateLimited
+  if (!socialDbConfigured()) {
+    const nd = nonDurableWriteResponse("Community leave")
+    return NextResponse.json(nd.body, { status: nd.status })
+  }
+  const result = await socialRpc("gh_community_leave", {
+    p_community_id: communityId,
+    p_user_id: auth.userId,
+  })
+  const data = result.data as { ok?: boolean; error?: string }
+  if (!result.ok || data?.ok === false) {
+    return NextResponse.json(
+      { ok: false, error: data?.error || result.error || "LEAVE_FAILED" },
+      { status: 400 }
+    )
+  }
+  return NextResponse.json({ ok: true, durable: true })
+}
