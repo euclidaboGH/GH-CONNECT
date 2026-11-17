@@ -265,7 +265,11 @@ export const ECOSYSTEM_SERVICES: readonly EcosystemService[] = [
     icon: "ClipboardList",
     description: "Create surveys, collect field reports and review research responses",
     status: "ACTIVE",
+<<<<<<< Updated upstream
     destination: { kind: "none" },
+=======
+    destination: { kind: "focus", serviceId: "field-research" },
+>>>>>>> Stashed changes
     keywords: ["field research", "surveys", "forms", "elections", "polling", "examinations", "data collection", "research"],
     featured: true,
   },

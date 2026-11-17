@@ -36,7 +36,7 @@ const checks = [
   ['story media rejects non-first-party and non-durable external URLs', /Persist only the first-party media facade/.test(stories) && stories.includes('/api/media/') && /return null/.test(stories)],
   ['story expiration is server-capped to 24 hours', /now \+ MAX_STORY_MS/.test(stories) && /Math\.min\(requested, now \+ MAX_STORY_MS\)/.test(stories)],
   ['public profile hydration uses narrow public field projection', /select:\s*"gh_user_id,display_name,username,photos"/.test(profile)],
-  ['social upstream calls use bounded timeout', /AbortSignal\.timeout\(SOCIAL_UPSTREAM_TIMEOUT_MS\)/.test(rpc)],
+  ['social upstream calls use the central bounded Supabase transport', /supabaseRpc\(fn, body, \{ timeoutMs: SOCIAL_UPSTREAM_TIMEOUT_MS \}\)/.test(rpc) && /timeoutMs: SOCIAL_UPSTREAM_TIMEOUT_MS/.test(rpc)],
   ['social post route exists for contract coverage', exists('app/api/social/posts/route.ts') && post.length > 0],
   ['comment route exists for contract coverage', exists('app/api/social/posts/[id]/comments/route.ts') && comment.length > 0],
   ['canonical visibility module exists', exists('lib/server/social/post-visibility.ts') && visibility.length > 0],

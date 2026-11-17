@@ -75,41 +75,30 @@ async function socialRpcOnce(
     return { ok: false, data: null, error: "DB_UNAVAILABLE", status: 503, fn }
   }
   try {
+<<<<<<< Updated upstream
     const res = await (async () => { const r = await supabaseRpc('${encodeURIComponent(fn)}', typeof JSON.stringify(body) === "string" ? JSON.parse(JSON.stringify(body)) : JSON.stringify(body), { timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
     const text = await res.text()
     const parsed = parsePostgrestBody(text)
+=======
+    const res = await supabaseRpc(fn, body, { timeoutMs: SOCIAL_UPSTREAM_TIMEOUT_MS })
+>>>>>>> Stashed changes
     if (!res.ok) {
-      logRpcFailure({
-        fn,
-        status: res.status,
-        code: parsed.code,
-        message: parsed.message,
-      })
+      const parsed = parsePostgrestBody(JSON.stringify(res.body ?? null))
+      logRpcFailure({ fn, status: res.status, code: parsed.code, message: parsed.message })
       return {
         ok: false,
         data: parsed.data,
-        error: `RPC_${fn}_HTTP_${res.status}`,
+        error: res.error || `RPC_${fn}_HTTP_${res.status}`,
         status: res.status,
         fn,
         diagnosticCode: parsed.code,
         diagnosticMessage: parsed.message || parsed.hint || parsed.details,
       }
     }
-    return {
-      ok: true,
-      data: parsed.data,
-      status: 200,
-      fn,
-    }
+    return { ok: true, data: res.data, status: res.status, fn }
   } catch (e) {
     const timedOut = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")
-    return {
-      ok: false,
-      data: null,
-      error: timedOut ? "RPC_TIMEOUT" : "RPC_NETWORK",
-      status: 503,
-      fn,
-    }
+    return { ok: false, data: null, error: timedOut ? "RPC_TIMEOUT" : "RPC_NETWORK", status: 503, fn }
   }
 }
 
@@ -145,6 +134,7 @@ export async function socialRest<T = unknown>(
     return { ok: false, data: null, error: "DB_UNAVAILABLE", status: 503 }
   }
   try {
+<<<<<<< Updated upstream
     const res = await (async () => { const r = await supabaseRest(`${pathAndQuery.replace(/^\//, "")}`, { method: "GET", timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
     const text = await res.text()
     let data: T | null = null
@@ -155,22 +145,18 @@ export async function socialRest<T = unknown>(
         data = null
       }
     }
+=======
+    const res = await supabaseRest<T>(pathAndQuery.replace(/^\//, ""), {
+      method: "GET",
+      timeoutMs: SOCIAL_UPSTREAM_TIMEOUT_MS,
+    })
+>>>>>>> Stashed changes
     if (!res.ok) {
-      return {
-        ok: false,
-        data: null,
-        error: `REST_HTTP_${res.status}`,
-        status: res.status,
-      }
+      return { ok: false, data: null, error: res.error || `REST_HTTP_${res.status}`, status: res.status }
     }
-    return { ok: true, data, status: 200 }
+    return { ok: true, data: res.data, status: res.status }
   } catch (e) {
     const timedOut = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")
-    return {
-      ok: false,
-      data: null,
-      error: timedOut ? "REST_TIMEOUT" : "REST_NETWORK",
-      status: 503,
-    }
+    return { ok: false, data: null, error: timedOut ? "REST_TIMEOUT" : "REST_NETWORK", status: 503 }
   }
 }

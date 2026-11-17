@@ -2,12 +2,21 @@
 
 **Current source version:** `0.338.92`  
 **Package identity:** `gh-connect@0.338.92`  
+<<<<<<< Updated upstream
 **Authoritative source archive:** `GREENHAVEN-0.338.92-SCOPED-EVIDENCE-2026-11-17.zip`  
+=======
+**Authoritative source archive:** `GREENHAVEN-0.338.92-TESTNET-QUARANTINE-ENV-PREP-2026-11-17-1.zip`  
+**SHA-256:** `90cb8260f2b5a7fdf345135c636c250b591eb4a0be625d86b61eae988e12b578`  
+>>>>>>> Stashed changes
 **Current status:** **NOT APPROVED** for production.
 
 ## Source authority
 
+<<<<<<< Updated upstream
 This is an in-place derivative of the user's supplied `GREENHAVEN-0.338.90-MEDIA-EVIDENCE-2026-11-16.zip`. It supersedes earlier GreenHaven source archives wherever they conflict. Preserve the existing GitHub repository, Vercel project, Pi integrations, wallet and financial boundaries, and migration history. Do not rewrite the application.
+=======
+This is the exact archive supplied by the user on 2026-11-17 and supersedes earlier GreenHaven source archives wherever they conflict. Its project history identifies it as an in-place derivative of `GREENHAVEN-0.338.90-MEDIA-EVIDENCE-2026-11-16.zip`. Preserve the existing GitHub repository, Vercel project, Pi integrations, wallet and financial boundaries, and migration history. Do not rewrite the application.
+>>>>>>> Stashed changes
 
 ## 0.338.92 implementation
 

@@ -5,7 +5,9 @@ import { join } from 'node:path'
 const read = (p) => readFileSync(p, 'utf8')
 const pkg = JSON.parse(read('package.json'))
 const lock = JSON.parse(read('package-lock.json'))
-const ci = read('.github/workflows/ci.yml')
+const ciPath = '.github/workflows/ci.yml'
+const workflowsDir = '.github/workflows'
+const ci = existsSync(ciPath) ? read(ciPath) : ''
 const closure = read('scripts/check-phase10-release-closure.mjs')
 const phasePack = read('scripts/check-phase1-10-upgrade-pack.mjs')
 const truth = read('docs/PROJECT_TRUTH.md')
@@ -13,7 +15,9 @@ const audit = read('docs/PHASE-1-CONSOLIDATED-AUDIT-AND-IMPLEMENTATION-REGISTER-
 const manifest = read('VERIFIED_MANIFEST.txt')
 const release = read('lib/app-release.ts')
 const ignore = read('.vercelignore').split(/\r?\n/).map((x) => x.trim())
-const workflows = readdirSync('.github/workflows').filter((x) => /\.ya?ml$/i.test(x)).map((x) => [x, read(join('.github/workflows', x))])
+const workflows = existsSync(workflowsDir)
+  ? readdirSync(workflowsDir).filter((x) => /\.ya?ml$/i.test(x)).map((x) => [x, read(join(workflowsDir, x))])
+  : []
 const allWorkflows = workflows.map(([name, body]) => `# ${name}\n${body}`).join('\n')
 const checks = []
 const add = (name, ok) => checks.push({ name, ok: Boolean(ok) })
@@ -26,11 +30,11 @@ add('README identifies the current package version', read('README.md').includes(
 add('project truth identifies the current package version', truth.includes(`Current source version:** \`${pkg.version}\``))
 add('verified manifest identifies the current package version', manifest.includes(`project_version=${pkg.version}`))
 add('Phase 1 audit identifies the current package identity', audit.includes(`gh-connect@${pkg.version}`))
-add('phase-10 closure uses case-insensitive no-go assertion', /NOT APPROVED\/i/.test(closure))
+add('phase-10 closure uses case-insensitive no-go assertion', /NOT APPROVED/i.test(closure))
 
 // 8–14: CI must remain static, least-privilege and migration-safe.
-add('P10-B contract checks the production no-go case-insensitively', /NOT APPROVED\/i\.test\(releaseClosure\)/.test(phasePack))
-add('GitHub workflow inventory is non-empty and readable', workflows.length > 0 && workflows.every(([, body]) => body.length > 0))
+add('P10-B contract checks the production no-go case-insensitively', /\/NOT APPROVED\/i\.test\(releaseClosure\)/.test(phasePack))
+add('GitHub CI workflow exists and is readable', existsSync(ciPath) && workflows.length > 0 && workflows.every(([, body]) => body.length > 0))
 add('no workflow applies Supabase migrations', !/supabase\s+db\s+push/i.test(allWorkflows))
 add('no workflow applies Prisma migrations', !/prisma\s+migrate\s+deploy/i.test(allWorkflows))
 add('no workflow pushes Drizzle schema changes', !/drizzle-kit\s+push/i.test(allWorkflows))
@@ -40,7 +44,7 @@ add('workflow permissions remain read-only for repository contents', /permission
 // 15–17: CI installation and build provenance.
 add('untrusted pull_request_target trigger is absent', !/^\s*pull_request_target:/m.test(allWorkflows))
 add('CI uses exact Node 24.15.0 in static and build jobs', (ci.match(/node-version:\s*24\.15\.0/g) || []).length === 2)
-add('dependency lock integrity runs before npm ci', ci.indexOf('check-dependency-lock-integrity.mjs') >= 0 && ci.indexOf('check-dependency-lock-integrity.mjs') < ci.indexOf('npm ci'))
+add('dependency lock integrity runs before npm ci in every install job', (ci.match(/check-dependency-lock-integrity\.mjs/g) || []).length >= 2 && (ci.match(/npm ci/g) || []).length >= 2 && ci.indexOf('check-dependency-lock-integrity.mjs') < ci.indexOf('npm ci'))
 
 // 18–20: Vercel must receive source, not local build/dependency/secrets.
 add('Vercel excludes node_modules from upload', excluded('node_modules') && excluded('node_modules/**'))

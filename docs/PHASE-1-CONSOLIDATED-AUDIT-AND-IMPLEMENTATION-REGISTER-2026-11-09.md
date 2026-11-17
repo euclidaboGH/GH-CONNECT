@@ -3,11 +3,21 @@
 **Audit date:** 2026-11-09  
 **Last updated:** 2026-11-11  
 **Authoritative source archive:** `GREENHAVEN-0.338.55-RUN292-MOBILE-WALLET-AUDIT.zip`  
+<<<<<<< Updated upstream
 **Current project package:** `gh-connect@0.338.86`
 
 **Current in-place maintenance derivative:** `gh-connect@0.338.86 (Runs #250–310; Run #302 A2U safety correction); the audit findings and historical baseline below remain preserved. The original 0.338.18 audit baseline and Run #250–278 snapshots are historical references, not current release pointers.  
+=======
+**Current project package:** `gh-connect@0.338.92`
+
+**Current in-place maintenance derivative:** `gh-connect@0.338.92` (authoritative source archive dated 2026-11-17); the audit findings and historical baseline below remain preserved. Older Run #250–310 snapshots are historical references, not current release pointers.  
+>>>>>>> Stashed changes
 **Phase:** 1 of the ten-phase completion roadmap — authoritative baseline and complete audit  
 **Disposition:** **Source inventory and selected contracts verified; Phase 1 is NOT fully closed. Production remains NOT APPROVED.**
+
+## Current source addendum — 0.338.92 (2026-11-17)
+
+The authoritative source archive is `GREENHAVEN-0.338.92-TESTNET-QUARANTINE-ENV-PREP-2026-11-17-1.zip`. The current increment adds scoped public and field evidence intake, quarantine-first delivery, SHA-256 evidence-chain events and scanner callback contracts. The trusted malware-scanner provider remains unconfigured; three evidence/research migrations remain REVIEW_REQUIRED and unapplied. This addendum supersedes only the current-release pointer above; dated Run #250–310 details below remain historical snapshots. The Testnet branch's `.github/workflows/ci.yml` was absent even though the repository default branch contains the workflow; the release repair restores that repository workflow to the Testnet candidate. No push, deployment, database mutation, scanner activation or Mainnet operation is claimed.
 
 ## Run #291 addendum — 2026-11-11
 

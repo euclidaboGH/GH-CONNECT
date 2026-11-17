@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 const root=process.cwd()
 const registry=JSON.parse(readFileSync(join(root,'lib/architecture/domain-mutation-route-owners.json'),'utf8'))
-const domains=new Set(['identity','walletGhc','walletPiEarnings','marketplace','membership','messaging','feed','media','rewards','communities','notifications','trustSafety','payments'])
+const domains=new Set(['identity','walletGhc','walletPiEarnings','marketplace','membership','messaging','feed','media','rewards','communities','notifications','trustSafety','payments','research','fieldOperations'])
 const rules=[...registry.rules].sort((a,b)=>b.prefix.length-a.prefix.length)
 function walk(dir){let out=[];for(const name of readdirSync(dir)){const p=join(dir,name);if(statSync(p).isDirectory())out.push(...walk(p));else if(name==='route.ts')out.push(p)}return out}
 const mutating=[];const failures=[]

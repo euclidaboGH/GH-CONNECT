@@ -58,6 +58,14 @@
       "owner": "identity"
     },
     {
+      "prefix": "/api/internal/evidence",
+      "owner": "media"
+    },
+    {
+      "prefix": "/api/research/projects",
+      "owner": "research"
+    },
+    {
       "prefix": "/api/economy/earnings",
       "owner": "walletPiEarnings"
     },
@@ -70,12 +78,32 @@
       "owner": "rewards"
     },
     {
+      "prefix": "/api/research/public",
+      "owner": "research"
+    },
+    {
       "prefix": "/api/admin/treasury",
       "owner": "walletGhc"
     },
     {
+      "prefix": "/api/field/reports",
+      "owner": "fieldOperations"
+    },
+    {
+      "prefix": "/api/field/session",
+      "owner": "identity"
+    },
+    {
       "prefix": "/api/notifications",
       "owner": "notifications"
+    },
+    {
+      "prefix": "/api/field/report",
+      "owner": "fieldOperations"
+    },
+    {
+      "prefix": "/api/field/unlock",
+      "owner": "fieldOperations"
     },
     {
       "prefix": "/api/verification",
@@ -88,6 +116,10 @@
     {
       "prefix": "/api/connections",
       "owner": "feed"
+    },
+    {
+      "prefix": "/api/field/admin",
+      "owner": "fieldOperations"
     },
     {
       "prefix": "/api/marketplace",
@@ -156,6 +188,10 @@
     {
       "prefix": "/api/system",
       "owner": "notifications"
+    },
+    {
+      "prefix": "/api/field",
+      "owner": "fieldOperations"
     },
     {
       "prefix": "/api/media",

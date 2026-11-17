@@ -3,15 +3,15 @@ import assert from 'node:assert/strict'
 import { ECOSYSTEM_SERVICES, SERVICE_CATEGORIES, isInteractiveStatus } from '../lib/navigation/service-registry.ts'
 import { getEcosystemServiceAccess } from '../lib/server/ecosystem/service-release.ts'
 
-assert.equal(SERVICE_CATEGORIES.length, 9, 'all nine ecosystem categories remain registered')
-assert.equal(ECOSYSTEM_SERVICES.length, 41, 'all 41 services remain registered')
-assert.equal(new Set(ECOSYSTEM_SERVICES.map((service) => service.id)).size, 41, 'service IDs are unique')
+assert.equal(SERVICE_CATEGORIES.length, 10, 'all ten ecosystem categories remain registered')
+assert.equal(ECOSYSTEM_SERVICES.length, 42, 'all 42 services remain registered')
+assert.equal(new Set(ECOSYSTEM_SERVICES.map((service) => service.id)).size, 42, 'service IDs are unique')
 
 const active = ECOSYSTEM_SERVICES.filter((service) => service.status === 'ACTIVE')
 const beta = ECOSYSTEM_SERVICES.filter((service) => service.status === 'BETA')
 const comingSoon = ECOSYSTEM_SERVICES.filter((service) => service.status === 'COMING_SOON')
 const unavailable = ECOSYSTEM_SERVICES.filter((service) => service.status === 'UNAVAILABLE')
-assert.equal(active.length, 11, 'the eleven released services remain active')
+assert.equal(active.length, 12, 'the twelve released services remain active')
 assert.equal(beta.length, 0, 'no service is silently promoted to beta')
 assert.equal(comingSoon.length, 30, 'all thirty planned services remain Coming Soon')
 assert.equal(unavailable.length, 0, 'no existing service is silently disabled')
@@ -33,4 +33,4 @@ for (const service of ECOSYSTEM_SERVICES) {
   assert.ok(service.title.trim().length > 0, `${service.id} has a display title`)
 }
 
-console.log('Ecosystem service registry: 41 services / 9 categories / 11 Active / 30 Coming Soon — all checks passed')
+console.log('Ecosystem service registry: 42 services / 10 categories / 12 Active / 30 Coming Soon — all checks passed')
