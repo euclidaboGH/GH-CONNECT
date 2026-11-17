@@ -33,7 +33,30 @@ check('CI installs the exact supported Node runtime', /node-version:\s*24\.15\.0
 check('dependency lock integrity runs before npm ci', ci.indexOf('check-dependency-lock-integrity.mjs') >= 0 && ci.indexOf('check-dependency-lock-integrity.mjs') < ci.indexOf('npm ci'))
 check('CI runs the complete static verification suite', /run:\s*npm run verify:static/.test(ci))
 check('CI keeps typecheck and lint as explicit gates', /run:\s*npm run typecheck/.test(ci) && /run:\s*npm run lint/.test(ci))
-check('CI builds only after static verification', ci.indexOf('needs: static') >= 0 && /run:\s*npm run build/.test(ci))
+const buildJob = ci.match(/\n  build:\n([\s\S]*?)(?=\n  [a-zA-Z0-9_-]+:\n|$)/)?.[1] ?? ''
+function declaresStaticDependency(jobText) {
+  const lines = jobText.split(/\r?\n/)
+  const index = lines.findIndex((line) => /^\s{4}needs\s*:/.test(line))
+  if (index < 0) return false
+  const inline = lines[index].replace(/^\s{4}needs\s*:/, '').replace(/\s+#.*$/, '').trim()
+  if (inline) {
+    if (inline === 'static') return true
+    if (/^\[.*\]$/.test(inline)) return inline.slice(1, -1).split(',').map((value) => value.trim().replace(/^['"]|['"]$/g, '')).includes('static')
+    return false
+  }
+  for (const line of lines.slice(index + 1)) {
+    if (/^\s{4}\S/.test(line)) break
+    const item = line.match(/^\s{6}-\s*['"]?([a-zA-Z0-9_-]+)['"]?\s*(?:#.*)?$/)
+    if (item?.[1] === 'static') return true
+  }
+  return false
+}
+check('CI builds only after static verification', declaresStaticDependency(buildJob) && /run:\s*npm run build/.test(buildJob))
+check('release gate accepts scalar, flow-list, and block-list CI dependencies', [
+  declaresStaticDependency('    needs: static\n'),
+  declaresStaticDependency('    needs: [static]\n'),
+  declaresStaticDependency('    needs:\n      - static\n'),
+].every(Boolean))
 check('release hygiene runs in prebuild and static verification', prebuild === 'node scripts/run-prebuild-checks.mjs' && prebuildHas('scripts/check-release-hygiene.mjs') && verifyHas('scripts/check-release-hygiene.mjs'))
 check('project truth runs in prebuild and static verification', prebuild === 'node scripts/run-prebuild-checks.mjs' && prebuildHas('scripts/check-project-truth.mjs') && verifyHas('scripts/check-project-truth.mjs'))
 check('phase 10 closure contract runs in prebuild and static verification', prebuild === 'node scripts/run-prebuild-checks.mjs' && prebuildHas('scripts/check-phase10-release-closure.mjs') && verifyHas('scripts/check-phase10-release-closure.mjs'))

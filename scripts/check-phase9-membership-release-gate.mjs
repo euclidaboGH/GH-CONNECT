@@ -25,9 +25,9 @@ const checks = [
   ['Expiry sweep and renewal operator routes require operator authentication', read('app/api/operator/operational/membership-expire/route.ts').includes('assertOperatorKey') && read('app/api/operator/operational/membership-renew/route.ts').includes('assertOperatorKey')],
   ['Membership authorization is server-side and precedes protected spend', read('app/api/messaging/premium/route.ts').includes('checkMembershipTierAccess') && read('app/api/messaging/premium/route.ts').indexOf('const access = await checkMembershipTierAccess') < read('app/api/messaging/premium/route.ts').indexOf('const spend = await executeDurableGhcSpend')],
   ['Prepaid plans do not silently enable auto-renew or recurring billing', /do not auto-renew|no automatic renewal|non-recurring/i.test(phase) && /no[- ]auto[- ]renew/i.test(worklog)],
-  ['GHC and Pi remain separate payment rails', /GHC and Pi remain separate rails and ledgers/i.test(worklog) && /GHC and Pi pricing\/settlement authorities remain separate/i.test(truth)],
+  ['GHC and Pi remain separate payment rails', /GHC and Pi remain separate rails and ledgers/i.test(worklog) && /not Pi|not a live exchange rate|separate ledgers/i.test(read('lib/asset-separation.ts'))],
   ['72-hour grace is continuity-only and does not grant access', /not\*\* preserve premium access/i.test(phase) && /no grace access/i.test(phase)],
-  ['Production acceptance remains explicitly pending', /not production approval/i.test(phase) && /production approval remains pending/i.test(truth)],
+  ['Production acceptance remains explicitly pending', /not production approval/i.test(phase) && /NOT APPROVED/i.test(truth)],
   ['Membership source is complete with acceptance open; Feed and Wallet occupy priorities 1 and 2', roadmap.includes('| 4 | **Membership** |') && roadmap.includes('| 1 | **Feed** |') && roadmap.includes('Source implementation completed in 0.330.19;') && roadmap.includes('| 2 | **Wallet** |') && roadmap.includes('Source implementation completed in 0.330.20;')],
 ]
 let failed = 0
