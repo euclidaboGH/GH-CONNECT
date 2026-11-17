@@ -4,6 +4,7 @@
  * (or GHC_A2U_ADMIN_KEY as fallback). Does not expose user PII.
  */
 import { NextResponse } from "next/server"
+import { createHash } from "node:crypto"
 import { adminKeyAuthorized } from "@/lib/server/security/operator-key"
 import { commissionPolicyPublic } from "@/lib/server/marketplace/commission"
 import { payoutPolicyPublic } from "@/lib/server/payouts/eligibility"

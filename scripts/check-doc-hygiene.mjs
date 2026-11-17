@@ -415,6 +415,7 @@ const required = new Set([
   'docs/UPGRADE-WORKLOG-0.338.92.md',
   'docs/VERCEL-GITHUB-REMEDIATION-2026-11-17.md',
   'docs/VERCEL-PREBUILD-FAILURE-REPAIR-2026-11-17.md',
+  'docs/VERCEL-RUN312-TYPECHECK-REPAIR-2026-11-17.md',
 ])
 const failures=[]
 const walk=(dir)=>{

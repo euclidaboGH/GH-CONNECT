@@ -88,6 +88,7 @@ export async function rpcExecuteTransfer(
       ok: rpcResult.ok,
       status: rpcResult.status,
       json: async () => rpcResult.ok ? rpcResult.data : rpcResult.body,
+      text: async () => JSON.stringify(rpcResult.ok ? rpcResult.data : rpcResult.body),
     }
 if (!res.ok) {
       // HTTP error bodies may contain SQL, schema, or provider internals; never
@@ -190,6 +191,7 @@ export async function rpcWalletSnapshot(
       ok: rpcResult.ok,
       status: rpcResult.status,
       json: async () => rpcResult.ok ? rpcResult.data : rpcResult.body,
+      text: async () => JSON.stringify(rpcResult.ok ? rpcResult.data : rpcResult.body),
     }
 if (!res.ok) return null
     const data = (await res.json()) as Record<string, unknown>
@@ -363,6 +365,7 @@ export async function rpcEnsureAccountCreatedAt(
       ok: rpcResult.ok,
       status: rpcResult.status,
       json: async () => rpcResult.ok ? rpcResult.data : rpcResult.body,
+      text: async () => JSON.stringify(rpcResult.ok ? rpcResult.data : rpcResult.body),
     }
 if (!res.ok) {
       return { ok: false, error: "SERVER_UNAVAILABLE" }
@@ -446,6 +449,7 @@ export async function rpcStagePending(
       ok: rpcResult.ok,
       status: rpcResult.status,
       json: async () => rpcResult.ok ? rpcResult.data : rpcResult.body,
+      text: async () => JSON.stringify(rpcResult.ok ? rpcResult.data : rpcResult.body),
     }
 if (!res.ok) {
       const body = await res.json().catch(() => null)
@@ -599,6 +603,7 @@ export async function rpcActivityStageReward(
       ok: rpcResult.ok,
       status: rpcResult.status,
       json: async () => rpcResult.ok ? rpcResult.data : rpcResult.body,
+      text: async () => JSON.stringify(rpcResult.ok ? rpcResult.data : rpcResult.body),
     }
 if (!res.ok) {
       const body = await res.json().catch(() => null)
@@ -668,6 +673,7 @@ export async function rpcClaimPending(
       ok: rpcResult.ok,
       status: rpcResult.status,
       json: async () => rpcResult.ok ? rpcResult.data : rpcResult.body,
+      text: async () => JSON.stringify(rpcResult.ok ? rpcResult.data : rpcResult.body),
     }
 if (!res.ok) {
       return { ok: false, error: "SERVER_UNAVAILABLE" }
@@ -725,6 +731,7 @@ export async function rpcEconomicPopulationStats(
       ok: rpcResult.ok,
       status: rpcResult.status,
       json: async () => rpcResult.ok ? rpcResult.data : rpcResult.body,
+      text: async () => JSON.stringify(rpcResult.ok ? rpcResult.data : rpcResult.body),
     }
 if (!res.ok) return fallback
     const data = (await res.json()) as Record<string, unknown>
@@ -784,6 +791,7 @@ export async function rpcGetClaimStreak(
       ok: rpcResult.ok,
       status: rpcResult.status,
       json: async () => rpcResult.ok ? rpcResult.data : rpcResult.body,
+      text: async () => JSON.stringify(rpcResult.ok ? rpcResult.data : rpcResult.body),
     }
 if (!res.ok) return empty
     const data = (await res.json()) as Record<string, unknown>
@@ -850,6 +858,7 @@ export async function rpcCommitClaimDay(
       ok: rpcResult.ok,
       status: rpcResult.status,
       json: async () => rpcResult.ok ? rpcResult.data : rpcResult.body,
+      text: async () => JSON.stringify(rpcResult.ok ? rpcResult.data : rpcResult.body),
     }
 if (!res.ok) return { ok: false, error: "SERVER_UNAVAILABLE" }
     const data = (await res.json()) as Record<string, unknown>
@@ -941,6 +950,7 @@ export async function rpcExecuteDailyClaimV12(
       ok: rpcResult.ok,
       status: rpcResult.status,
       json: async () => rpcResult.ok ? rpcResult.data : rpcResult.body,
+      text: async () => JSON.stringify(rpcResult.ok ? rpcResult.data : rpcResult.body),
     }
 if (!res.ok) {
       const text = await res.text().catch(() => "")

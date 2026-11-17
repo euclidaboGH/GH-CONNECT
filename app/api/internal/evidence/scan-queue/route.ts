@@ -10,22 +10,24 @@ export async function GET(request: Request) {
   const supplied = authorization.startsWith("Bearer ") ? Buffer.from(authorization.slice(7)) : Buffer.alloc(0)
   const expected = Buffer.from(secret)
   if (secret.length < 32 || supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) return NextResponse.json({ ok: false, error: "FORBIDDEN" }, { status: 403, headers: { "Cache-Control": "no-store" } })
+  type ResearchEvidenceRow = { id: string; storage_bucket: string; object_path: string; sha256: string | null; mime_type: string; byte_size: number }
+  type FieldEvidenceRow = { id: string; media_asset_id: string; sha256: string | null }
   const [research, field] = await Promise.all([
-    supabaseRest<Array<Record<string, unknown>>>("gh_research_evidence?scan_status=in.(pending,error)&select=id,storage_bucket,object_path,sha256,mime_type,byte_size&order=created_at.asc&limit=20"),
-    supabaseRest<Array<Record<string, unknown>>>("gh_field_report_evidence?scan_status=in.(pending,error)&select=id,media_asset_id,sha256&order=created_at.asc&limit=20"),
+    supabaseRest<ResearchEvidenceRow[]>("gh_research_evidence?scan_status=in.(pending,error)&select=id,storage_bucket,object_path,sha256,mime_type,byte_size&order=created_at.asc&limit=20"),
+    supabaseRest<FieldEvidenceRow[]>("gh_field_report_evidence?scan_status=in.(pending,error)&select=id,media_asset_id,sha256&order=created_at.asc&limit=20"),
   ])
   if (!research.ok || !field.ok) return NextResponse.json({ ok: false, error: "SCAN_QUEUE_UNAVAILABLE" }, { status: 503, headers: { "Cache-Control": "no-store" } })
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return NextResponse.json({ ok: false, error: "STORAGE_UNAVAILABLE" }, { status: 503, headers: { "Cache-Control": "no-store" } })
   const base = env.supabaseUrl.replace(/\/$/, "")
-  const all = [...research.data.map(row=>({...row,evidence_type:"research"})),...field.data.map(row=>({...row,evidence_type:"field_report"}))].slice(0,30)
+  const all: Array<(ResearchEvidenceRow & { evidence_type: "research" }) | (FieldEvidenceRow & { evidence_type: "field_report" })> = [...research.data.map(row=>({...row,evidence_type:"research" as const})),...field.data.map(row=>({...row,evidence_type:"field_report" as const}))].slice(0,30)
   const items = await Promise.all(all.map(async row=>{
-    let bucket = String(row.storage_bucket || "")
-    let path = String(row.object_path || "")
-    let mimeType = String(row.mime_type || "")
-    let byteSize = Number(row.byte_size || 0)
+    let bucket = row.evidence_type === "research" ? row.storage_bucket : ""
+    let path = row.evidence_type === "research" ? row.object_path : ""
+    let mimeType = row.evidence_type === "research" ? row.mime_type : ""
+    let byteSize = row.evidence_type === "research" ? Number(row.byte_size || 0) : 0
     if (row.evidence_type === "field_report") {
-      const asset = await supabaseRest<Array<{bucket:string;storage_path:string;mime_type:string;byte_size:number}>>(`gh_media_assets?id=eq.${encodeURIComponent(String(row.media_asset_id))}&select=bucket,storage_path,mime_type,byte_size&limit=1`)
+      const asset = await supabaseRest<Array<{bucket:string;storage_path:string;mime_type:string;byte_size:number}>>(`gh_media_assets?id=eq.${encodeURIComponent(String(row.evidence_type === "field_report" ? row.media_asset_id : ""))}&select=bucket,storage_path,mime_type,byte_size&limit=1`)
       if (!asset.ok || !asset.data.length) return null
       bucket = asset.data[0].bucket; path = asset.data[0].storage_path; mimeType = asset.data[0].mime_type; byteSize = Number(asset.data[0].byte_size)
     }

@@ -22,5 +22,5 @@ export async function POST(request: Request, context: { params: Promise<{ slug: 
   if (!row || (row.settings as Record<string, unknown>)?.allow_evidence_uploads === false) return NextResponse.json({ ok: false, error: "EVIDENCE_UPLOADS_DISABLED" }, { status: 404, headers: noStore })
   const result = await createScopedEvidenceUpload({ scopeType: "research_response", projectId: String(row.id), submissionKey, mimeType: String(body.mimeType || ""), byteSize: Number(body.byteSize), fileName: String(body.fileName || "evidence"), uploaderLabel: "Public respondent", geoUnitId: typeof body.geoUnitId === "string" ? body.geoUnitId : null, requirePollingUnit: row.project_type === "election_observation" })
   if (!result.ok) return NextResponse.json({ ok: false, error: result.error }, { status: result.status, headers: noStore })
-  return NextResponse.json({ ok: true, ...result }, { status: 201, headers: noStore })
+  return NextResponse.json({ ...result }, { status: 201, headers: noStore })
 }

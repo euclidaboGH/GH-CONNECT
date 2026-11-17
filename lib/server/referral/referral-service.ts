@@ -16,14 +16,11 @@ function settlementEnabled(): boolean {
 async function rpc(name: string, body: Record<string, unknown>): Promise<Record<string, unknown> | null> {
   const e = env()
   if (!e.supabaseUrl || !e.supabaseServiceRoleKey) return null
-  try {
-    const res = await (async () => { const r = await supabaseRpc(name, body, { timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
-    const data = await res.json().catch(() => null)
-    if (!res.ok) return { ok: false, error: String(data?.message || data?.error || res.status) }
-    return data && typeof data === "object" ? (data as Record<string, unknown>) : null
-  } catch {
-    return null
-  }
+  const result = await supabaseRpc<unknown>(name, body, { timeoutMs: 15_000 })
+  if (!result.ok) return { ok: false, error: result.error || String(result.status) }
+  return result.data && typeof result.data === "object" && !Array.isArray(result.data)
+    ? result.data as Record<string, unknown>
+    : null
 }
 
 export async function ensureReferralCode(userId: string) {

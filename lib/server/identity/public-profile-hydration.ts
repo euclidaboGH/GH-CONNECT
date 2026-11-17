@@ -4,7 +4,7 @@
  * profile attributes and treats persisted post/comment labels as a fallback.
  */
 import { readGhcServerEnv } from "@/lib/server/economy/env"
-import { supabaseRpc, supabaseRest } from "@/lib/server/supabase/rest-client"
+import { supabaseRest } from "@/lib/server/supabase/rest-client"
 
 type Row = Record<string, unknown>
 
@@ -39,42 +39,6 @@ function quotePostgrestIn(value: string): string {
   return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`
 }
 
-/** Parse a small upstream JSON response with a hard streaming byte limit. */
-async function readBoundedProfileRows(response: Response, maxBytes: number): Promise<unknown[] | null> {
-  const declared = response.headers.get("content-length")
-  if (declared !== null) {
-    if (!/^\d+$/.test(declared) || Number(declared) > maxBytes) return null
-  }
-  if (!response.body) return null
-  const reader = response.body.getReader()
-  const chunks: Uint8Array[] = []
-  let total = 0
-  try {
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      total += value.byteLength
-      if (total > maxBytes) {
-        await reader.cancel("profile response exceeds configured limit").catch(() => undefined)
-        return null
-      }
-      chunks.push(value)
-    }
-  } catch {
-    return null
-  } finally {
-    reader.releaseLock()
-  }
-  const bytes = new Uint8Array(total)
-  let offset = 0
-  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength }
-  try {
-    const parsed: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes))
-    return Array.isArray(parsed) ? parsed : null
-  } catch {
-    return null
-  }
-}
 
 /**
  * Hydrate social authors and nested comment/reply trees from public profile fields.
@@ -113,10 +77,9 @@ export async function hydratePublicProfileIdentity<T extends Row>(items: T[]): P
       select: "gh_user_id,display_name,username,photos",
       limit: String(ids.length),
     })
-    const response = await (async () => { const r = await supabaseRest(`gh_user_profiles?${query.toString()}`, { method: "GET", timeoutMs: 5000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
-    if (!response.ok) return items
-    const data = await readBoundedProfileRows(response, 1024 * 1024)
-    if (!data || data.length > ids.length) return items
+    const response = await supabaseRest<unknown>(`gh_user_profiles?${query.toString()}`, { method: "GET", timeoutMs: 5000, maxResponseBytes: 1024 * 1024 })
+    if (!response.ok || !Array.isArray(response.data) || response.data.length > ids.length) return items
+    const data = response.data
     const requestedIds = new Set(ids)
     const profiles = new Map<string, { name: string; photo: string }>()
     for (const value of data) {

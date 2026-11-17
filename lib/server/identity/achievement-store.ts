@@ -130,7 +130,7 @@ export async function unlockAchievement(input: {
           return (await listAchievementsForUser(uid)).find((e) => e.achievementId === aid) || row
         }
         if (isProd()) {
-          console.error("[achievement-store] unlock failed", res.status)
+          console.error("[achievement-store] unlock failed", result.status)
           return null
         }
       } catch (err) {

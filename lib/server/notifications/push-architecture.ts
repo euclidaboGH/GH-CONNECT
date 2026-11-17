@@ -28,11 +28,14 @@ export function getWebPushConfiguration() {
 
 export async function notificationPushRpc(name: string, body: Record<string, unknown>) {
   const env = readGhcServerEnv()
-  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return { ok: false, data: null as any, error: "DB_UNAVAILABLE" }
-  try {
-    const response = await (async () => { const r = await supabaseRpc(name, body, { timeoutMs: 15000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
-    const data = await response.json().catch(() => null)
-    if (!response.ok) return { ok: false, data, error: `HTTP_${response.status}` }
-    return { ok: data?.ok !== false, data, error: data?.error ? String(data.error) : undefined }
-  } catch { return { ok: false, data: null as any, error: "RPC_FAILED" } }
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return { ok: false as const, data: null, error: "DB_UNAVAILABLE" }
+  const result = await supabaseRpc<unknown>(name, body, { timeoutMs: 15_000 })
+  if (!result.ok) return { ok: false as const, data: result.body ?? null, error: result.error }
+  const data = result.data
+  const envelope = data && typeof data === "object" && !Array.isArray(data) ? data as Record<string, unknown> : null
+  return {
+    ok: envelope?.ok !== false,
+    data,
+    error: typeof envelope?.error === "string" ? envelope.error : undefined,
+  }
 }

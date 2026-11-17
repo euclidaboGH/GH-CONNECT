@@ -66,7 +66,8 @@ export async function POST(request: Request, context: { params: Promise<{ slug: 
   const idempotencyKey = typeof payload.submissionKey === "string" && /^[A-Za-z0-9_-]{16,80}$/.test(payload.submissionKey) ? payload.submissionKey : randomUUID()
   const saved = await supabaseRest<Array<Record<string, unknown>>>("gh_research_responses?on_conflict=project_id,submission_key&select=id,submitted_at", { method: "POST", headers: { "Content-Type": "application/json", Prefer: "return=representation,resolution=ignore-duplicates" }, body: JSON.stringify({ id: randomUUID(), project_id: project.id, submission_key: idempotencyKey, answers: normalized, consent_recorded_at: new Date().toISOString(), review_status: "received" }), timeoutMs: 12_000 })
   if (!saved.ok) return NextResponse.json({ ok: false, error: "RESPONSE_SAVE_FAILED" }, { status: 503, headers: NO_STORE })
-  const responseRow = saved.data?.[0] || (await supabaseRest<Array<{ id: string }>>(`gh_research_responses?project_id=eq.${project.id}&submission_key=eq.${encodeURIComponent(idempotencyKey)}&select=id&limit=1`)).data?.[0]
+  const fallbackResponse = saved.data?.[0] ? null : await supabaseRest<Array<{ id: string }>>(`gh_research_responses?project_id=eq.${project.id}&submission_key=eq.${encodeURIComponent(idempotencyKey)}&select=id&limit=1`)
+  const responseRow = saved.data?.[0] || (fallbackResponse?.ok ? fallbackResponse.data[0] : undefined)
   if (!responseRow?.id) return NextResponse.json({ ok: false, error: "RESPONSE_REFERENCE_UNAVAILABLE" }, { status: 503, headers: NO_STORE })
   // Bind only uploads created under this exact project + unguessable submission key.
   const pendingEvidence = await supabaseRest<Array<{ id: string }>>(`gh_research_evidence?project_id=eq.${project.id}&submission_key=eq.${encodeURIComponent(idempotencyKey)}&response_id=is.null&select=id&limit=6`)

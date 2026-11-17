@@ -57,17 +57,10 @@ export async function countEngagedPioneers(options?: {
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
     return { totalIdentities: null, engagedEstimate: null, onboardingCompleted: null }
   }
-  const base = env.supabaseUrl.replace(/\/$/, "")
-  const headers = {
-    apikey: env.supabaseServiceRoleKey,
-    Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-    Prefer: "count=exact",
-    Range: "0-0",
-  }
-
   async function countQuery(qs: string): Promise<number | null> {
     try {
-      const res = await (async () => { const r = await supabaseRest(`gh_pi_identities?${qs}`, { method: "GET", timeoutMs: 12000 }); return { ok: r.ok, status: r.status, json: async () => r.ok ? r.data : r.body, text: async () => JSON.stringify(r.ok ? r.data : r.body) }; })()
+      const res = await supabaseRest(`gh_pi_identities?${qs}`, { method: "GET", headers: { Prefer: "count=exact", Range: "0-0" }, timeoutMs: 12000 })
+      if (!res.ok) return null
       const range = res.headers.get("content-range") || ""
       const m = range.match(/\/(\d+)\s*$/)
       if (m) return Number(m[1])

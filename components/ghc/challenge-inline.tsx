@@ -60,6 +60,7 @@ export function resolvePostChallenge(post: { content?: string }): ChallengeView 
 export function ChallengeInline({ challenge, readOnly = false }: { challenge: ChallengeView; readOnly?: boolean }) {
   const [joined, setJoined] = useState(false)
   const [joining, setJoining] = useState(false)
+  const durableId = /^[0-9a-f-]{36}$/i.test(challenge.id)
   useEffect(() => {
     if (!durableId) return
     let active = true
@@ -67,7 +68,6 @@ export function ChallengeInline({ challenge, readOnly = false }: { challenge: Ch
     return () => { active = false }
   }, [challenge.id, durableId])
   const endsLabel = useMemo(() => `${challenge.days} day window`, [challenge.days])
-  const durableId = /^[0-9a-f-]{36}$/i.test(challenge.id)
 
   const onJoin = async () => {
     if (joining) return

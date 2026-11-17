@@ -21,5 +21,5 @@ export async function POST(request: Request, context: { params: Promise<{ slug: 
   if (!rate.ok) return NextResponse.json({ ok: false, error: durableRateLimitCode(rate) }, { status: durableRateLimitStatus(rate), headers: noStore })
   const result = await finalizeScopedEvidenceUpload({ uploadId, token, expectedScope: "research_response", scopeId: row.id })
   if (!result.ok) return NextResponse.json({ ok: false, error: result.error }, { status: result.status, headers: noStore })
-  return NextResponse.json({ ok: true, ...result }, { status: 201, headers: noStore })
+  return NextResponse.json({ ...result }, { status: 201, headers: noStore })
 }

@@ -633,7 +633,7 @@ export function EnhancedFeedScreen({ onCompose, onProfile }: EnhancedFeedScreenP
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (containerRef.current && containerRef.current.scrollTop === 0 && touchIdentifierRef.current !== null) {
-      const touch = Array.from<Touch>(e.touches).find((t) => t.identifier === touchIdentifierRef.current)
+      const touch = e.touches.item(Array.from({ length: e.touches.length }, (_, index) => index).find((index) => e.touches.item(index)?.identifier === touchIdentifierRef.current) ?? -1)
       if (touch) {
         const distance = Math.max(0, touch.clientY - startYRef.current)
         setPullDistance(Math.min(distance, 120))

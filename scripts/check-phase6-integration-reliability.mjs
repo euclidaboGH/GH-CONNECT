@@ -30,7 +30,7 @@ const checks = [
   ['app release metadata matches package version', release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],
   ['Phase 6 integration release note exists', exists('docs/archive/phase-notes/PHASE-6-CROSS-FEATURE-INTEGRATION-RELIABILITY.md')],
   ['shared public identity hydration uses a narrow public-field allowlist', /select:\s*"gh_user_id,display_name,username,photos"/.test(identity)],
-  ['public identity hydration uses no-store reads', /supabaseRest\(/.test(identity) && /cache:\s*"no-store"/.test(restClient)],
+  ['public identity hydration uses no-store reads', /supabaseRest(?:<[^>]+>)?\(/.test(identity) && /cache:\s*"no-store"/.test(restClient)],
   ['referral ID resolution uses canonical public identity directory', /resolvePublicIdentity\(asGh\)/.test(referral) && !/from\("gh_profiles"\)/.test(referral)],
   ['referral attribution authenticates actor and blocks self-referral', /resolveAuthenticatedUser\(request\.headers\)/.test(referral) && /SELF_REFERRAL/.test(referral)],
   ['main feed hydrates canonical author identity', /hydratePublicProfileIdentity/.test(feed)],

@@ -71,7 +71,8 @@ export async function POST(request: Request) {
     if (row.visibility !== "public" && row.author_user_id !== auth.userId) return NextResponse.json({ ok: false, error: "CHALLENGE_NOT_OPEN_TO_USER" }, { status: 403, headers: NO_STORE })
     if (row.status !== "open" || Date.parse(row.ends_at) <= Date.now()) return NextResponse.json({ ok: false, error: "CHALLENGE_CLOSED" }, { status: 409, headers: NO_STORE })
     const joined = await supabaseRest<{ ok?: boolean; error?: string }>("rpc/gh_social_challenge_participate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ p_challenge_id: challengeId, p_user_id: auth.userId, p_action: "join" }) })
-    if (!joined.ok || joined.data?.ok !== true) return NextResponse.json({ ok: false, error: joined.data?.error || "CHALLENGE_JOIN_FAILED" }, { status: joined.data?.error === "CHALLENGE_CLOSED" ? 409 : 503, headers: NO_STORE })
+    if (!joined.ok) return NextResponse.json({ ok: false, error: "CHALLENGE_JOIN_FAILED" }, { status: joined.status >= 400 && joined.status < 500 ? joined.status : 503, headers: NO_STORE })
+    if (joined.data?.ok !== true) return NextResponse.json({ ok: false, error: joined.data?.error || "CHALLENGE_JOIN_FAILED" }, { status: joined.data?.error === "CHALLENGE_CLOSED" ? 409 : 503, headers: NO_STORE })
     return NextResponse.json({ ok: true, joined: true }, { headers: NO_STORE })
   }
   if (action === "leave") {

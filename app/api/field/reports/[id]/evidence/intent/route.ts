@@ -21,5 +21,5 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (!report.ok || !report.data.length) return NextResponse.json({ ok: false, error: "REPORT_NOT_FOUND_OR_NOT_OWNED" }, { status: 404, headers: noStore })
   const result = await createScopedEvidenceUpload({ scopeType: "field_report", reportId: id, fieldSessionJti: session.jti, uploaderLabel: session.label || "Field agent", mimeType: String(body.mimeType || ""), byteSize: Number(body.byteSize), fileName: String(body.fileName || "evidence"), geoUnitId: typeof body.geoUnitId === "string" ? body.geoUnitId : null })
   if (!result.ok) return NextResponse.json({ ok: false, error: result.error }, { status: result.status, headers: noStore })
-  return NextResponse.json({ ok: true, ...result }, { status: 201, headers: noStore })
+  return NextResponse.json({ ...result }, { status: 201, headers: noStore })
 }

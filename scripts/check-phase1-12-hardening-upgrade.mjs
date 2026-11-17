@@ -27,7 +27,7 @@ const checks = [
   ["navigation rejects unsafe externally supplied avatar URLs", /userPhoto: safePhoto\(options\.userPhoto\)/.test(navigation) && /parsed\.protocol === \"https:\"/.test(navigation)],
   ["readiness detects malformed explicit Pi network flags", /pi_sandbox_flag_schema/.test(readiness) && /invalidSandboxFlag/.test(readiness)],
   ["profile hydration keeps its upstream deadline", /timeoutMs:\s*5000/.test(profile) && /signal:\s*fetchInit\.signal \?\? AbortSignal\.timeout\(timeoutMs \?\? 15_000\)/.test(restClient)],
-  ["profile hydration enforces a streaming 1 MiB response limit", /readBoundedProfileRows\(response, 1024 \* 1024\)/.test(profile) && /total > maxBytes/.test(profile)],
+  ["profile hydration enforces a streaming 1 MiB response limit", /maxResponseBytes:\s*1024 \* 1024/.test(profile) && /total > maxResponseBytes/.test(restClient) && /SUPABASE_REST_RESPONSE_TOO_LARGE/.test(restClient)],
   ["profile hydration limits response rows and identity scope", /data\.length > ids\.length/.test(profile) && /requestedIds\.has\(id\)/.test(profile)],
   ["profile projection selects public fields only", /select: "gh_user_id,display_name,username,photos"/.test(profile) && !/select: "[^"]*(balance|membership|entitlement|wallet)/i.test(profile)],
   ["authoritative GHC store entry points reject negative inputs without Math.abs coercion", !/Math\.abs\(Number\(input\.amount\)\)/.test(economy) && (economy.match(/const amount = Number\(input\.amount\)/g) || []).length >= 6],

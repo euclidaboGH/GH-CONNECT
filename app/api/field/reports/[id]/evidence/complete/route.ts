@@ -21,5 +21,5 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (!/^[0-9a-f-]{36}$/i.test(uploadId) || token.length < 40 || token.length > 100) return NextResponse.json({ ok: false, error: "INVALID_UPLOAD_TOKEN" }, { status: 400, headers: noStore })
   const result = await finalizeScopedEvidenceUpload({ uploadId, token, expectedScope: "field_report", scopeId: id, sessionJti: session.jti })
   if (!result.ok) return NextResponse.json({ ok: false, error: result.error }, { status: result.status, headers: noStore })
-  return NextResponse.json({ ok: true, ...result }, { status: 201, headers: noStore })
+  return NextResponse.json({ ...result }, { status: 201, headers: noStore })
 }
