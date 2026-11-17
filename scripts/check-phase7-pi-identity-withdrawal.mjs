@@ -15,7 +15,7 @@ const checks = [
   ["Production Pi bearer auth fails closed when canonical mapping is absent", /if \(!mapping\?\.ghUserId\) \{\s*if \(env\.isProduction\) return null/s.test(auth)],
   ["Pi UID fallback is explicitly limited to non-production compatibility", /if \(!mapping\?\.ghUserId\)[\s\S]*?if \(env\.isProduction\) return null[\s\S]*?Non-production compatibility only/s.test(auth)],
   ["Mapped GH identity, not raw Pi UID, is returned when mapping exists", /userId: mapping\.ghUserId/.test(auth)],
-  ["Pi bootstrap creates the mapping only after /v2/me token verification", /verifyPiAccessToken\(accessToken\)/.test(bridge) && /findOrCreateFromVerifiedPi/.test(bridge)],
+  ["Pi bootstrap creates the mapping only after /v2/me token verification", /verifyPiAccessTokenDetailed\(accessToken\)/.test(bridge) && /verification\.ok/.test(bridge) && /const piUser = verification\.user/.test(bridge) && /findOrCreateFromVerifiedPi/.test(bridge)],
   ["Production bootstrap refuses non-durable identity and session stores", /prod && \(!isPiIdentityDurable\(\) \|\| !isSessionStoreDurable\(\)\)/.test(bridge)],
   ["Wallet consent is based on fresh verified Pi proof", /verifyWalletConsentProof/.test(walletRoute) && /verifyPiAccessToken/.test(walletRoute)],
   ["Payout authorization binds canonical user to exact recipient UID", /gh_pi_wallet_authorization_assert_payout/.test(walletAuth) && /p_recipient_uid/.test(walletAuth)],

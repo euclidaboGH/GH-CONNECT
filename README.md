@@ -1,12 +1,16 @@
 # GreenHaven
 
-**Current source version:** `0.338.99`
+**Current source version:** `0.338.99` (Run 318 Pi authentication reliability derivative)
 
 Production status: **NOT APPROVED** — supported Node 24.15.0 dependency-backed typecheck/lint/build, browser/device, live database/provider and operator acceptance remain outstanding.
 
 This repository is the canonical GreenHaven source tree. See `docs/SOURCE_OF_TRUTH.md` and `docs/CURRENT_BUILD_CONTEXT.md` before implementation or release work.
 
-## Latest maintenance — 0.338.99 / Run 317 browser-safe crypto build repair
+## Latest maintenance — 0.338.99 / Run 318 Pi authentication reliability repair
+
+Run 318 separates rejected Pi credentials from Pi Platform outages, prevents overlapping client authentication attempts, respects server retry guidance and restores the dedicated 503 recovery path. See `RUN318-PI-AUTHENTICATION-RELIABILITY-DELIVERY.md`.
+
+## Previous maintenance — 0.338.99 / Run 317 browser-safe crypto build repair
 
 Run 317 repairs the confirmed `node:crypto` Webpack client-bundle failure. Shared ID helpers now use Web Crypto without Node-only imports; shared modules statically import the browser-safe helper; SHA-256 push endpoint hashing is isolated to a server-only module. GitHub Actions on 0.338.98 confirmed TypeScript and ESLint pass, while the Next.js production build failed at `node:crypto`. Run 317 adds a regression gate. This is a source-only remediation candidate; a fresh Node 24.15.0 dependency-backed typecheck/lint/build and browser/device acceptance remain required. No GitHub push, Vercel deployment, database or migration operation, financial mutation, provider execution or Mainnet action was performed. Production remains NOT APPROVED.
 

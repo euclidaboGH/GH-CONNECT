@@ -98,12 +98,18 @@ function verifyHs256Jwt(
 }
 
 /**
- * Cryptographically verify a Pi access token by calling Pi Platform /v2/me.
- * Network failure → null (caller maps to AUTH_REQUIRED / SERVER_UNAVAILABLE as appropriate).
+ * Result of the authoritative Pi Platform identity check.
+ * Keep invalid credentials distinct from an upstream outage: a timeout, 429 or
+ * 5xx from Pi must never be presented to the Pioneer as a bad/expired token.
  */
-export async function verifyPiAccessToken(
+export type PiAccessTokenVerification =
+  | { ok: true; user: { uid: string; username?: string; walletAddress?: string; scopes?: string[] } }
+  | { ok: false; reason: "INVALID_TOKEN" | "PI_UNAVAILABLE" | "INVALID_PI_RESPONSE" }
+
+/** Verify a Pi access token against the authoritative Platform GET /v2/me. */
+export async function verifyPiAccessTokenDetailed(
   accessToken: string
-): Promise<{ uid: string; username?: string; walletAddress?: string; scopes?: string[] } | null> {
+): Promise<PiAccessTokenVerification> {
   const env = readGhcServerEnv()
   const url = `${env.piPlatformApiUrl}/v2/me`
   try {
@@ -114,9 +120,15 @@ export async function verifyPiAccessToken(
         Accept: "application/json",
       },
       signal: AbortSignal.timeout?.(12_000),
+      cache: "no-store",
     })
-    if (!res.ok) return null
-    const data = (await res.json()) as {
+    if (res.status === 401 || res.status === 403) {
+      return { ok: false, reason: "INVALID_TOKEN" }
+    }
+    if (res.status === 429 || res.status >= 500 || !res.ok) {
+      return { ok: false, reason: "PI_UNAVAILABLE" }
+    }
+    let data: {
       uid?: string
       user?: { uid?: string; username?: string; wallet_address?: string; walletAddress?: string }
       username?: string
@@ -124,22 +136,39 @@ export async function verifyPiAccessToken(
       walletAddress?: string
       credentials?: { scopes?: unknown }
     }
+    try {
+      data = await res.json()
+    } catch {
+      return { ok: false, reason: "INVALID_PI_RESPONSE" }
+    }
     const uid = data.uid || data.user?.uid
-    if (typeof uid !== "string" || !uid) return null
+    if (typeof uid !== "string" || !uid.trim()) {
+      return { ok: false, reason: "INVALID_PI_RESPONSE" }
+    }
     const walletAddress = data.wallet_address || data.walletAddress || data.user?.wallet_address || data.user?.walletAddress
-    // Pi's UserDTO reports the scopes the user granted in credentials.scopes.
     const scopes = Array.isArray(data.credentials?.scopes)
-      ? (data.credentials!.scopes as unknown[]).filter((v): v is string => typeof v === "string").slice(0, 16)
+      ? data.credentials.scopes.filter((v): v is string => typeof v === "string").slice(0, 16)
       : undefined
     return {
-      uid,
-      username: data.username || data.user?.username,
-      ...(typeof walletAddress === "string" && walletAddress.trim() ? { walletAddress: walletAddress.trim().toUpperCase() } : {}),
-      ...(scopes ? { scopes } : {}),
+      ok: true,
+      user: {
+        uid: uid.trim(),
+        username: data.username || data.user?.username,
+        ...(typeof walletAddress === "string" && walletAddress.trim() ? { walletAddress: walletAddress.trim().toUpperCase() } : {}),
+        ...(scopes ? { scopes } : {}),
+      },
     }
   } catch {
-    return null
+    return { ok: false, reason: "PI_UNAVAILABLE" }
   }
+}
+
+/** Backwards-compatible nullable verifier for existing callers. */
+export async function verifyPiAccessToken(
+  accessToken: string
+): Promise<{ uid: string; username?: string; walletAddress?: string; scopes?: string[] } | null> {
+  const result = await verifyPiAccessTokenDetailed(accessToken)
+  return result.ok ? result.user : null
 }
 
 /**

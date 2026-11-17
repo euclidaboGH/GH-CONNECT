@@ -13,7 +13,7 @@
  */
 
 import { NextResponse } from "next/server"
-import { verifyPiAccessToken } from "@/lib/server/economy/auth"
+import { verifyPiAccessTokenDetailed } from "@/lib/server/economy/auth"
 import { checkDurableRateLimit, appendSecurityEvent, requestCorrelationId, durableRateLimitStatus, durableRateLimitCode } from "@/lib/server/security/control-plane"
 import { createHash } from "node:crypto"
 import {
@@ -85,19 +85,36 @@ export async function POST(request: Request) {
       )
     }
 
-    const piUser = await verifyPiAccessToken(accessToken)
-    if (!piUser?.uid) {
-      void appendSecurityEvent({ eventType: "auth.pi.rejected", outcome: "blocked", reasonCode: "INVALID_PI_TOKEN", correlationId })
+    const verification = await verifyPiAccessTokenDetailed(accessToken)
+    if (!verification.ok) {
+      const unavailable = verification.reason === "PI_UNAVAILABLE"
+      const malformed = verification.reason === "INVALID_PI_RESPONSE"
+      const error = unavailable
+        ? "PI_VERIFICATION_UNAVAILABLE"
+        : malformed
+          ? "PI_VERIFICATION_INVALID_RESPONSE"
+          : "INVALID_PI_TOKEN"
+      void appendSecurityEvent({
+        eventType: "auth.pi.rejected",
+        outcome: unavailable || malformed ? "error" : "blocked",
+        reasonCode: error,
+        correlationId,
+      })
       return NextResponse.json(
         {
           ok: false,
-          error: "INVALID_PI_TOKEN",
-          detail:
-            "Pi /me rejected the access token. Re-authenticate in Pi Browser.",
+          error,
+          detail: unavailable
+            ? "Pi identity verification is temporarily unavailable. Please retry; your account was not changed."
+            : malformed
+              ? "Pi returned an unexpected identity response. Please retry shortly."
+              : "Pi rejected the access token. Sign in with Pi again.",
+          retryable: unavailable || malformed,
         },
-        { status: 401 }
+        { status: unavailable ? 503 : malformed ? 502 : 401, headers: { "Cache-Control": "no-store" } }
       )
     }
+    const piUser = verification.user
 
     const prod =
       process.env.NODE_ENV === "production" ||

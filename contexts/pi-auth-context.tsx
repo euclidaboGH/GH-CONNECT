@@ -328,6 +328,10 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authMessage, setAuthMessage] = useState("Initializing Pi Network...");
   const softRetryRef = useRef(0);
+  // The initial bootstrap and a user's Retry tap can overlap in a slow Pi
+  // WebView. Pi.authenticate must be single-flight or competing prompts can
+  // invalidate each other's bridge state.
+  const authAttemptRef = useRef(false);
   const [hasError, setHasError] = useState(false);
   const [sdk, setSdk] = useState<SDKLiteInstance | null>(null);
   const [products, setProducts] = useState<Product[] | null>(null);
@@ -347,6 +351,8 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const initialize = useCallback(async () => {
+    if (authAttemptRef.current) return;
+    authAttemptRef.current = true;
     setHasError(false);
     setRestoredPurchases(null);
     setAuthLifecycle(INITIAL_AUTH_LIFECYCLE);
@@ -481,7 +487,7 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
               bridgeRes.status === 404 ||
               bridgeRes.status === 502 ||
               bridgeRes.status === 500 ||
-              bridgeRes.status >= 500 ||
+              (bridgeRes.status >= 500 && bridgeRes.status !== 503) ||
               /FUNCTION_RUNTIME_DEPRECATED|FUNCTION_INVOCATION_FAILED|DEPLOYMENT_NOT_FOUND|Internal Server Error/i.test(
                 bridgeText
               )
@@ -494,7 +500,8 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
               setAuthLifecycle((s) =>
                 transitionAuth(s, "ERROR", {
                   error:
-                    "App server is temporarily unavailable (API offline). Redeploy on a supported Node.js runtime and confirm /api/health responds. You were not registered as a new user.",
+                    (typeof bridge?.detail === "string" && bridge.detail) ||
+                    "App server is temporarily unavailable. Please retry shortly; your account was not changed.",
                   onboardingStatus: "unavailable",
                   serverVerified: false,
                 })
@@ -505,9 +512,27 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
               return
             }
             if (
+              bridgeRes.status === 429
+            ) {
+              const retryAfter = Number(bridgeRes.headers.get("Retry-After") || 30);
+              setAuthLifecycle((s) =>
+                transitionAuth(s, "ERROR", {
+                  error: "Too many sign-in attempts. Please wait briefly and try again.",
+                  onboardingStatus: "unavailable",
+                  serverVerified: false,
+                })
+              );
+              setAuthMessage(`Please wait ${Number.isFinite(retryAfter) ? Math.max(1, retryAfter) : 30}s before retrying.`);
+              setHasError(true);
+              setIsAuthenticated(false);
+              return;
+            }
+            if (
               bridgeRes.status === 503 ||
               bridge?.error === "IDENTITY_STORE_UNAVAILABLE" ||
-              bridge?.error === "SESSION_STORE_UNAVAILABLE"
+              bridge?.error === "SESSION_STORE_UNAVAILABLE" ||
+              bridge?.error === "PI_VERIFICATION_UNAVAILABLE" ||
+              bridge?.error === "PI_VERIFICATION_INVALID_RESPONSE"
             ) {
               console.error("[PiAuth] identity store unavailable:", bridge?.error || bridgeRes.status)
               setAuthLifecycle((s) =>
@@ -847,6 +872,8 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
           serverVerified: false,
         })
       );
+    } finally {
+      authAttemptRef.current = false;
     }
   }, [fetchProducts]);
 
