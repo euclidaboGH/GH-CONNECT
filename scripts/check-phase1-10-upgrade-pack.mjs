@@ -2,13 +2,14 @@
 /** Cross-phase 20-point regression contract: two controls for each completion phase. */
 import fs from 'node:fs'
 import path from 'node:path'
+import { readProjectDoc } from './lib/read-project-doc.mjs'
 const read = (p) => fs.readFileSync(p, 'utf8')
 const exists = (p) => fs.existsSync(p)
 const checks = []
 const add = (phase, id, label, ok) => checks.push({ phase, id, label, ok: Boolean(ok) })
 const pkg = JSON.parse(read('package.json'))
 const release = read('lib/app-release.ts')
-const sourceTruth = read('docs/PHASE-1-CONSOLIDATED-AUDIT-AND-IMPLEMENTATION-REGISTER-2026-11-09.md')
+const sourceTruth = readProjectDoc('docs/PHASE-1-CONSOLIDATED-AUDIT-AND-IMPLEMENTATION-REGISTER-2026-11-09.md')
 const migrationFiles = fs.readdirSync('supabase/migrations').filter((f) => f.endsWith('.sql'))
 const migrationVersions = migrationFiles.map((f) => f.slice(0, 14))
 const workflow = read('.github/workflows/ci.yml')

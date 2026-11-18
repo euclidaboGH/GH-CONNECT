@@ -2,6 +2,7 @@
 /** Run #300: release identity, CI safety and Vercel upload integrity. */
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { readProjectDoc } from './lib/read-project-doc.mjs'
 const read = (p) => readFileSync(p, 'utf8')
 const pkg = JSON.parse(read('package.json'))
 const lock = JSON.parse(read('package-lock.json'))
@@ -11,7 +12,7 @@ const ci = existsSync(ciPath) ? read(ciPath) : ''
 const closure = read('scripts/check-phase10-release-closure.mjs')
 const phasePack = read('scripts/check-phase1-10-upgrade-pack.mjs')
 const truth = read('docs/PROJECT_TRUTH.md')
-const audit = read('docs/PHASE-1-CONSOLIDATED-AUDIT-AND-IMPLEMENTATION-REGISTER-2026-11-09.md')
+const audit = readProjectDoc('docs/PHASE-1-CONSOLIDATED-AUDIT-AND-IMPLEMENTATION-REGISTER-2026-11-09.md')
 const manifest = read('VERIFIED_MANIFEST.txt')
 const release = read('lib/app-release.ts')
 const ignore = read('.vercelignore').split(/\r?\n/).map((x) => x.trim())
