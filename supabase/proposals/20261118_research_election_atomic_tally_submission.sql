@@ -19,7 +19,7 @@ CREATE OR REPLACE FUNCTION public.gh_research_election_tally_submit(
 ) RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = pg_catalog, public
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 DECLARE
   v_contest public.gh_research_election_contests%ROWTYPE;
@@ -73,6 +73,12 @@ BEGIN
   IF v_candidate_total <> p_valid_votes OR v_candidate_total > 2147483647 THEN
     RETURN jsonb_build_object('ok',false,'code','CANDIDATE_TOTAL_MISMATCH');
   END IF;
+  IF v_candidate_count NOT BETWEEN 1 AND 100 OR v_candidate_count <> (
+    SELECT count(*)::integer FROM public.gh_research_candidates c
+    WHERE c.contest_id=p_contest_id AND c.is_active
+  ) THEN
+    RETURN jsonb_build_object('ok',false,'code','CANDIDATE_SET_INCOMPLETE');
+  END IF;
 
   SELECT c.* INTO v_contest
   FROM public.gh_research_election_contests c
@@ -80,6 +86,14 @@ BEGIN
   FOR UPDATE;
   IF NOT FOUND OR v_contest.status <> 'active' THEN
     RETURN jsonb_build_object('ok',false,'code','CONTEST_NOT_ACTIVE');
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.gh_research_members m
+    WHERE m.project_id=p_project_id AND m.user_id=p_actor_user_id
+      AND m.status='active' AND m.role IN ('owner','editor','field_agent')
+  ) THEN
+    RETURN jsonb_build_object('ok',false,'code','AGENT_NOT_ACTIVE_PROJECT_MEMBER');
   END IF;
 
   IF NOT EXISTS (
@@ -92,6 +106,9 @@ BEGIN
     )
     SELECT 1 FROM public.gh_research_geo_units g
     WHERE g.id=p_geo_unit_id AND g.country_code=v_contest.country_code AND g.is_active
+      AND g.level_key='polling_unit'
+      AND g.external_code=p_polling_unit_code
+      AND g.source_ref IS NOT NULL AND g.source_version IS NOT NULL
       AND (v_contest.geo_unit_id IS NULL OR g.id IN (SELECT id FROM contest_scope))
   ) THEN
     RETURN jsonb_build_object('ok',false,'code','GEOGRAPHIC_UNIT_NOT_ALLOWED');

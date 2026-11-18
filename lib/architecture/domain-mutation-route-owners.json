@@ -62,6 +62,10 @@
       "owner": "media"
     },
     {
+      "prefix": "/api/research/elections",
+      "owner": "research"
+    },
+    {
       "prefix": "/api/research/projects",
       "owner": "research"
     },

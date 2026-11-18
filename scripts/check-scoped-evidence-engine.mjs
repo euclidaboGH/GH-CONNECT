@@ -36,6 +36,7 @@ add(admin.includes('GHC_FIELD_ADMIN_USER_ID') && admin.includes('verification_st
 add(researchContent.includes('scan_status !== "clean"') && fieldContent.includes('scan_status !== "clean"') && researchContent.includes('rejected') && fieldContent.includes('quarantined'), 'both evidence delivery routes fail closed before clean scan')
 add(migration.includes('gh_scoped_evidence_uploads') && migration.includes('REVOKE ALL ON TABLE public.gh_scoped_evidence_uploads FROM PUBLIC,anon,authenticated'), 'scoped upload table has RLS and no client-role table privileges')
 add(migration.includes('gh_evidence_chain_events') && migration.includes('extensions.digest') && migration.includes('REVOKE INSERT,UPDATE,DELETE'), 'append-only SHA-256 evidence chain is database enforced')
+add(migration.includes('pg_advisory_xact_lock(hashtextextended(TG_TABLE_NAME') && migration.indexOf('pg_advisory_xact_lock') < migration.indexOf('SELECT event_hash, sequence_no INTO v_previous'), 'evidence-chain sequence allocation is serialized per evidence row')
 add(migration.includes('field_session_jti') && migration.includes('gh_field_report_append'), 'field reports persist the originating session JTI')
 add(migration.includes('geo_unit_id') && helper.includes('is_active=eq.true') && helper.includes('level_key !== "polling_unit"'), 'geographic IDs must be active and election scopes require polling-unit level')
 add(publicForm.includes('uploadEvidence(file:File)') && publicForm.includes('allowEvidenceUploads'), 'public form exposes consent-gated optional evidence uploads')

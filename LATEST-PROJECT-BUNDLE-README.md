@@ -1,46 +1,47 @@
 # GreenHaven — Current Project Bundle
 
-**Package:** `gh-connect@0.338.92`  
-**Hardening program:** Phases 1–4 complete in source  
-**Date:** 2026-11-17  
+**Package:** `gh-connect@0.338.99`  
+**Working increment:** RUN333 — Testnet security reconciliation and election tally UI/reconciliation source upgrade  
+**Baseline:** user-provided RUN331 archive; RUN332 audit remediation is the immediate parent.  
+**Date:** 2026-11-18  
+**Release status:** **NOT APPROVED** for production.
 
 ## Delivery identity
-Record SHA-256 of each packaged zip after build.
 
-| Artifact | SHA-256 |
-|----------|---------|
-| HARDENING phases 1–4 complete | *4c993d78a032f0ff644140c614bd81f9899e3e69bee299f73de43a5dd250673d* |
+The current RUN333 archive is a local source derivative. Its SHA-256 is supplied with the packaged artifact in the delivery message. It has not been pushed to GitHub or deployed to Vercel.
 
-## Hardening summary
-1. **Phase 1** — Address privacy hard-delete + CI proposal scan + route hardening  
-2. **Phase 2** — Operator keys, JWT claims, cookie CSRF, CSP, approve hardening, rate limits  
-3. **Phase 3** — Money/auth contracts, Playwright CI, supply chain, lint ratchet → 100, critical audit  
-4. **Phase 4** — Central Supabase client (0 raw `/rest/v1/` under `lib/`), file splits, image opt flag, worklog archive  
+## RUN333 changes
 
-## Gates
-- Node 24.15+  
-- No bulk migration push while REVIEW_REQUIRED remains  
-- **Production remains NOT APPROVED**
+1. Used the existing GH Connect Supabase Testnet project directly; no new Supabase branch was created.
+2. Applied `20261118033839_revoke_client_select_on_server_only_tables` to revoke redundant `SELECT` grants from `PUBLIC`, `anon`, and `authenticated` on eight RLS-enabled server-only tables. Postflight confirms service-role CRUD remains intact.
+3. Reconciled the Testnet history to 46 entries and regenerated the 230-file source migration inventory, manifest, checklist and apply-order guide. Twenty applied history entries still have no matching source filename and eleven same-slug/different-version candidates remain unverified.
+4. Added the authenticated field-agent election tally desk, own-assignment acceptance, provenance-gated polling-unit selection and owner/reviewer-only read-only independent tally comparison. Submissions remain disabled until the held atomic tally RPC and approved geography dataset are installed.
+5. Hardened the held tally SQL proposal to require active project membership, exact authoritative polling-unit code, source reference/version and the complete active candidate set.
+6. Added per-evidence advisory transaction locking to the held evidence hash-chain trigger to prevent concurrent sequence forks.
+7. Corrected final-release audit network classification to use `PI_NETWORK` rather than `PI_ENV`, and made the reported release version derive from `APP_RELEASE_VERSION`.
+8. Preserved server-side financial authority, Testnet-only payout fences, no mock backends, and Mainnet separation.
 
-## Key docs
-- `docs/SOURCE_OF_TRUTH.md`
-- `docs/HARDENING-PROGRAM-4-PHASES.md`
-- `docs/HARDENING-PHASE4-STRUCTURE-RELEASE-PROGRESS.md`
+## Verification
 
+- `npm run verify:static`: PASS on available Node 22.16.0.
+- RUN333 security reconciliation source gate: 11/11.
+- Election tally UI/reconciliation source gate: 13/13.
+- Election reconciliation runtime tests: 6/6.
+- Final release audit environment tests: 4/4.
+- Migration source manifest: 230/230.
+- Project truth: 11/11.
+- Changed TypeScript/TSX syntax transpilation: 7/7 with TypeScript 5.8.3; full project typecheck remains outstanding.
+- Full `npm run prebuild:checks` remains blocked because dependencies could not be installed and `typescript` is missing from the local workspace. The supported runtime is Node 24.15.0; typecheck, lint, production build and browser/device acceptance remain outstanding.
 
-## Previous implementation — Field Research foundation 0.338.87
+## Database and release gates
 
-Adds the Field Research ecosystem destination and redesigned `/field` agent workspace. The requested ten access codes are stored as SHA-256 digests in Preview-only Vercel variables for the `testnet` branch, with a dedicated HMAC session secret. The field report storage proposal was reviewed and applied to GH Connect Testnet as `20261116170409_gh_field_reports_public_intake`; postflight confirmed RLS and service-role-only access. See `docs/FIELD-RESEARCH-PLATFORM-UPGRADE-PLAN.md` for the 30-track programmes for Field Research, Challenge-on-Post and Polls-on-Post.
+- Testnet migration history: 46 entries; source inventory: 230 SQL migrations.
+- Twenty historical applied migration source files are missing; eleven version-drift candidates are not proven equivalent. Do not reconstruct, repair or replay them by guess.
+- The research foundation, media evidence engine and scoped evidence-chain migrations remain held pending exact source review and a safe rehearsal. Testnet currently has `gh_research_projects`, but dependent membership, geography, election, assignment, tally and atomic tally RPC objects are absent.
+- Trusted scanner provider/worker and provenance-backed authoritative geography dataset remain external prerequisites.
+- GitHub branch protection and source push remain outstanding. No Vercel deployment was triggered; fresh Testnet Preview verification is required.
+- Mainnet project was not modified. No balances, payment, payout, reward, membership, election or user data rows were changed.
 
+## Safety rule
 
-The previous 0.338.89 increment added basic conditional branching, durable Challenge-on-Post creation/join through a row-locked server RPC, and an additive REVIEW_REQUIRED schema foundation for research evidence, team roles, geographic hierarchy, election contests/candidates/assignments/tallies, timed examination attempts, poll policies and audit history. The earlier Research Studio migration `20261116171144_gh_research_studio_public_forms` remains applied and recorded on Testnet. New migration `20261116182000_gh_research_intelligence_platform_foundation` is source-only and unapplied. No Mainnet, GitHub push or Vercel deployment was performed. Full Node 24.15.0 dependency-backed build and browser/device acceptance remain outstanding. See `docs/UPGRADE-WORKLOG-0.338.89.md` and `docs/RESEARCH-STUDIO-USER-GUIDE.md`.
-
-
-## Latest source increment — 0.338.92
-
-Scoped Evidence Intake & Chain of Custody: public respondents can upload up to five evidence files through a project-scoped, submission-key-bound upload session; access-code field agents can upload against only reports created by their exact field-session JTI. Uploads are streamed through server-side SHA-256 hashing and magic-byte validation, then remain quarantined. A central Evidence Review Centre supports review after a trusted scanner attests clean; scanner queue and HMAC callback endpoints define the provider integration contract. Evidence creation, scan outcomes and review decisions are recorded in an append-only SHA-256 event chain. Active geographic unit IDs are validated, and election-observation projects require polling-unit-level IDs when supplied. Malware scanning itself still requires a separately operated trusted scanner; no provider is configured. New migration `20261117010001_gh_evidence_scoped_upload_chain_of_custody.sql` depends on migrations `20261116182000` and `20261116190000`; all three remain REVIEW_REQUIRED and unapplied. No GitHub push, Vercel deployment or Mainnet change was performed. See `docs/UPGRADE-WORKLOG-0.338.92.md` and `docs/SCOPED-EVIDENCE-USER-GUIDE.md`.
-
-
-## Testnet-only environment preparation — 0.338.92
-
-Vercel project `gh-connect` now has `SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, and `GH_MEDIA_BUCKET=gh-media` configured for Preview branch `testnet` only. Production values are unchanged. Testnet still requires its own `SUPABASE_SERVICE_ROLE_KEY`, `GHC_FIELD_ADMIN_USER_ID`, and a trusted scanner worker plus `GHC_EVIDENCE_SCANNER_SECRET`. These were intentionally not fabricated or copied from Production. The scoped evidence migration now defaults both scanner states to `pending`. The three database migrations have not been applied.
+Never run a bulk migration push while any migration source/history discrepancy or held migration remains. Testnet and Mainnet must be reconciled independently. Production remains NOT APPROVED until the supported-runtime build, exact database history/catalog reconciliation, provider acceptance, Pi Browser/device tests, and release-owner approval all pass.

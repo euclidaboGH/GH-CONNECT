@@ -106,6 +106,10 @@ DECLARE
   v_actor text;
   v_event text;
 BEGIN
+  -- Serialize per-evidence chain appends so concurrent scanner/review updates
+  -- cannot select the same next sequence number or fork the hash chain.
+  PERFORM pg_advisory_xact_lock(hashtextextended(TG_TABLE_NAME || ':' || v_id::text, 0));
+
   SELECT event_hash, sequence_no INTO v_previous, v_sequence
   FROM public.gh_evidence_chain_events
   WHERE evidence_table=TG_TABLE_NAME AND evidence_id=v_id
