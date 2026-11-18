@@ -5,6 +5,7 @@
  */
 import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { hasProjectDoc } from './lib/read-project-doc.mjs'
 
 const root = process.cwd()
 const read = (p) => readFileSync(join(root, p), 'utf8')
@@ -56,7 +57,7 @@ test('accessibility requires visible focus styles', /:focus-visible/.test(css))
 test('resilience checker exists', resilience.length > 50)
 test('service worker policy test exists', sw.length > 50)
 test('production remains explicitly not approved in project truth', /NOT APPROVED/.test(truth) || /not approved/i.test(truth))
-test('phase 10 platform acceptance doc exists', existsSync(join(root, 'docs/PHASE-10-PLATFORM-ACCEPTANCE-2026-11-08.md')))
+test('phase 10 platform acceptance doc exists in canonical or preserved historical documentation', hasProjectDoc('docs/PHASE-10-PLATFORM-ACCEPTANCE-2026-11-08.md'))
 test('phase 10 checker is registered in prebuild', prebuild.includes('check-phase10-platform-acceptance.mjs'))
 test('completion register documents programme phases 1-10', existsSync(join(root, 'docs/PROGRAMME-COMPLETION-REGISTER-2026-11-08.md')))
 
