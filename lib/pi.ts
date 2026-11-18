@@ -14,7 +14,6 @@ import { createPiSDK } from "@swetate/core";
 import { authPlugin } from "@swetate/auth";
 import { userStatePlugin } from "@swetate/user-state";
 import { PI_NETWORK_CONFIG } from "@/lib/system-config";
-import { onIncompletePaymentFound } from "@/lib/pi-incomplete-payment";
 import type { RestoreOptions, SDKLiteInstance, UserStateRecord, UserStateWritable } from "@/lib/sdklite-types";
 
 interface PiUser {
@@ -91,32 +90,9 @@ export function createSdk(sdkLite: SDKLiteInstance, pi: PiSdk): SDKLiteInstance 
     ...sdkLiteMethods,
     login: async () => {
       await pi.auth.login();
-      // Ensure incomplete-payment recovery is registered on window.Pi when available
-      try {
-        const wPi = (typeof window !== "undefined"
-          ? (window as unknown as {
-              Pi?: {
-                authenticate?: (
-                  scopes: string[],
-                  onIncomplete: (p: unknown) => void
-                ) => Promise<unknown>
-              }
-            }).Pi
-          : null)
-        if (wPi && typeof wPi.authenticate === "function") {
-          await wPi.authenticate(["username", "payments"], (payment) => {
-            void onIncompletePaymentFound(
-              payment as {
-                identifier?: string
-                paymentId?: string
-                transaction?: { txid?: string } | null
-              }
-            )
-          })
-        }
-      } catch {
-        /* already authenticated or SDK path without classic authenticate */
-      }
+      // The official Pi auth provider already registers incomplete-payment
+      // recovery during its username-scope authentication. Never launch a
+      // second classic Pi.authenticate call or silently request payments here.
       return sdkLite.login();
     },
     state: {

@@ -27,13 +27,17 @@ export type PiRuntimeSnapshot = {
   hasCreatePayment: boolean
   initialized: boolean
   hostname: string | null
+  origin: string | null
+  referrerHost: string
+  inIframe: boolean
+  sandboxFrame: boolean
 }
 
 
 /** Emit stable, token-free Pi auth diagnostics for field troubleshooting. */
 export function reportPiAuthDiagnostic(
   code: string,
-  details: { stage?: string; status?: number; sandbox?: boolean; hasPi?: boolean; hasAccessToken?: boolean; errorName?: string; errorShape?: string; reasonClass?: string; reason?: string; inIframe?: boolean } = {},
+  details: { stage?: string; status?: number; sandbox?: boolean; hasPi?: boolean; hasAccessToken?: boolean; errorName?: string; errorShape?: string; reasonClass?: string; reason?: string; inIframe?: boolean; userActivationActive?: boolean } = {},
 ): void {
   const safeCode = /^[A-Z0-9_]{3,64}$/.test(code) ? code : "PI_AUTH_DIAGNOSTIC_INVALID"
   const safeDetails = {
@@ -48,6 +52,7 @@ export function reportPiAuthDiagnostic(
     // Bounded (<=80 chars), printable-ASCII, token-redacted reason text only; never a raw error object.
     reason: typeof details.reason === "string" ? details.reason.slice(0, 80) : undefined,
     inIframe: typeof details.inIframe === "boolean" ? details.inIframe : undefined,
+    userActivationActive: typeof details.userActivationActive === "boolean" ? details.userActivationActive : undefined,
   }
   // Never include tokens, usernames, Pi UIDs, cookies, request bodies, or raw errors.
   console.info("[GH_PI_AUTH_DIAGNOSTIC]", { code: safeCode, ...safeDetails })
@@ -72,8 +77,31 @@ function recordPiAuthDiagnostic(entry: PiAuthDiagnosticEntry): void {
   } catch { /* diagnostics must never break authentication */ }
 }
 
+function getReferrerHost(): string {
+  if (typeof document === "undefined" || !document.referrer) return "none"
+  try { return new URL(document.referrer).hostname.toLowerCase() } catch { return "unparseable" }
+}
+
+export function isPiSandboxFrame(): boolean {
+  if (typeof window === "undefined" || !getPiSandbox()) return false
+  let framed = false
+  try { framed = window.self !== window.top } catch { framed = true }
+  const referrerHost = getReferrerHost()
+  // Pi's Developer Sandbox wraps the registered app on this host. The referrer
+  // is corroborating evidence; framing remains required so a copied referrer
+  // cannot make a top-level Vercel page appear authorised.
+  return framed && (referrerHost === "sandbox.minepi.com" || referrerHost.endsWith(".sandbox.minepi.com"))
+}
+
 function isWindowFramed(): boolean {
   try { return window.self !== window.top } catch { return true }
+}
+
+function isUserActivationActive(): boolean | undefined {
+  try {
+    const activation = (navigator as Navigator & { userActivation?: { isActive?: boolean } }).userActivation
+    return typeof activation?.isActive === "boolean" ? activation.isActive : undefined
+  } catch { return undefined }
 }
 
 /** Short, printable, token-redacted reason text from whatever the Pi SDK rejected with. */
@@ -111,15 +139,14 @@ export function classifyPiAuthReason(reason: string | undefined): string {
 export function buildPiAuthDiagnosticReport(): string {
   if (typeof window === "undefined") return "Pi auth diagnostics are client-only"
   const snap = getPiRuntimeSnapshot()
-  let referrerHost = "none"
-  try { referrerHost = document.referrer ? new URL(document.referrer).hostname : "none" } catch { referrerHost = "unparseable" }
+  const referrerHost = snap.referrerHost
   const w = window as unknown as Record<string, unknown>
   const history = Array.isArray(w[PI_AUTH_HISTORY_KEY]) ? (w[PI_AUTH_HISTORY_KEY] as PiAuthDiagnosticEntry[]) : []
   return [
     `GH Pi auth diagnostics ${new Date().toISOString()}`,
-    `host=${snap.hostname} mode=${snap.mode} sandbox=${snap.sandbox}`,
+    `host=${snap.hostname} origin=${snap.origin || "none"} mode=${snap.mode} sandbox=${snap.sandbox}`,
     `clientIdConfigured=${snap.clientIdConfigured} hasWindowPi=${snap.hasWindowPi} hasInit=${snap.hasInit} hasAuthenticate=${snap.hasAuthenticate} initialized=${snap.initialized}`,
-    `inIframe=${isWindowFramed()} referrerHost=${referrerHost}`,
+    `inIframe=${snap.inIframe} referrerHost=${referrerHost} sandboxFrame=${snap.sandboxFrame}`,
     ...history.map((e) => JSON.stringify(e)),
   ].join("\n")
 }
@@ -131,8 +158,10 @@ export function buildPiAuthDiagnosticReport(): string {
  */
 export function getPiSandboxLaunchHint(): string | null {
   if (typeof window === "undefined" || !getPiSandbox()) return null
-  if (isWindowFramed()) return null
-  return "Sandbox mode is on but this page is not running inside Pi's sandbox frame. Open the app from Pi Develop using its Sandbox link; opening the Vercel URL directly can make Pi reject authorization."
+  // Use the same frame/referrer evidence as diagnostics and the auth bootstrap.
+  // Never show the direct-URL warning when the Pi Sandbox wrapper is confirmed.
+  if (isPiSandboxFrame() || isWindowFramed()) return null
+  return "Sandbox mode is enabled, but this page is not inside a recognised Pi Sandbox frame. Open the app with its Sandbox launch link."
 }
 
 let initPromise: Promise<void> | null = null
@@ -171,6 +200,10 @@ export function getPiRuntimeSnapshot(): PiRuntimeSnapshot {
     hasCreatePayment: typeof Pi?.createPayment === "function",
     initialized,
     hostname: host,
+    origin: typeof window !== "undefined" ? window.location.origin : null,
+    referrerHost: getReferrerHost(),
+    inIframe: typeof window !== "undefined" ? isWindowFramed() : false,
+    sandboxFrame: isPiSandboxFrame(),
   }
 }
 
@@ -288,7 +321,13 @@ export type PiAuthenticateResult = {
 export async function piAuthenticateOfficial(
   scopes: string[] = ["username", "payments"]
 ): Promise<PiAuthenticateResult> {
-  await ensurePiInitialized()
+  // Important: when the SDK was pre-initialized during page bootstrap, invoke
+  // Pi.authenticate immediately in the click handler's task. Do not insert an
+  // awaited init/bridge step between the user's tap and the Pi authorization
+  // prompt. If not ready, initialize first; the caller can then retry by tap.
+  if (!initialized || !getWindowPi()) {
+    return ensurePiInitialized().then(() => piAuthenticateOfficial(scopes))
+  }
   const Pi = getWindowPi()
   if (!Pi || typeof Pi.authenticate !== "function") {
     throw new Error("Pi.authenticate is not available on this host")
@@ -305,6 +344,13 @@ export async function piAuthenticateOfficial(
   }>
 
   const authenticate = Pi.authenticate as PiAuthFn
+  reportPiAuthDiagnostic("PI_AUTH_INVOKE_CONTEXT", {
+    stage: "pi_authenticate",
+    sandbox: getPiSandbox(),
+    hasPi: true,
+    inIframe: isWindowFramed(),
+    userActivationActive: isUserActivationActive(),
+  })
   reportPiAuthDiagnostic("PI_AUTH_PROMPT_START", { stage: "pi_authenticate", sandbox: getPiSandbox(), hasPi: true })
   let authResult: Awaited<ReturnType<PiAuthFn>>
   // The Pi bridge can leave authenticate() pending indefinitely when its host

@@ -20,6 +20,7 @@ import {
   piAuthenticateOfficial,
   reportPiAuthDiagnostic,
   getPiSandboxLaunchHint,
+  isPiSandboxFrame,
 } from "@/lib/pi-runtime";
 import {
   INITIAL_AUTH_LIFECYCLE,
@@ -214,22 +215,6 @@ function detectPiEnvironment(): {
   }
 }
 
-/**
- * Pi Browser often injects window.Pi slightly after first paint.
- * Poll briefly before treating the bridge as missing.
- */
-async function waitForWindowPi(timeoutMs = 14000, intervalMs = 200): Promise<boolean> {
-  if (typeof window === "undefined") return false
-  if (typeof (window as any).Pi !== "undefined") return true
-  const start = Date.now()
-  while (Date.now() - start < timeoutMs) {
-    await new Promise((r) => setTimeout(r, intervalMs))
-    if (typeof (window as any).Pi !== "undefined") return true
-  }
-  return typeof (window as any).Pi !== "undefined"
-}
-
-
 /** Map raw SDK ReferenceErrors to a clear operator message */
 function humanizePiAuthError(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err || "Authentication failed")
@@ -254,8 +239,9 @@ function humanizePiAuthError(err: unknown): string {
 
 
 /**
- * Official Pi auth path via unified pi-runtime:
- * ensurePiInitialized (once) → Pi.authenticate
+ * Official Pi auth path via unified pi-runtime.
+ * Sandbox bootstrap pre-initializes the SDK; a direct sign-in tap then invokes
+ * Pi.authenticate without waiting on the App Studio bridge or SDK loader.
  * Backend must still verify accessToken via Platform API GET /me.
  */
 async function officialPiAuthenticate(): Promise<{
@@ -265,13 +251,6 @@ async function officialPiAuthenticate(): Promise<{
 }> {
   if (typeof window === "undefined") {
     throw new Error("No window")
-  }
-  try {
-    await ensurePiInitialized()
-  } catch {
-    // Fallback wait if script race
-    await waitForWindowPi(14000, 200)
-    await ensurePiInitialized()
   }
   // Sign-in needs identity only. Payment and wallet permissions are requested
   // later, inside the specific payment/authorization flow that needs them.
@@ -370,7 +349,11 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
       // 1) App Studio parent credentials (iframe)
       setAuthMessage("Connecting to Pi Network...");
       setAuthLifecycle((s) => transitionAuth(s, "PI_AUTHENTICATING"));
-      const parentCredentials = await requestParentCredentials();
+      // Pi Developer Sandbox is not the legacy App Studio parent bridge. Skip
+      // the 4-second postMessage probe there so a user's Retry tap can reach the
+      // already-initialized Pi.authenticate call without an intervening await.
+      const sandboxFrame = isPiSandboxFrame()
+      const parentCredentials = sandboxFrame ? null : await requestParentCredentials();
       if (parentCredentials?.accessToken) {
         setAuthMessage("Authenticated via App Studio...");
         // Establish a GH server session so uploads / profile saves are authorized.
@@ -435,8 +418,11 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
       diagnosticStage = "PI_SDK_INIT";
       setAuthMessage("Loading Pi SDK...");
       try {
-        // Use the shared single-flight SDK loader; do not race the root SDK script.
-        await ensurePiInitialized();
+        // Sandbox iframe bootstrap has already initialized the SDK before the
+        // sign-in button is shown. Other hosts initialize here as before.
+        // Crucially, Sandbox skips this await so a user's tap reaches
+        // Pi.authenticate in the same task.
+        if (!sandboxFrame) await ensurePiInitialized();
         diagnosticStage = "PI_AUTHENTICATE";
         setAuthMessage("Authenticating with Pi...");
         setAuthLifecycle((s) => transitionAuth(s, "PI_AUTHENTICATING"));
@@ -821,9 +807,10 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
             const sdkLite = await (window as any).SDKLite.init();
             let sdkInstance: SDKLiteInstance;
             try {
+              // The Pioneer has already authenticated through the official Pi
+              // SDK and the server session has been verified. Do not start a
+              // second Pi auth flow while bringing up optional commerce.
               const pi = buildPiSdk();
-              await pi.auth.login();
-              await sdkLite.login();
               sdkInstance = createSdk(sdkLite, pi);
             } catch {
               sdkInstance = sdkLite;
@@ -1006,11 +993,44 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // User explicitly logged out: do not silently sign back in on reload.
     if (readSignedOutFlag()) {
-      setHasError(true);
-      setAuthMessage("You are signed out. Tap Sign in with Pi to continue.");
+      if (isPiSandboxFrame()) {
+        let cancelled = false
+        setHasError(false)
+        setAuthMessage("Preparing Pi Sandbox sign-in…")
+        void ensurePiInitialized().then(() => {
+          if (cancelled) return
+          setHasError(true)
+          setAuthMessage("You are signed out. Pi Sandbox is ready. Tap Sign in with Pi to continue.")
+        }).catch((error) => {
+          if (cancelled) return
+          setHasError(true)
+          setAuthMessage(humanizePiAuthError(error) + " (PI_SDK_INIT_FAILED)")
+          reportPiAuthDiagnostic("PI_SDK_INIT_FAILED", {
+            stage: "sdk_init",
+            sandbox: true,
+            errorName: error instanceof Error ? error.name : "UnknownError",
+          })
+        })
+        return () => { cancelled = true }
+      }
+      setHasError(true)
+      setAuthMessage("You are signed out. Tap Sign in with Pi to continue.")
       return undefined;
     }
     let cancelled = false;
+    if (isPiSandboxFrame()) {
+      setAuthMessage("Preparing Pi Sandbox sign-in…")
+      void ensurePiInitialized().then(() => {
+        if (cancelled) return
+        setHasError(true)
+        setAuthMessage("Pi Sandbox is ready. Tap Sign in with Pi to authorize your account.")
+      }).catch((error) => {
+        if (cancelled) return
+        setHasError(true)
+        setAuthMessage(humanizePiAuthError(error) + " (PI_SDK_INIT_FAILED)")
+      })
+      return () => { cancelled = true }
+    }
     const hardTimeout = window.setTimeout(() => {
       if (cancelled) return;
       setIsAuthenticated((prev) => {

@@ -5,6 +5,7 @@ import { getPiClientId } from "@/lib/pi-env"
 import { startPiSignIn } from "@/lib/pi-oauth-client"
 import { isPiBrowserRuntime, markPiBrowserRuntime } from "@/lib/pi-native"
 import { usePiAuth } from "@/contexts/pi-auth-context"
+import { isPiSandboxFrame } from "@/lib/pi-runtime"
 
 type Props = {
   className?: string
@@ -23,6 +24,7 @@ export function SignInWithPiButton({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const configured = Boolean(getPiClientId())
+  const inPiRuntime = isPiBrowserRuntime() || isPiSandboxFrame()
   const { reinitialize } = usePiAuth()
 
   const onClick = async () => {
@@ -32,7 +34,7 @@ export function SignInWithPiButton({
     try {
       // Pi Browser: OAuth redirect pages often reject in-app WebViews.
       // Prefer the official SDK authenticate path already used by the provider.
-      if (typeof window !== "undefined" && isPiBrowserRuntime()) {
+      if (typeof window !== "undefined" && (isPiBrowserRuntime() || isPiSandboxFrame())) {
         markPiBrowserRuntime()
         await reinitialize()
         setBusy(false)
@@ -54,7 +56,7 @@ export function SignInWithPiButton({
     <div className="w-full flex flex-col items-center gap-2">
       <button
         type="button"
-        disabled={busy || (!configured && !isPiBrowserRuntime())}
+        disabled={busy || (!configured && !inPiRuntime)}
         onClick={() => void onClick()}
         className={
           className ||
@@ -63,7 +65,7 @@ export function SignInWithPiButton({
       >
         {busy ? "Connecting to Pi…" : label}
       </button>
-      {!configured && !isPiBrowserRuntime() ? (
+      {!configured && !inPiRuntime ? (
         <p className="max-w-xs text-center text-[11px] text-white/40">
           Pi Sign-in Client ID is not configured (NEXT_PUBLIC_PI_CLIENT_ID).
         </p>

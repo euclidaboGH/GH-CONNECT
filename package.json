@@ -2,7 +2,7 @@
   "name": "gh-connect",
   "version": "0.338.99",
   "private": true,
-  "description": "GreenHaven — social, matching, community, messaging, marketplace and GHC utility platform",
+  "description": "GreenHaven \u2014 social, matching, community, messaging, marketplace and GHC utility platform",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -304,7 +304,8 @@
     "check:run333-election-tally-ui": "node scripts/check-run333-election-tally-ui.mjs",
     "test:election-reconciliation": "node --disable-warning=ExperimentalWarning --experimental-strip-types scripts/test-election-reconciliation.mjs",
     "check:run335-type-narrowing": "node scripts/check-run335-type-narrowing.mjs",
-    "check:run336-build-cleanup": "node scripts/check-run336-build-cleanup.mjs"
+    "check:run336-build-cleanup": "node scripts/check-run336-build-cleanup.mjs",
+    "check:run353-pi-auth-root-cause": "node scripts/check-run353-pi-auth-root-cause.mjs"
   },
   "dependencies": {
     "@simplewebauthn/browser": "13.2.2",

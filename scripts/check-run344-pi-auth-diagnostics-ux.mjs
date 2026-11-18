@@ -12,7 +12,7 @@ const checks = [
   ['rejection diagnostic records reason class and framing', /reasonClass: classifyPiAuthReason\(reason\)/.test(runtime) && /inIframe: isWindowFramed\(\)/.test(runtime)],
   ['token-free diagnostic contract is preserved', runtime.includes('Never include tokens, usernames, Pi UIDs, cookies, request bodies, or raw errors.')],
   ['diagnostic history is bounded and token-free', /PI_AUTH_HISTORY_MAX = 30/.test(runtime) && !/accessToken|Authorization|cookie/i.test((runtime.split('export function buildPiAuthDiagnosticReport')[1] || '').split('export function getPiSandboxLaunchHint')[0])],
-  ['sandbox launch hint exists and only applies to unframed sandbox mode', /export function getPiSandboxLaunchHint/.test(runtime) && /if \(isWindowFramed\(\)\) return null/.test(runtime)],
+  ['sandbox launch hint exists and only applies to unframed sandbox mode', /export function getPiSandboxLaunchHint/.test(runtime) && /if \(isPiSandboxFrame\(\) \|\| isWindowFramed\(\)\) return null/.test(runtime)],
   ['sign-in failure message appends the sandbox hint only for authenticate failures', /diagnosticCode === "PI_AUTHENTICATE_FAILED" \? getPiSandboxLaunchHint\(\)/.test(context)],
   ['error screen offers copyable diagnostics', /buildPiAuthDiagnosticReport/.test(screen) && /Copy sign-in diagnostics/.test(screen)],
   ['no local identity fallback introduced', !/PI_AUTH_PROMPT_REJECTED[\s\S]{0,900}continueLocalPreview/.test(runtime)],
