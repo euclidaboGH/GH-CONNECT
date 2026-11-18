@@ -1,5 +1,6 @@
 import fs from "node:fs"
 import path from "node:path"
+import { readProjectDoc } from "./lib/read-project-doc.mjs"
 
 const root = process.cwd()
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8")
@@ -10,7 +11,7 @@ const checks = [
   ["workflow feedback is accessible", /aria-live="polite"/.test(read("components/ghc/workflow-feedback.tsx"))],
   ["marketplace uses shared feedback", /WorkflowFeedback/.test(read("components/ghc/marketplace-screen.tsx"))],
   ["home uses shared feedback", /WorkflowFeedback/.test(read("components/ghc/home-cross-feature-path.tsx"))],
-  ["canonical navigation remains five items", /Home.*Messages.*Communities.*Cart.*Profile/s.test(read("docs/release-0.252.0-pass30.md"))],
+  ["canonical navigation remains five items", /Home.*Messages.*Communities.*Cart.*Profile/s.test(readProjectDoc("docs/release-0.252.0-pass30.md"))],
   ["no migration files changed by this pass", !fs.existsSync(path.join(root, "scripts/.pass31-migration-touch"))],
 ]
 let failed = 0

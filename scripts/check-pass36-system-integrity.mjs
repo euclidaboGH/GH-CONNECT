@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { readProjectDoc } from './lib/read-project-doc.mjs'
 
 const root = process.cwd()
 const read = (file) => readFileSync(join(root, file), 'utf8')
@@ -18,7 +19,7 @@ const checks = [
   ['system-integrity gate runs before production build', prebuild.includes('node scripts/check-pass36-system-integrity.mjs')],
   ['production release remains explicitly unapproved pending live evidence', read('docs/PROJECT_TRUTH.md').includes('NOT APPROVED') && read('docs/PROJECT_TRUTH.md').includes('does not establish')],
   ['runtime contract remains pinned to Node 24.15.0', pkg.engines?.node === '^24.15.0' && read('.nvmrc').trim() === '24.15.0'],
-  ['canonical bottom navigation contract remains documented', read('lib/navigation/destinations.ts').includes('BOTTOM_NAV_IDS = ["home", "discover", "messages", "communities", "cart", "profile"]') && read('docs/release-0.259.0-pass37.md').includes('Wallet remains an overlay')],
+  ['canonical bottom navigation contract remains documented', read('lib/navigation/destinations.ts').includes('BOTTOM_NAV_IDS = ["home", "discover", "messages", "communities", "cart", "profile"]') && readProjectDoc('docs/release-0.259.0-pass37.md').includes('Wallet remains an overlay')],
 ]
 let failures = 0
 for (const [label, pass] of checks) {

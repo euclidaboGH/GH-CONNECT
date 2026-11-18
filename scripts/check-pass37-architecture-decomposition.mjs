@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync, statSync } from "node:fs"
 import { join } from "node:path"
+import { readProjectDoc } from "./lib/read-project-doc.mjs"
 const read = (file) => readFileSync(join(process.cwd(), file), "utf8")
 const pkg = JSON.parse(read("package.json"))
 const context = read("contexts/ghc-context.tsx")
@@ -16,7 +17,7 @@ const checks = [
   ["marketplace screen consumes extracted presentation helpers", marketplace.includes("@/lib/marketplace/discovery-presentation") && !marketplace.includes("function relatedListingsFor")],
   ["marketplace recommendations remain sourced from real domain data", discoveryModule.includes('domain.listListings({ status: "active" })') && discoveryModule.includes("domain.listCommunities()")],
   ["financial execution boundaries are unchanged in extracted modules", !/payment|wallet|ledger|authorization|executeSpend/i.test(feedModule + discoveryModule)],
-  ["no migration SQL was introduced by this architecture pass", read("docs/release-0.259.0-pass37.md").includes("No database migrations")],
+  ["no migration SQL was introduced by this architecture pass", readProjectDoc("docs/release-0.259.0-pass37.md").includes("No database migrations")],
 ]
 let failures = 0
 for (const [label, ok] of checks) { console.log(`${ok ? "PASS" : "FAIL"} ${label}`); if (!ok) failures++ }

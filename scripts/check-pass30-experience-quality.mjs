@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { readProjectDoc } from './lib/read-project-doc.mjs'
 
 const root = process.cwd()
 const read = (p) => fs.readFileSync(path.join(root, p), 'utf8')
@@ -12,7 +13,7 @@ const checks = [
   ['empty status accessibility', /aria-live="polite"/.test(read('components/ghc/empty-state.tsx'))],
   ['marketplace loading standardization', /<LoadingState title="Loading your listings"/.test(read('components/ghc/marketplace-screen.tsx')) && /<LoadingState title="Loading orders"/.test(read('components/ghc/marketplace-screen.tsx'))],
   ['no migration edits in release script', !read('package.json').includes('check-pass30-experience-quality.mjs && node scripts/check-node-runtime.mjs') || true],
-  ['canonical nav remains', /Home/.test(read('docs/release-0.252.0-pass30.md')) && /Messages/.test(read('docs/release-0.252.0-pass30.md')) && /Communities/.test(read('docs/release-0.252.0-pass30.md')) && /Cart/.test(read('docs/release-0.252.0-pass30.md')) && /Profile/.test(read('docs/release-0.252.0-pass30.md'))],
+  ['canonical nav remains', /Home/.test(readProjectDoc('docs/release-0.252.0-pass30.md')) && /Messages/.test(readProjectDoc('docs/release-0.252.0-pass30.md')) && /Communities/.test(readProjectDoc('docs/release-0.252.0-pass30.md')) && /Cart/.test(readProjectDoc('docs/release-0.252.0-pass30.md')) && /Profile/.test(readProjectDoc('docs/release-0.252.0-pass30.md'))],
 ]
 let failed = 0
 for (const [name, ok] of checks) { console.log(`${ok ? 'PASS' : 'FAIL'} ${name}`); if (!ok) failed++ }

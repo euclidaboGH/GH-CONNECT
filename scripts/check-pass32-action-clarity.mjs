@@ -1,5 +1,6 @@
 import fs from "node:fs"
 import path from "node:path"
+import { readProjectDoc } from "./lib/read-project-doc.mjs"
 const root = process.cwd()
 const read = (f) => fs.readFileSync(path.join(root, f), "utf8")
 const checks = [
@@ -8,7 +9,7 @@ const checks = [
   ["discovery actions have accessible labels", /aria-label=\{actionAriaLabel\(/.test(read("components/ghc/discovery-object-card.tsx"))],
   ["discovery actions use comfortable touch targets", (read("components/ghc/discovery-object-card.tsx").match(/min-h-10/g) || []).length >= 4],
   ["workflow feedback remains present", fs.existsSync(path.join(root, "components/ghc/workflow-feedback.tsx"))],
-  ["canonical navigation preserved", /Home.*Messages.*Communities.*Cart.*Profile/s.test(read("docs/release-0.252.0-pass30.md"))],
+  ["canonical navigation preserved", /Home.*Messages.*Communities.*Cart.*Profile/s.test(readProjectDoc("docs/release-0.252.0-pass30.md"))],
   ["no migration touch marker", !fs.existsSync(path.join(root, "scripts/.pass32-migration-touch"))],
   ["no financial mutation in action helper", !/balance|ledger|payment|withdraw/i.test(read("lib/action-language.ts"))],
 ]
