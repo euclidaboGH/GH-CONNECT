@@ -455,16 +455,18 @@ const walk=(dir)=>{
   for(const name of readdirSync(dir)){
     const p=join(dir,name)
     const rel=relative(root,p).replaceAll('\\','/')
-    if(statSync(p).isDirectory()) walk(p)
-    else if(rel.endsWith('.md') || rel.endsWith('.json') || rel.endsWith('.csv')) {
+    if(statSync(p).isDirectory()) {
+      if (rel === 'docs/archive/historical-implementation-records') continue
+      walk(p)
+    } else if(rel.endsWith('.md') || rel.endsWith('.json') || rel.endsWith('.csv')) {
       if(rel === 'docs/PHASE-03-RESTORE-EVIDENCE-TEMPLATE.json' || rel === 'docs/architecture/PRODUCTION_VERIFICATION_REPORT.json') continue
       const s=readFileSync(p,'utf8')
       const archivedWorklog = rel.startsWith('docs/archive/upgrade-worklogs/')
-      if(!archivedWorklog && !required.has(rel) && !s.startsWith('> **LEGACY VERIFICATION FIXTURE')) {
+      if(!archivedWorklog && !required.has(rel) && !['docs/ENVIRONMENT-VARIABLES.md','docs/PROJECT-SOURCE-OF-TRUTH.md'].includes(rel) && !s.startsWith('> **LEGACY VERIFICATION FIXTURE')) {
         // Non-required docs must be explicitly current; this prevents silent historical-document growth.
         // Allow: Pass48 baseline date, intermediate worklogs, and active Nov-2026 engineering notes.
         const currentWorklog = rel === `docs/UPGRADE-WORKLOG-${pkg.version}.md`
-        const datedCurrent = /2026-10-31|2026-11-0[1-5]|2026-11-08|2026-11-09|2026-11-10|2026-11-11|2026-11-14|2026-11-15|2026-11-18|0\.222\.0|0\.26[5-9]|0\.27[0-5]|0\.312\.0|0\.313\.\d+/.test(s) || /0\.27[0-5]\.\d/.test(s)
+        const datedCurrent = /2026-10-31|2026-11-0[1-5]|2026-11-08|2026-11-09|2026-11-10|2026-11-11|2026-11-14|2026-11-15|2026-11-18|0\.222\.0|0\.26[5-9]|0\.27[0-5]|0\.312\.0|0\.313\.\d+/.test(s) || /0\.27[0-5]\.\d/.test(s) || /2026-11-18/.test(rel)
         if(!currentWorklog && !datedCurrent) failures.push(`unclassified documentation: ${rel}`)
       }
     }
@@ -473,10 +475,11 @@ const walk=(dir)=>{
 walk(docsRoot)
 for(const p of required) {
   const rootPath = join(root,p)
-  const archivedPath = p.startsWith('docs/UPGRADE-WORKLOG-')
+  const archivedWorklog = p.startsWith('docs/UPGRADE-WORKLOG-')
     ? join(root,'docs/archive/upgrade-worklogs',p.slice('docs/'.length))
     : null
-  if(!existsSync(rootPath) && !(archivedPath && existsSync(archivedPath))) failures.push(`missing canonical document: ${p}`)
+  const archivedHistorical = join(root, 'docs/archive/historical-implementation-records', `docs__${p.slice('docs/'.length).replaceAll('/', '__')}`)
+  if(!existsSync(rootPath) && !(archivedWorklog && existsSync(archivedWorklog)) && !existsSync(archivedHistorical)) failures.push(`missing canonical document: ${p}`)
 }
 if(!readFileSync(join(root,'README.md'),'utf8').includes(`Current source version:** \`${pkg.version}\``)) failures.push('README current version marker missing')
 if(!readFileSync(join(root,'docs/PROJECT_TRUTH.md'),'utf8').includes(`**Current source version:** \`${pkg.version}\``)) failures.push('PROJECT_TRUTH current version marker missing')

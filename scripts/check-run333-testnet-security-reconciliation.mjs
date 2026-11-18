@@ -2,7 +2,10 @@
 /** Source contract for RUN333's narrowly scoped, already-applied Testnet grant revocation. */
 import { readFileSync, existsSync } from 'node:fs'
 
-const read = (path) => readFileSync(path, 'utf8')
+const read = (path) => {
+  const archived = `docs/archive/historical-implementation-records/docs__${path.slice('docs/'.length)}`
+  return readFileSync(existsSync(path) ? path : archived, 'utf8')
+}
 const migrationPath = 'supabase/migrations/20261118033839_revoke_client_select_on_server_only_tables.sql'
 const migration = read(migrationPath)
 const order = read('supabase/TESTNET_APPLY_ORDER.md')

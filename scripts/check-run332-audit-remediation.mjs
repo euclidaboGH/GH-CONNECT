@@ -13,6 +13,7 @@ const ci = read('.github/workflows/ci.yml')
 const security = read('.github/workflows/dependency-security.yml')
 const pkg = JSON.parse(read('package.json'))
 const reportPath = 'docs/RUN332-ADVANCED-PROJECT-AUDIT-AND-REMEDIATION-2026-11-18.md'
+const archivedReportPath = 'docs/archive/historical-implementation-records/docs__RUN332-ADVANCED-PROJECT-AUDIT-AND-REMEDIATION-2026-11-18.md'
 const migrationMap = read('docs/RUN332-MIGRATION-HISTORY-RECONCILIATION.csv')
 const checks = []
 const check = (name, ok) => {
@@ -55,8 +56,8 @@ check('checkout disables persisted GitHub token credentials', checkoutUses > 0 &
 check('dependency audit distinguishes registry errors from vulnerability findings and fails closed on findings', /report\.error/.test(security) && /counts\.total/.test(security) && /Security gate blocked:/.test(security) && /process\.exit\(1\)/.test(security))
 check('new audit gate is wired into static verification and prebuild', ['verify:static','prebuild:checks'].every((key) => pkg.scripts[key].includes('check-run332-audit-remediation.mjs') && pkg.scripts[key].includes('test-run332-pi-environment-classification.mjs')))
 check('45-row historical migration reconciliation is present with explicit match states', migrationMap.trim().split(/\r?\n/).length === 46 && migrationMap.includes('exact_version_match') && migrationMap.includes('same_slug_different_version_unverified') && migrationMap.includes('no_matching_filename'))
-check('full audit report is present and preserves production no-go', existsSync(reportPath) && /Production remains NOT APPROVED/.test(read(reportPath)))
-check('RUN333 Testnet follow-up and current 46-row migration map are present', existsSync('docs/RUN333-TESTNET-SECURITY-RECONCILIATION-2026-11-18.md') && existsSync('docs/RUN333-MIGRATION-HISTORY-RECONCILIATION.csv') && read('docs/RUN333-MIGRATION-HISTORY-RECONCILIATION.csv').trim().split(/\r?\n/).length === 47)
+check('full audit report is present and preserves production no-go', (existsSync(reportPath) || existsSync(archivedReportPath)) && /Production remains NOT APPROVED/.test(read(existsSync(reportPath) ? reportPath : archivedReportPath)))
+check('RUN333 Testnet follow-up and current 46-row migration map are present', (existsSync('docs/RUN333-TESTNET-SECURITY-RECONCILIATION-2026-11-18.md') || existsSync('docs/archive/historical-implementation-records/docs__RUN333-TESTNET-SECURITY-RECONCILIATION-2026-11-18.md')) && existsSync('docs/RUN333-MIGRATION-HISTORY-RECONCILIATION.csv') && read('docs/RUN333-MIGRATION-HISTORY-RECONCILIATION.csv').trim().split(/\r?\n/).length === 47)
 
 const passed = checks.filter(Boolean).length
 console.log(`\nRUN332 audit remediation: ${passed}/${checks.length} passed`)
