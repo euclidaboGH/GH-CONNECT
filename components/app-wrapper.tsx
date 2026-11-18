@@ -15,6 +15,7 @@ import { a11y } from "@/lib/accessibility";
 import { offlineSupport } from "@/lib/offline";
 import "@/lib/auth/install-api-auth-fetch";
 import { startWebVitalsCollector } from "@/lib/web-vitals-collector";
+import { isPublicRoutePath } from "@/lib/routing/public-route-policy";
 
 function AccessibilitySetup() {
   useEffect(() => {

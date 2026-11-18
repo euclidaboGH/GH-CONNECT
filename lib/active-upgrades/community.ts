@@ -7,4 +7,4 @@ export function communityActivityLabel(posts: unknown, members: unknown): string
 export function canShowCommunityChat(input: { isMember?: boolean; chatEnabled?: boolean; revoked?: boolean }): boolean { return input.isMember === true && input.chatEnabled === true && input.revoked !== true }
 
 export function safeCommunityCount(value: unknown): number { const count = Number(value); return Number.isSafeInteger(count) && count >= 0 ? count : 0 }
-export function safeCommunityCountTotal(values: readonly unknown[]): number { return values.reduce((sum, value) => Math.min(Number.MAX_SAFE_INTEGER, sum + safeCommunityCount(value)), 0) }
+export function safeCommunityCountTotal(values: readonly unknown[]): number { return values.reduce<number>((sum, value) => Math.min(Number.MAX_SAFE_INTEGER, sum + safeCommunityCount(value)), 0) }

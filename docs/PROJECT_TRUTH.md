@@ -1,17 +1,28 @@
-# Current project truth — 0.338.99 RUN333 (2026-11-18)
+# Current project truth — 0.338.99 RUN336 (2026-11-18)
 
 **Current source version:** `0.338.99`  
 **Package identity:** `gh-connect@0.338.99`  
 **Latest user-provided source archive:** `GREENHAVEN-0.338.99-RUN331-PHASE1-6-GAP-REGISTER-PHASE7-COMMUNITIES.zip`  
 **RUN331 archive SHA-256:** `851ac3a540b76572b1325c6e06a35de069649f37db5cb11d24aca124d239fafa`  
-**Current local working derivative:** RUN333 Testnet security reconciliation candidate; not pushed or deployed.  
+**Current local working derivative:** RUN336 GitHub/Vercel build cleanup on top of RUN335; not pushed or deployed.  
 **Current status:** **NOT APPROVED** for production.
 
 ## Source authority
 
 RUN331 is the latest user-provided 0.338.99 archive. RUN332 and RUN333 are local source derivatives of that archive; neither has been pushed or deployed. RUN333 uses the existing GH Connect Supabase Testnet project directly and applied one narrow grant-revocation migration, documented in `docs/RUN333-TESTNET-SECURITY-RECONCILIATION-2026-11-18.md`. Testnet now records 46 migration entries; the canonical source inventory contains 230 files. Twenty applied history entries still lack matching source filenames and eleven same-slug/different-version records remain unverified. The three research/media/scoped-evidence migrations remain held. Preview/testnet-only Vercel environment update requests were accepted; sensitive values are masked and runtime verification awaits a fresh preview build. Preserve the existing GreenHaven and Pi identity, wallet and financial boundaries, and migration history.
 
-## RUN333 current Testnet state
+## RUN336 GitHub / Vercel build cleanup
+
+- Corrected the tally route count parsing with explicit `number | null | "invalid"` optional-count normalization and explicit numeric required-count assignments. All count bounds and consistency checks remain.
+- Fixed the missing public-route policy import, the field-agent `assignmentId` model, the Communities `useRef` import, the invalid `selected.isJoined` property access, and the unknown `reduce` accumulator.
+- Research Studio loader callback dependencies are present; no hook lint suppression was added.
+- Updated the dependent Phase 4 assertion to verify the computed `joined` membership decision.
+- RUN336 build cleanup checks pass 12/12; RUN335 tally checks 8/8; election UI 13/13; reconciliation runtime 6/6; Phase 4 identity/community/messaging 32/32. Full `npm run verify:static` passes.
+- The source errors in the supplied seven-error typecheck log are addressed. Full dependency-backed typecheck/lint/Next build remain unverified because this packaging environment lacks `node_modules` and uses Node 22.16.0 rather than required `^24.15.0`.
+- Remaining npm warnings are documented in `docs/RUN336-GITHUB-VERCEL-BUILD-CLEANUP-2026-11-18.md`: deprecated `isomorphic-dompurify@3.20.0`, Stellar packages transitively required by the exact official `pi-backend@0.1.3` pin, and ESLint 9 EOL while Next 15's ESLint 10 compatibility remains unverified. No unsafe overrides or hand-edited lock metadata were introduced.
+- These are source-only changes. No GitHub push, Vercel deployment or database mutation occurred. Production remains NOT APPROVED.
+
+## RUN333 current Testnet state (retained by RUN336)
 
 - Existing Testnet project only; no additional Supabase branch created.
 - Applied `20261118033839_revoke_client_select_on_server_only_tables` and verified that the eight target tables retain RLS, client SELECT privileges are absent, and service-role SELECT/INSERT/UPDATE/DELETE remain.
@@ -20,7 +31,7 @@ RUN331 is the latest user-provided 0.338.99 archive. RUN332 and RUN333 are local
 - RUN333 adds the authenticated field-agent tally desk, own-assignment acceptance, and owner/reviewer-only read-only independent comparison. Tally submission remains gated on the held atomic RPC and a provenance-backed polling-unit dataset; no result is certified.
 - Testnet currently has `gh_research_projects`, but not the dependent research membership, geography, election contest/candidate/assignment/tally tables or atomic tally RPC. The new field-agent desk fails closed until those dependencies are safely installed.
 - Three research/media/scoped-evidence migrations remain held. No scanner/geography acceptance is inferred.
-- `npm run verify:static` passes on Node 22.16.0. Supported Node 24.15.x install/typecheck/lint/build and browser/device acceptance remain outstanding.
+- RUN336 retains all RUN333 Testnet state. Its project-wide static verification passes, but supported Node 24.15.x dependency-backed typecheck/lint/build remain outstanding.
 - Mainnet untouched; no GitHub push or Vercel deployment. Production remains NOT APPROVED.
 
 ## 0.338.92 implementation

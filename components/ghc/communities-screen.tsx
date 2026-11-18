@@ -12,7 +12,7 @@ import { loadPersistedCommunities, isCommunityConversationRow } from "@/lib/doma
  * Cards use elevated surfaces + clearer My vs Discover hierarchy.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState, useRef } from "react"
 import { useSectionRefresh } from "@/hooks/use-section-refresh"
 import { useAccountFilterState } from "@/hooks/use-account-filter-state"
 import { FilterSummary } from "./filtering/filter-summary"
@@ -1282,7 +1282,7 @@ export function CommunitiesScreen() {
           }
           // Until the canonical public member-directory RPC is installed, do not
           // invent member display names from opaque user IDs or expose those IDs as labels.
-          memberPreview={selected.isJoined ? [{
+          memberPreview={joined ? [{
             id: "current-user",
             name: profile?.displayName || "You",
             role: role === "guest" ? "member" : role,

@@ -25,20 +25,34 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const body = parsed.value
   const geoUnitId = typeof body.geoUnitId === "string" ? body.geoUnitId : ""
   const pollingUnitCode = typeof body.pollingUnitCode === "string" ? body.pollingUnitCode.trim() : ""
-  const registeredVoters = body.registeredVoters === null || body.registeredVoters === undefined ? null : body.registeredVoters
-  const accreditedVoters = body.accreditedVoters === null || body.accreditedVoters === undefined ? null : body.accreditedVoters
-  const totalBallots = body.totalBallots === null || body.totalBallots === undefined ? null : body.totalBallots
-  const validVotes = body.validVotes
-  const rejectedBallots = body.rejectedBallots
   const candidateVotes = body.candidateVotes
-  const countOk = (value: unknown, nullable = false) => (nullable && value === null) || (Number.isSafeInteger(value) && Number(value) >= 0 && Number(value) <= MAX_COUNT)
-  if (!UUID.test(geoUnitId) || !pollingUnitCode || pollingUnitCode.length > 120 || /[\u0000-\u001f\u007f]/.test(pollingUnitCode) || !countOk(registeredVoters, true) || !countOk(accreditedVoters, true) || !countOk(totalBallots, true) || !countOk(validVotes) || !countOk(rejectedBallots) || !Array.isArray(candidateVotes) || candidateVotes.length < 1 || candidateVotes.length > 100) {
+  const parseRequiredCount = (value: unknown): number | null =>
+    typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= MAX_COUNT ? value : null
+  const parseOptionalCount = (value: unknown): number | null | "invalid" => {
+    if (value === null || value === undefined) return null
+    const parsed = parseRequiredCount(value)
+    return parsed === null ? "invalid" : parsed
+  }
+  const registeredParsed = parseOptionalCount(body.registeredVoters)
+  const accreditedParsed = parseOptionalCount(body.accreditedVoters)
+  const ballotsParsed = parseOptionalCount(body.totalBallots)
+  const validParsed = parseRequiredCount(body.validVotes)
+  const rejectedParsed = parseRequiredCount(body.rejectedBallots)
+  if (!UUID.test(geoUnitId) || !pollingUnitCode || pollingUnitCode.length > 120 || /[\u0000-\u001f\u007f]/.test(pollingUnitCode) || registeredParsed === "invalid" || accreditedParsed === "invalid" || ballotsParsed === "invalid" || validParsed === null || rejectedParsed === null || !Array.isArray(candidateVotes) || candidateVotes.length < 1 || candidateVotes.length > 100) {
     return NextResponse.json({ ok: false, error: "INVALID_ELECTION_TALLY" }, { status: 400, headers: NO_STORE })
   }
+  // The sentinel checks above establish these exact numeric/null types before arithmetic.
+  const registeredVoters: number | null = registeredParsed
+  const accreditedVoters: number | null = accreditedParsed
+  const totalBallots: number | null = ballotsParsed
+  const validVotes: number = validParsed
+  const rejectedBallots: number = rejectedParsed
+  const isCount = (value: unknown): value is number =>
+    typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= MAX_COUNT
   const normalized: CandidateVote[] = []
   const seen = new Set<string>()
   for (const item of candidateVotes) {
-    if (!item || typeof item !== "object" || typeof item.candidateId !== "string" || !UUID.test(item.candidateId) || !countOk(item.votes)) {
+    if (!item || typeof item !== "object" || typeof item.candidateId !== "string" || !UUID.test(item.candidateId) || !isCount(item.votes)) {
       return NextResponse.json({ ok: false, error: "INVALID_CANDIDATE_VOTES" }, { status: 400, headers: NO_STORE })
     }
     const candidateId = item.candidateId.toLowerCase()
@@ -49,7 +63,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const candidateTotal = normalized.reduce((sum, item) => sum + item.votes, 0)
   if (!Number.isSafeInteger(candidateTotal) || candidateTotal !== validVotes) return NextResponse.json({ ok: false, error: "CANDIDATE_TOTAL_MISMATCH" }, { status: 422, headers: NO_STORE })
   if (registeredVoters !== null && accreditedVoters !== null && accreditedVoters > registeredVoters) return NextResponse.json({ ok: false, error: "ACCREDITED_EXCEEDS_REGISTERED" }, { status: 422, headers: NO_STORE })
-  if (totalBallots !== null && (Number(validVotes) + Number(rejectedBallots) !== totalBallots || (accreditedVoters !== null && totalBallots > accreditedVoters))) return NextResponse.json({ ok: false, error: "BALLOT_TOTAL_MISMATCH" }, { status: 422, headers: NO_STORE })
+  if (totalBallots !== null && (validVotes + rejectedBallots !== totalBallots || (accreditedVoters !== null && totalBallots > accreditedVoters))) return NextResponse.json({ ok: false, error: "BALLOT_TOTAL_MISMATCH" }, { status: 422, headers: NO_STORE })
   if (!getServiceSupabaseConfig()) return NextResponse.json({ ok: false, error: "RESEARCH_STORAGE_UNAVAILABLE" }, { status: 503, headers: NO_STORE })
 
   const result = await supabaseRpc<TallyResult>("gh_research_election_tally_submit", {

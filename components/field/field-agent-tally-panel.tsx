@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 type Candidate = { id: string; name: string; party: string; ballotOrder: number | null }
 type AssignmentItem = {
   key: string
+  assignmentId: string
   projectId: string
   projectTitle: string
   contestId: string

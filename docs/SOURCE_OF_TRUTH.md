@@ -1,12 +1,16 @@
-# GreenHaven source authority — 0.338.99 RUN332 remediation candidate (2026-11-18)
+# GreenHaven source authority — 0.338.99 RUN336 GitHub/Vercel build cleanup (2026-11-18)
 
 **Current source version:** `0.338.99`
 **Current user-provided archive:** `GREENHAVEN-0.338.99-RUN331-PHASE1-6-GAP-REGISTER-PHASE7-COMMUNITIES.zip`  
 **SHA-256 of RUN331 archive:** `851ac3a540b76572b1325c6e06a35de069649f37db5cb11d24aca124d239fafa`  
-**Current local working derivative:** RUN332 advanced audit/remediation candidate; source-only, not pushed or deployed.  
+**Current local working derivative:** RUN336 GitHub/Vercel build cleanup, based on RUN335/RUN333; source-only, not pushed or deployed.  
 **Package identity:** `gh-connect@0.338.99` (user-facing brand: GREENHAVEN).
 
 RUN331 is the latest user-provided starting archive for RUN332. The earlier RUN324 archive and RUN325–RUN330 derivatives remain historical lineage only. Preserve all existing CI, identity, wallet, payment and migration boundaries. Do not treat the RUN332 candidate as the live GitHub branch or Vercel deployment.
+
+## RUN336 GitHub / Vercel build cleanup
+
+RUN336 addresses the seven TypeScript diagnostics in the supplied GitHub Actions log: the election tally route now explicitly normalizes optional counts to `number | null | "invalid"` and required counts to `number`; the app shell imports the canonical public-route helper; the field assignment UI type includes `assignmentId`; Communities imports `useRef`, uses the resolved `joined` membership state and gives `reduce` a numeric accumulator. Research Studio callback dependencies remain complete with no lint suppression. RUN336 cleanup checks pass 12/12, the updated RUN335 tally gate passes 8/8, and the complete `npm run verify:static` suite passes. Full dependency-backed typecheck/lint/Next build remains pending on supported Node 24.15.x. Remaining upstream dependency warnings and why they were not force-overridden are documented in `docs/RUN336-GITHUB-VERCEL-BUILD-CLEANUP-2026-11-18.md`.
 
 ## Latest implementation
 
