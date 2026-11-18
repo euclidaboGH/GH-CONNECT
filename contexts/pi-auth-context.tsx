@@ -19,6 +19,7 @@ import {
   ensurePiInitialized,
   piAuthenticateOfficial,
   reportPiAuthDiagnostic,
+  getPiSandboxLaunchHint,
 } from "@/lib/pi-runtime";
 import {
   INITIAL_AUTH_LIFECYCLE,
@@ -337,6 +338,9 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
   // WebView. Pi.authenticate must be single-flight or competing prompts can
   // invalidate each other's bridge state.
   const authAttemptRef = useRef(false);
+  // Preserve an explicit user Retry tap even when automatic bootstrap is still
+  // in flight. The request is drained after the active attempt settles.
+  const retryRequestedRef = useRef(false);
   const [hasError, setHasError] = useState(false);
   const [sdk, setSdk] = useState<SDKLiteInstance | null>(null);
   const [products, setProducts] = useState<Product[] | null>(null);
@@ -946,16 +950,24 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       setHasError(true);
-      setAuthMessage(`${humanizePiAuthError(err)} (${diagnosticCode})`);
+      const sandboxHint = diagnosticCode === "PI_AUTHENTICATE_FAILED" ? getPiSandboxLaunchHint() : null;
+      const failureMessage = `${humanizePiAuthError(err)} (${diagnosticCode})${sandboxHint ? ` ${sandboxHint}` : ""}`;
+      setAuthMessage(failureMessage);
       setAuthLifecycle((s) =>
         transitionAuth(s, "ERROR", {
-          error: `${humanizePiAuthError(err)} (${diagnosticCode})`,
+          error: failureMessage,
           onboardingStatus: "unknown",
           serverVerified: false,
         })
       );
     } finally {
       authAttemptRef.current = false;
+      if (retryRequestedRef.current) {
+        retryRequestedRef.current = false;
+        // Start a fresh attempt after the active promise has unwound. Do not
+        // overlap Pi.authenticate calls or bypass server-side token verification.
+        window.setTimeout(() => { void initialize(); }, 0);
+      }
     }
   }, [fetchProducts]);
 
@@ -1053,6 +1065,12 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
 
   const reinitialize = async () => {
     writeSignedOutFlag(false);
+    if (authAttemptRef.current) {
+      retryRequestedRef.current = true;
+      setHasError(false);
+      setAuthMessage("Finishing the current Pi connection attempt before retrying…");
+      return;
+    }
     await initialize();
   };
 

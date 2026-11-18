@@ -33,7 +33,7 @@ export type PiRuntimeSnapshot = {
 /** Emit stable, token-free Pi auth diagnostics for field troubleshooting. */
 export function reportPiAuthDiagnostic(
   code: string,
-  details: { stage?: string; status?: number; sandbox?: boolean; hasPi?: boolean; hasAccessToken?: boolean; errorName?: string } = {},
+  details: { stage?: string; status?: number; sandbox?: boolean; hasPi?: boolean; hasAccessToken?: boolean; errorName?: string; errorShape?: string; reasonClass?: string; reason?: string; inIframe?: boolean } = {},
 ): void {
   const safeCode = /^[A-Z0-9_]{3,64}$/.test(code) ? code : "PI_AUTH_DIAGNOSTIC_INVALID"
   const safeDetails = {
@@ -43,12 +43,96 @@ export function reportPiAuthDiagnostic(
     hasPi: typeof details.hasPi === "boolean" ? details.hasPi : undefined,
     hasAccessToken: typeof details.hasAccessToken === "boolean" ? details.hasAccessToken : undefined,
     errorName: details.errorName && /^[A-Za-z0-9_]{1,48}$/.test(details.errorName) ? details.errorName : undefined,
+    errorShape: details.errorShape && /^[a-z_]{1,16}$/.test(details.errorShape) ? details.errorShape : undefined,
+    reasonClass: details.reasonClass && /^[A-Z0-9_]{3,32}$/.test(details.reasonClass) ? details.reasonClass : undefined,
+    // Bounded (<=80 chars), printable-ASCII, token-redacted reason text only; never a raw error object.
+    reason: typeof details.reason === "string" ? details.reason.slice(0, 80) : undefined,
+    inIframe: typeof details.inIframe === "boolean" ? details.inIframe : undefined,
   }
   // Never include tokens, usernames, Pi UIDs, cookies, request bodies, or raw errors.
   console.info("[GH_PI_AUTH_DIAGNOSTIC]", { code: safeCode, ...safeDetails })
+  recordPiAuthDiagnostic({ t: new Date().toISOString(), code: safeCode, ...safeDetails })
   if (typeof window !== "undefined") {
     try { window.dispatchEvent(new CustomEvent("gh:pi-auth-diagnostic", { detail: { code: safeCode, ...safeDetails } })) } catch { /* diagnostics must never break authentication */ }
   }
+}
+
+type PiAuthDiagnosticEntry = Record<string, string | number | boolean | undefined>
+const PI_AUTH_HISTORY_KEY = "__GH_PI_AUTH_HISTORY__"
+const PI_AUTH_HISTORY_MAX = 30
+
+function recordPiAuthDiagnostic(entry: PiAuthDiagnosticEntry): void {
+  if (typeof window === "undefined") return
+  try {
+    const w = window as unknown as Record<string, unknown>
+    const list = Array.isArray(w[PI_AUTH_HISTORY_KEY]) ? (w[PI_AUTH_HISTORY_KEY] as PiAuthDiagnosticEntry[]) : []
+    list.push(entry)
+    if (list.length > PI_AUTH_HISTORY_MAX) list.splice(0, list.length - PI_AUTH_HISTORY_MAX)
+    w[PI_AUTH_HISTORY_KEY] = list
+  } catch { /* diagnostics must never break authentication */ }
+}
+
+function isWindowFramed(): boolean {
+  try { return window.self !== window.top } catch { return true }
+}
+
+/** Short, printable, token-redacted reason text from whatever the Pi SDK rejected with. */
+export function sanitizePiAuthReason(err: unknown): string | undefined {
+  let raw = ""
+  if (typeof err === "string") raw = err
+  else if (err instanceof Error) raw = err.message
+  else if (err && typeof err === "object") {
+    const o = err as Record<string, unknown>
+    const found = [o.message, o.error, o.reason, o.code].find((v) => typeof v === "string")
+    raw = typeof found === "string" ? found : ""
+  }
+  const cleaned = raw
+    .replace(/[^\x20-\x7E]/g, " ")
+    .replace(/[A-Za-z0-9_\-.+/=]{24,}/g, "[redacted]")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80)
+  return cleaned || undefined
+}
+
+export function classifyPiAuthReason(reason: string | undefined): string {
+  if (!reason) return "NO_MESSAGE"
+  if (/timed out|timeout/i.test(reason)) return "TIMEOUT"
+  if (/cancel|closed|denied|rejected by (the )?user/i.test(reason)) return "USER_CANCELLED"
+  if (/scope/i.test(reason)) return "SCOPE_REJECTED"
+  if (/sandbox/i.test(reason)) return "SANDBOX_MISMATCH"
+  if (/origin|domain|url|whitelist|not registered|not allowed/i.test(reason)) return "ORIGIN_NOT_REGISTERED"
+  if (/network|fetch|offline/i.test(reason)) return "NETWORK"
+  if (/^authentication failed\.?$/i.test(reason)) return "GENERIC_SDK_REJECTION"
+  return "UNCLASSIFIED"
+}
+
+/** Token-free, copyable report for field troubleshooting (host, mode, framing, recent diagnostics). */
+export function buildPiAuthDiagnosticReport(): string {
+  if (typeof window === "undefined") return "Pi auth diagnostics are client-only"
+  const snap = getPiRuntimeSnapshot()
+  let referrerHost = "none"
+  try { referrerHost = document.referrer ? new URL(document.referrer).hostname : "none" } catch { referrerHost = "unparseable" }
+  const w = window as unknown as Record<string, unknown>
+  const history = Array.isArray(w[PI_AUTH_HISTORY_KEY]) ? (w[PI_AUTH_HISTORY_KEY] as PiAuthDiagnosticEntry[]) : []
+  return [
+    `GH Pi auth diagnostics ${new Date().toISOString()}`,
+    `host=${snap.hostname} mode=${snap.mode} sandbox=${snap.sandbox}`,
+    `clientIdConfigured=${snap.clientIdConfigured} hasWindowPi=${snap.hasWindowPi} hasInit=${snap.hasInit} hasAuthenticate=${snap.hasAuthenticate} initialized=${snap.initialized}`,
+    `inIframe=${isWindowFramed()} referrerHost=${referrerHost}`,
+    ...history.map((e) => JSON.stringify(e)),
+  ].join("\n")
+}
+
+/**
+ * Sandbox (Testnet) SDK mode normally needs the app opened through Pi Develop's
+ * Sandbox link, which frames the app inside sandbox.minepi.com. When sandbox mode
+ * is active and the app is top-level, tell the operator instead of a bare failure.
+ */
+export function getPiSandboxLaunchHint(): string | null {
+  if (typeof window === "undefined" || !getPiSandbox()) return null
+  if (isWindowFramed()) return null
+  return "Sandbox mode is on but this page is not running inside Pi's sandbox frame. Open the app from Pi Develop using its Sandbox link; opening the Vercel URL directly can make Pi reject authorization."
 }
 
 let initPromise: Promise<void> | null = null
@@ -223,19 +307,52 @@ export async function piAuthenticateOfficial(
   const authenticate = Pi.authenticate as PiAuthFn
   reportPiAuthDiagnostic("PI_AUTH_PROMPT_START", { stage: "pi_authenticate", sandbox: getPiSandbox(), hasPi: true })
   let authResult: Awaited<ReturnType<PiAuthFn>>
+  // The Pi bridge can leave authenticate() pending indefinitely when its host
+  // cannot present/complete the authorization prompt. Bound this wait so the
+  // provider's in-flight guard is eventually released and the user can retry.
+  // Promise.race does not cancel the SDK call; we deliberately do not start a
+  // second attempt automatically or weaken server-side token verification.
+  const authTimeoutMs = 25000
+  let authTimeout: ReturnType<typeof setTimeout> | undefined
   try {
-    authResult = await authenticate(scopes, (payment: unknown) => {
-    void onIncompletePaymentFound(
-      payment as {
-        identifier?: string
-        paymentId?: string
-        transaction?: { txid?: string } | null
-      }
-    )
+    const authPromise = authenticate(scopes, (payment: unknown) => {
+      void onIncompletePaymentFound(
+        payment as {
+          identifier?: string
+          paymentId?: string
+          transaction?: { txid?: string } | null
+        }
+      )
     })
+    authResult = await Promise.race([
+      authPromise,
+      new Promise<never>((_, reject) => {
+        authTimeout = setTimeout(() => {
+          reportPiAuthDiagnostic("PI_AUTH_PROMPT_TIMEOUT", {
+            stage: "pi_authenticate",
+            sandbox: getPiSandbox(),
+            hasPi: true,
+          })
+          reject(new Error("Pi authorization prompt timed out. Return to Pi Browser and tap Retry Pi authentication."))
+        }, authTimeoutMs)
+      }),
+    ])
   } catch (err) {
-    reportPiAuthDiagnostic("PI_AUTH_PROMPT_REJECTED", { stage: "pi_authenticate", sandbox: getPiSandbox(), errorName: err instanceof Error ? err.name : "UnknownError" })
-    throw err
+    const reason = sanitizePiAuthReason(err)
+    reportPiAuthDiagnostic("PI_AUTH_PROMPT_REJECTED", {
+      stage: "pi_authenticate",
+      sandbox: getPiSandbox(),
+      errorName: err instanceof Error ? err.name : "UnknownError",
+      errorShape: err instanceof Error ? "error" : typeof err === "string" ? "string" : err && typeof err === "object" ? "object" : "other",
+      reasonClass: classifyPiAuthReason(reason),
+      reason,
+      inIframe: isWindowFramed(),
+    })
+    // The Pi bridge often rejects with a plain string/object. Wrap it so callers
+    // keep a meaningful message instead of an empty "Authentication failed".
+    throw err instanceof Error ? err : new Error(reason || "Pi rejected the authorization request")
+  } finally {
+    if (authTimeout !== undefined) clearTimeout(authTimeout)
   }
 
   const uid = authResult?.user?.uid != null ? String(authResult.user.uid) : ""

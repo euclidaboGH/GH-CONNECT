@@ -1,4 +1,5 @@
 import { addCalendarMonths, getMembershipGhcPrice, membershipPeriodForPaidMonths, type PaidMembershipMonths } from "@/lib/membership-pricing"
+import { humanizeMembershipError, MEMBERSHIP_DEFAULT_ERROR } from "@/lib/active-upgrades/membership"
 /**
  * Premium Membership domain — FREE | VIP | VVIP
  *
@@ -12,25 +13,10 @@ import { domainEvents } from "../realtime/event-bus"
 
 
 function mapMembershipError(code: unknown, status?: number): string {
-  const c = String(code || "").toUpperCase()
-  if (c.includes("INSUFFICIENT") || status === 402) {
-    return "Insufficient GHC balance. Earn or claim available GHC, then try again."
-  }
-  if (c.includes("ALREADY_ACTIVE") || c.includes("ALREADY_MEMBER")) {
-    return "This membership is already active on your account."
-  }
-  if (c.includes("AUTH")) return "Sign in required to purchase membership."
-  if (c.includes("STORE_UNAVAILABLE") || c.includes("DURABLE_WRITE")) {
-    return "Membership could not be saved on the server. If GHC was spent, contact support with your receipt."
-  }
-  if (c.includes("SERVER_UNAVAILABLE") || status === 503) {
-    return "Membership service is temporarily unavailable. Try again shortly."
-  }
-  if (c.includes("PRODUCT_MISMATCH") || c.includes("AMOUNT_MISMATCH")) {
-    return "Payment does not match the selected plan. No entitlement was granted."
-  }
+  const mapped = humanizeMembershipError(typeof code === "string" ? code : String(code || ""), status)
+  if (mapped !== MEMBERSHIP_DEFAULT_ERROR) return mapped
   const raw = String(code || "").trim()
-  return raw || "Membership purchase failed"
+  return raw || MEMBERSHIP_DEFAULT_ERROR
 }
 
 export type MembershipTierId = "free" | "vip" | "vvip"
@@ -377,7 +363,12 @@ function loadStatus(userId: string): MembershipStatus {
 
     // Trial lifecycle — recompute tier from fixed anchor (device-independent)
     if (s.trialAnchorAt || s.lifecycle === "trial" || s.source === "trial") {
-      const anchor = s.trialAnchorAt || s.startedAt || now
+      // A trial record with no anchor is corrupt. Falling back to `now` would restart a
+      // fresh VVIP trial on every read (a trial that never ends), so treat it as Free.
+      const anchor = s.trialAnchorAt || s.startedAt
+      if (!anchor) {
+        return { userId, tier: "free", active: true, source: "default", lifecycle: "standard" }
+      }
       const tier = tierFromTrialAnchor(anchor, now)
       return {
         userId,

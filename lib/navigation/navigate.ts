@@ -15,6 +15,10 @@ export type NavigateOptions = {
   groupId?: string
   /** Marketplace listing */
   listingId?: string
+  /** Marketplace order deep link */
+  orderId?: string
+  /** Marketplace surface bucket */
+  marketplaceBucket?: "browse" | "orders" | "saved" | "sell" | "mine" | "cart"
   /** Settings section when opening settings */
   section?: "main" | "wallet" | "rewards" | "membership" | "help" | "privacy" | "notifications" | "appearance" | "device-lock"
   /** Chat peer */
@@ -69,10 +73,21 @@ export function navigateTo(raw: string, options: NavigateOptions = {}): boolean 
   if (typeof window === "undefined") return false
   // Bound externally sourced navigation values before emitting cross-component events.
   if (typeof raw !== "string" || raw.length > 100) return false
+  const bucket =
+    options.marketplaceBucket === "browse" ||
+    options.marketplaceBucket === "orders" ||
+    options.marketplaceBucket === "saved" ||
+    options.marketplaceBucket === "sell" ||
+    options.marketplaceBucket === "mine" ||
+    options.marketplaceBucket === "cart"
+      ? options.marketplaceBucket
+      : undefined
   const safeOptions: NavigateOptions = {
     section: safeSection(options.section),
     groupId: bounded(options.groupId, 180),
     listingId: bounded(options.listingId, 180),
+    orderId: bounded(options.orderId, 180),
+    marketplaceBucket: bucket,
     userId: bounded(options.userId, 180),
     userName: bounded(options.userName, 120),
     userPhoto: safePhoto(options.userPhoto),
@@ -124,6 +139,8 @@ export function navigateTo(raw: string, options: NavigateOptions = {}): boolean 
       // Dedicated marketplace product surface (listings from domain — no invented catalog)
       emit("ghc:open-marketplace", {
         listingId: safeOptions.listingId || undefined,
+        orderId: safeOptions.orderId || undefined,
+        bucket: safeOptions.marketplaceBucket || undefined,
       })
       return true
     case "create":
@@ -137,11 +154,63 @@ export function navigateTo(raw: string, options: NavigateOptions = {}): boolean 
 /**
  * Open a registry service by id. ACTIVE/BETA run destination; others no-op
  * (UI should show Coming Soon landing instead of calling this).
+ *
+ * ACTIVE deep-links (12 live modules):
+ * - community → Communities
+ * - gh-chat → Messages
+ * - connections → Matches + connection-requests inbox
+ * - matches → Matches
+ * - marketplace → Marketplace browse
+ * - orders → Marketplace orders bucket
+ * - field-research → /field/studio
+ * - wallet | ghc | pi-payments → Wallet (with asset-rail focus)
+ * - rewards → Rewards
+ * - membership → Settings membership
  */
 export function openService(serviceId: string): boolean {
   const service = getServiceById(serviceId)
   if (!service) return false
   if (!isInteractiveStatus(service.status)) return false
+
+  // Field Research: real product surface is the authenticated studio route.
+  if (service.id === "field-research") {
+    if (typeof window === "undefined") return false
+    try {
+      window.location.assign("/field/studio")
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  // Connections: Matches tab + open the connection-requests inbox after the tab mounts.
+  if (service.id === "connections") {
+    const ok = navigateTo("matches")
+    if (ok && typeof window !== "undefined") {
+      window.setTimeout(() => {
+        try {
+          window.dispatchEvent(new CustomEvent("ghc:open-connection-inbox"))
+        } catch {
+          /* */
+        }
+      }, 280)
+    }
+    return ok
+  }
+
+  // Wallet family: seed one-shot focus for the wallet screen asset rail.
+  if (service.id === "wallet" || service.id === "ghc" || service.id === "pi-payments") {
+    if (typeof window !== "undefined") {
+      try {
+        const focus =
+          service.id === "pi-payments" ? "pi-payments" : service.id === "ghc" ? "ghc" : "wallet"
+        window.sessionStorage.setItem("ghc.wallet.focus", focus)
+      } catch {
+        /* focus is best-effort */
+      }
+    }
+    return navigateTo("wallet")
+  }
 
   const dest = service.destination
   if (dest.kind === "tab") {
@@ -149,7 +218,11 @@ export function openService(serviceId: string): boolean {
   }
   if (dest.kind === "overlay") {
     if (dest.overlay === "marketplace") {
-      return navigateTo("marketplace")
+      // ACTIVE "Orders" opens the orders bucket; generic marketplace opens browse.
+      if (service.id === "orders") {
+        return navigateTo("marketplace", { marketplaceBucket: "orders" })
+      }
+      return navigateTo("marketplace", { marketplaceBucket: "browse" })
     }
     return navigateTo(dest.overlay)
   }
@@ -158,7 +231,6 @@ export function openService(serviceId: string): boolean {
   }
   return false
 }
-
 /** Open a community board (switches to Communities tab first). */
 export function openCommunity(groupId: string) {
   if (!groupId?.trim()) return

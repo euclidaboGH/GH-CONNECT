@@ -1,6 +1,6 @@
 "use client"
 
-import { humanizeCurationError, isSelfCuration, nextCurationChoice } from "@/lib/curation/client-curation-guards"
+import { CURATION_UI_DEBOUNCE_MS, humanizeCurationError, isKnownCurationError, isSelfCuration } from "@/lib/curation/client-curation-guards"
 import { PostActionBar } from "./post-action-bar"
 import { toClientSafeErrorMessage } from "@/lib/client/safe-api-error"
 
@@ -45,6 +45,7 @@ import { resolveAvatarUrl } from "@/lib/avatar"
 import { AuthorRepChip } from "./author-rep-chip"
 import { authorReputationFromPost } from "@/lib/reputation/display"
 import { isOwnAuthor } from "@/lib/ownership"
+import { IdentityService } from "@/lib/identity/identity-service"
 import { ImageSkeleton } from "./skeleton-loaders"
 import { ReportChooser } from "./report-chooser"
 import { EngagementRosterSheet, type RosterKind } from "./engagement-roster-sheet"
@@ -62,6 +63,20 @@ const REACTIONS: PostReaction[] = [
   { type: "love", emoji: "❤️", label: "Love" },
   { type: "sad", emoji: "😢", label: "Concerned" },
 ]
+
+/** GHC amounts in toasts: up to 4 decimals, trailing zeros trimmed ("10.5000" -> "10.5", "10.0000" -> "10"). */
+function formatGhcAmount(value: unknown): string {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return "0"
+  const fixed = n.toFixed(4)
+  return fixed.includes(".") ? fixed.replace(/0+$/, "").replace(/\.$/, "") : fixed
+}
+
+function toastEvent(message: string, type: "success" | "error" | "info") {
+  try {
+    window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message, type } }))
+  } catch { /* toasts are best-effort */ }
+}
 
 interface EnhancedPostCardProps {
   post: Post
@@ -160,6 +175,14 @@ function EnhancedPostCardInner({
   )
   const [editMediaBusy, setEditMediaBusy] = useState(false)
   const editImageInputRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (!editingPost) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !editMediaBusy) setEditingPost(false)
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [editingPost, editMediaBusy])
   const [imageIndex, setImageIndex] = useState<number>(0)
   const [mediaToolsOpen, setMediaToolsOpen] = useState(false)
   const mediaLongPressRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -241,19 +264,35 @@ function EnhancedPostCardInner({
 
   const handleCuration = async (choice: "upvote" | "downvote") => {
     if (curationBusy) return
+    // Own posts cannot be curated (server also rejects; fail fast for clearer UX).
+    if (isOwn || isSelfCuration(IdentityService.getCurrentUserId(), post.authorId)) {
+      try {
+        window.dispatchEvent(new CustomEvent("ghc:toast", {
+          detail: { message: humanizeCurationError("SELF_CURATION"), type: "info" },
+        }))
+      } catch { /* */ }
+      return
+    }
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       try { window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "You are offline — vote when reconnected", type: "info" } })) } catch { /* */ }
       return
     }
-    if (Date.now() - lastCurationAtRef.current < 400) return
+    if (Date.now() - lastCurationAtRef.current < CURATION_UI_DEBOUNCE_MS) return
     lastCurationAtRef.current = Date.now()
     setCurationBusy(true)
     try {
       const res = await socialSetCuration(post.id, choice, rewardPercentage)
       if (!res.ok) {
         try {
+          const code = String(res.error || res.reason || "")
+          const message =
+            code === "NETWORK" || res.reason === "NETWORK"
+              ? "Could not vote — check connection"
+              : isKnownCurationError(code)
+                ? humanizeCurationError(code)
+                : toClientSafeErrorMessage(res.error, "Could not record vote")
           window.dispatchEvent(new CustomEvent("ghc:toast", {
-            detail: { message: res.reason === "NETWORK" || res.error === "NETWORK" ? "Could not vote — check connection" : toClientSafeErrorMessage(res.error, "Could not record vote"), type: "error" },
+            detail: { message, type: "error" },
           }))
         } catch { /* */ }
         return
@@ -277,13 +316,13 @@ function EnhancedPostCardInner({
           try {
             window.dispatchEvent(new CustomEvent("ghc:wallet-refresh"))
             window.dispatchEvent(new CustomEvent("ghc:content-reward-updated", { detail: { postId: post.id } }))
-            window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: `Vote saved and ${Number(res.redistribute?.amount).toFixed(4).replace(/\.?0+$/, "")} GHC contributed to this creator`, type: "success" } }))
+            window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: `Vote saved and ${formatGhcAmount(res.redistribute?.amount)} GHC contributed to this creator`, type: "success" } }))
           } catch { /* */ }
         } else if (res.reward?.credited && Number(res.reward.amount) > 0) {
           try {
             window.dispatchEvent(new CustomEvent("ghc:content-reward-updated", { detail: { postId: post.id } }))
             window.dispatchEvent(new CustomEvent("ghc:wallet-refresh"))
-            window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: `Vote saved and ${Number(res.reward.amount).toFixed(4).replace(/\.?0+$/, "")} GHC credited`, type: "success" } }))
+            window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: `Vote saved and ${formatGhcAmount(res.reward.amount)} GHC credited`, type: "success" } }))
           } catch { /* */ }
         } else {
           // A curation vote is a quality signal. GHC movement is a separate,
@@ -294,7 +333,7 @@ function EnhancedPostCardInner({
           const available = Number(res.redistribute?.availableBalanceAfter || 0)
           const message = redReason.includes("INSUFFICIENT")
             ? required > 0
-              ? `Vote saved. Your wallet needs ${required.toFixed(4).replace(/\.?0+$/, "")} GHC to fund this contribution.`
+              ? `Vote saved. Your wallet needs ${formatGhcAmount(required)} GHC to fund this contribution.`
               : "Vote saved. Fund your GHC wallet to make a curation contribution."
             : rewardReason.includes("DISABLED") || rewardReason.includes("DAILY_CLAIM_ONLY")
               ? "Vote saved. Curation reward issuance is gated; no GHC was created."
@@ -554,7 +593,8 @@ function EnhancedPostCardInner({
               ) : null}
               {(() => {
                 const hasVideo = Boolean(post.video)
-                const realImages = (post.images || []).filter((u) => typeof u === "string" && isDurableMediaUrl(u))
+                // Uses the card-level `realImages` (which also accepts small inline images) so the
+                // "Photo" label always agrees with the gallery that is actually rendered below.
                 const hasImage = realImages.length > 0
                 const special = detectSpecialPost(post.content)
                 const isPoll = Boolean((post as Post & { poll?: unknown }).poll) || special === "poll"
@@ -679,7 +719,11 @@ function EnhancedPostCardInner({
           </div>
         )}
         {!isOwn && onBlock && (
-          <ActionSheetItem destructive onClick={() => { onBlock(post.id); setShowMenu(false) }}>Block author</ActionSheetItem>
+          <ActionSheetItem destructive onClick={async () => {
+            setShowMenu(false)
+            // Blocking is hard to notice and awkward to undo, and Delete already asks first.
+            if (await confirmDialog({ title: `Block ${displayAuthor}?`, message: "This member will be blocked from your account.", confirmLabel: "Block", danger: true })) onBlock(post.id)
+          }}>Block author</ActionSheetItem>
         )}
       </ActionSheet> : null}
 
@@ -704,7 +748,7 @@ function EnhancedPostCardInner({
                                             <DurableImage loading="lazy" src={url} alt="" className="h-full w-full object-cover" />
                       <button
                         type="button"
-                        className="absolute right-0.5 top-0.5 rounded-full bg-black/60 p-0.5 text-white"
+                        className="absolute right-0 top-0 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                         aria-label="Remove image"
                         onClick={() => setDraftImages((prev) => prev.filter((u) => u !== url))}
                       >
@@ -717,7 +761,7 @@ function EnhancedPostCardInner({
               {draftVideo ? (
                 <div className="mb-2 flex items-center gap-2 rounded-xl border border-border/50 bg-muted/30 px-3 py-2 text-[12px]">
                   <span className="min-w-0 flex-1 truncate text-muted-foreground">Video attached</span>
-                  <button type="button" className="font-semibold text-rose-600" onClick={() => setDraftVideo(null)}>
+                  <button type="button" className="min-h-9 px-2 font-semibold text-rose-600" onClick={() => setDraftVideo(null)}>
                     Remove
                   </button>
                 </div>
@@ -734,30 +778,38 @@ function EnhancedPostCardInner({
                   if (!files?.length) return
                   void (async () => {
                     setEditMediaBusy(true)
+                    let imageSlots = 10 - draftImages.length
+                    let failed = 0
                     try {
-                      for (const file of Array.from<File>(files).slice(0, 10 - draftImages.length)) {
-                        if (file.type.startsWith("video/")) {
-                          const res = await uploadDurableMedia(file, { fileName: file.name, category: file.type.startsWith("video/") ? "videos" : "images" })
+                      for (const file of Array.from<File>(files)) {
+                        const isVideo = file.type.startsWith("video/")
+                        const isImage = file.type.startsWith("image/")
+                        if (!isVideo && !isImage) continue
+                        // The 10-item cap applies to images only; it used to also block a video.
+                        if (isImage && imageSlots <= 0) continue
+                        try {
+                          const res = await uploadDurableMedia(file, { fileName: file.name, category: isVideo ? "videos" : "images" })
                           const url =
                             (res as { url?: string; publicUrl?: string })?.url ||
                             (res as { publicUrl?: string })?.publicUrl
-                          if (url && isDurableMediaUrl(String(url))) setDraftVideo(String(url))
-                          continue
-                        }
-                        if (!file.type.startsWith("image/")) continue
-                        const res = await uploadDurableMedia(file, { fileName: file.name, category: file.type.startsWith("video/") ? "videos" : "images" })
-                        const url =
-                          (res as { url?: string; publicUrl?: string })?.url ||
-                          (res as { publicUrl?: string })?.publicUrl
-                        if (url && isDurableMediaUrl(String(url))) {
-                          setDraftImages((prev) => [...prev, String(url)].slice(0, 10))
+                          if (url && isDurableMediaUrl(String(url))) {
+                            if (isVideo) setDraftVideo(String(url))
+                            else {
+                              imageSlots -= 1
+                              setDraftImages((prev) => [...prev, String(url)].slice(0, 10))
+                            }
+                          } else {
+                            failed += 1
+                          }
+                        } catch {
+                          failed += 1
                         }
                       }
-                    } catch {
-                      /* fail-soft — keep existing media */
                     } finally {
                       setEditMediaBusy(false)
                     }
+                    // Existing media is kept either way, but a failed upload must not be silent.
+                    if (failed > 0) toastEvent(failed === 1 ? "One file could not be uploaded." : `${failed} files could not be uploaded.`, "error")
                   })()
                 }}
               />
@@ -781,13 +833,24 @@ function EnhancedPostCardInner({
               </button>
               <button
                 type="button"
-                disabled={!draftContent.trim() || editMediaBusy}
+                // A media-only post has empty text, so text alone must not be required to save.
+                disabled={(!draftContent.trim() && draftImages.length === 0 && !draftVideo) || editMediaBusy}
                 onClick={() => {
-                  const media: PostEditMedia = {
-                    images: draftImages,
-                    video: draftVideo,
+                  const originalImages = Array.isArray(post.images) ? post.images.filter((u) => typeof u === "string" && isDurableMediaUrl(u)) : []
+                  const originalVideo = typeof post.video === "string" && isDurableMediaUrl(post.video) ? post.video : null
+                  const unchanged =
+                    draftContent.trim() === String(post.content ?? "").trim() &&
+                    draftVideo === originalVideo &&
+                    draftImages.length === originalImages.length &&
+                    draftImages.every((url, i) => url === originalImages[i])
+                  // Saving without changes must not stamp the post as "Edited".
+                  if (!unchanged) {
+                    const media: PostEditMedia = {
+                      images: draftImages,
+                      video: draftVideo,
+                    }
+                    onEdit?.(post.id, draftContent.trim(), media)
                   }
-                  onEdit?.(post.id, draftContent.trim(), media)
                   setEditingPost(false)
                 }}
                 className="rounded-xl bg-[var(--gh-green)] px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
@@ -838,12 +901,21 @@ function EnhancedPostCardInner({
                   )
                 }
                 if (part.type === "mention") {
+                  // Previews (readOnly) and cards without a profile handler used to render a button
+                  // that did nothing when tapped. Render plain emphasised text instead.
+                  if (readOnly || !onOpenProfile) {
+                    return <span key={idx} className="font-medium text-emerald-700 dark:text-emerald-400">{part.value}</span>
+                  }
                   return (
                     <button
                       key={idx}
                       type="button"
-                      className="text-emerald-700 hover:underline dark:text-emerald-400"
-                      onClick={() => onOpenProfile?.(String(part.value || "").replace(/^@/, ""))}
+                      data-post-no-open
+                      className="text-emerald-700 hover:underline focus-visible:outline-none focus-visible:underline dark:text-emerald-400"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onOpenProfile(String(part.value || "").replace(/^@/, ""))
+                      }}
                     >
                       {part.value}
                     </button>

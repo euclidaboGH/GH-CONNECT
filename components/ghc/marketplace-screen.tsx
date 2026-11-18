@@ -2082,12 +2082,15 @@ export function MarketplaceScreen({
   initialOrderId,
   initialResponseAt,
   initialResponseAction,
+  initialBucket,
 }: {
   onBack: () => void
   initialListingId?: string | null
   initialOrderId?: string | null
   initialResponseAt?: number | null
   initialResponseAction?: string | null
+  /** Optional surface: browse | orders | saved | sell | mine | cart */
+  initialBucket?: "browse" | "orders" | "saved" | "sell" | "mine" | "cart" | null
 }) {
   const regional = useRegionalContext()
   const msg = useCallback((key: Parameters<typeof getProductMessage>[0]) => getProductMessage(key, regional.locale), [regional.locale])
@@ -2116,7 +2119,11 @@ export function MarketplaceScreen({
       setRecentIds([])
     }
   }, [selectedId])
-  const [bucket, setBucket] = useState<"browse" | "orders" | "saved" | "sell" | "mine" | "cart">("browse")
+  const [bucket, setBucket] = useState<"browse" | "orders" | "saved" | "sell" | "mine" | "cart">(
+    initialBucket === "orders" || initialBucket === "saved" || initialBucket === "sell" || initialBucket === "mine" || initialBucket === "cart" || initialBucket === "browse"
+      ? initialBucket
+      : "browse"
+  )
   const [mineListings, setMineListings] = useState<MarketplaceListing[]>([])
   const [mineStatusFilter, setMineStatusFilter] = useState<"all" | "active" | "paused" | "sold_out" | "draft">("all")
   const [mineLoading, setMineLoading] = useState(false)
@@ -2618,6 +2625,26 @@ export function MarketplaceScreen({
     setFocusedResponseAction(initialResponseAction || null)
     void loadDurableOrders()
   }, [initialOrderId, initialResponseAt, initialResponseAction, loadDurableOrders])
+
+  // Ecosystem "Orders" and other deep links can open the orders bucket without a specific order id.
+  useEffect(() => {
+    if (initialOrderId) return
+    if (initialBucket === "orders") {
+      setBucket("orders")
+      setOrderRoleFilter("all")
+      void loadDurableOrders()
+      return
+    }
+    if (
+      initialBucket === "browse" ||
+      initialBucket === "saved" ||
+      initialBucket === "sell" ||
+      initialBucket === "mine" ||
+      initialBucket === "cart"
+    ) {
+      setBucket(initialBucket)
+    }
+  }, [initialBucket, initialOrderId, loadDurableOrders])
 
   if (selected) {
     return (

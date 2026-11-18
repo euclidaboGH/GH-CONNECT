@@ -17,7 +17,7 @@ This audit used the exact user-designated source archive as the baseline. No liv
 ## Highest-priority findings
 
 ### P0 — Production verification remains incomplete
-A source-only check suite is not evidence of a successful install, production build, deployment, live database compatibility, or Pi Browser authentication. The latest reported user-facing failure is `PI_AUTHENTICATE_FAILED` in Pi Browser Preview/Testnet, where the authorization prompt does not appear. The root cause remains unconfirmed because no matching client diagnostic/event payload or live reproduction trace was supplied. Do not label this issue fixed until the Pi SDK bridge initializes and the authorization prompt appears, followed by server verification and durable session creation.
+A source-only check suite is not evidence of a successful install, production build, deployment, live database compatibility, or Pi Browser authentication. The latest reported user-facing failure is `PI_AUTHENTICATE_FAILED` in Pi Browser Preview/Testnet, where the authorization prompt does not appear. The root cause remains unconfirmed because no matching client diagnostic/event payload or live reproduction trace was supplied. A confirmed recovery weakness was found: if the SDK authentication promise never settles, the provider in-flight guard remains locked and a later Retry tap can be ignored. RUN343 now bounds the Pi.authenticate wait to 25 seconds, emits the token-free `PI_AUTH_PROMPT_TIMEOUT` diagnostic, releases the provider attempt path after timeout, and queues a manual Retry tap made during an active attempt instead of silently discarding it. The queued attempt starts only after the current attempt unwinds, preserving single-flight behavior. This is a retry-reliability fix, not proof that the authorization prompt itself now appears. Live Pi Browser verification and durable server session confirmation remain required.
 
 ### P0 — Database state must be reconciled before migrations
 There are 230 canonical migration files in this archive. Source inventory alone cannot establish which migrations are applied to the connected Supabase Testnet or whether the database schema matches the source. Reconcile migration IDs and schema read-only against the actual target before applying anything. Review-required migrations must remain unapplied until individually reviewed, tested against a disposable database, and approved. Never repair history by inserting/deleting migration ledger rows without evidence.
@@ -44,9 +44,11 @@ The source includes performance/accessibility checks, but real-device performanc
 1. Re-opened and inspected the exact authoritative archive.
 2. Ran the repository's `npm run verify:static` gate suite in the available Node 22.16.0 environment.
 3. Verified the baseline package version, canonical migration file count, and presence of repository CI/ignore metadata.
-4. Added this consolidated audit record to the project documentation.
+4. Added a bounded timeout and safe diagnostic for a Pi SDK authentication call that otherwise could remain pending indefinitely; manual Retry taps during a busy attempt are now queued and drained after the attempt settles. Mandatory server-side access-token verification and least-privilege username scope are preserved.
+5. Added `scripts/check-run343-pi-auth-timeout.mjs` and wired it into both the static verification and prebuild check lists.
+6. Passed the new timeout/retry regression check (8/8), RUN342 Pi scope-isolation check (6/6), RUN302 Pi withdrawal hardening check (35/35), and RUN247 build diagnostics check (15/15).
 
-No application logic, database schema, secrets, environment variables, dependency versions, or deployment settings were changed in this audit pass. This is deliberate: without a supported dependency-backed build, live database state, and trace for the reported Pi failure, broad code rewrites would risk breaking authentication, financial controls, or data access without proving the fix.
+No database schema, secrets, environment variables, dependency versions, or deployment settings were changed. The timeout change is narrowly scoped; without a supported dependency-backed build, live database state, and a live Pi trace, broader rewrites would risk breaking authentication, financial controls, or data access without proving a fix.
 
 ## Release gate checklist
 - [ ] Node 24.15.0 deterministic dependency install succeeds.
@@ -55,7 +57,7 @@ No application logic, database schema, secrets, environment variables, dependenc
 - [ ] Production build completes and build artifacts are inspected.
 - [ ] Dependency/security audit is reviewed and remediated.
 - [ ] Playwright and mobile/Pi Browser end-to-end acceptance pass.
-- [ ] Pi Testnet authorization prompt appears; Pi token is verified server-side; session persists and survives refresh/account switch correctly.
+- [ ] Pi Testnet authorization prompt appears; Pi token is verified server-side; session persists and survives refresh/account switch correctly. Timeout recovery is covered by the RUN343 regression check, but the prompt itself is still unverified live.
 - [ ] Supabase Testnet migration history/schema are reconciled read-only; every migration to apply is approved and verified after application.
 - [ ] Financial flows are tested for idempotency, concurrent requests, callback replay, timeouts and reconciliation; Mainnet stays disabled.
 - [ ] Evidence scanner is configured and quarantine release is verified.

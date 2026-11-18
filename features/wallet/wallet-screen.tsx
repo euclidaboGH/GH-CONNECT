@@ -670,10 +670,26 @@ export function PremiumWalletScreen({ onBack, initialNotificationTarget }: { onB
       if (focus) sessionStorage.removeItem("ghc.wallet.focus")
     } catch { /* */ }
     if (!focus) return
+    // Ecosystem ACTIVE services: wallet | ghc | pi-payments
+    if (focus === "ghc") {
+      setAssetRail("ghc")
+      setHistoryRail("ghc")
+      return
+    }
+    if (focus === "wallet") {
+      setAssetRail("ghc")
+      setHistoryRail("ghc")
+      return
+    }
+    // Default and explicit Pi payment tooling focus
     setAssetRail("pi")
     setHistoryRail("pi")
     const targetId =
-      focus === "gh-pi-earnings-tools" || focus.startsWith("gh-") ? focus : "gh-pi-earnings-tools"
+      focus === "pi" || focus === "pi-payments" || focus === "gh-pi-earnings-tools" || focus.startsWith("gh-")
+        ? focus === "pi" || focus === "pi-payments"
+          ? "gh-pi-earnings-tools"
+          : focus
+        : "gh-pi-earnings-tools"
     const timer = window.setTimeout(() => {
       try {
         document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth", block: "start" })

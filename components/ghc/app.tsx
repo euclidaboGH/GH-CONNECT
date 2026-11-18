@@ -15,7 +15,7 @@ import type { Candidate } from "@/lib/ghc-types"
 import { usePiAuth } from "@/contexts/pi-auth-context"
 import { useRegionalContext } from "@/contexts/regional-context"
 import { getShellMessage } from "@/lib/i18n/shell"
-import { Compass, Heart, MessagesSquare, Newspaper, Plus, ShoppingBag, ShoppingCart, UserRound, Users, Wallet } from "lucide-react"
+import { Compass, MessagesSquare, Newspaper, ShoppingCart, UserRound, Users } from "lucide-react"
 import { ErrorBoundary } from "@/lib/error-boundary"
 import { toUserFacingError } from "@/lib/user-facing-error"
 import { ConsentGate } from "./consent-gate"
@@ -26,7 +26,6 @@ import { DailyClaimPrompt } from "./daily-claim-prompt"
 import { SkipToContent } from "./skip-to-content"
 import { AccessibilityAnnouncer } from "./accessibility-announcer"
 import { AccessibleStatus } from "./accessible-status"
-import { SessionResumeToast } from "./session-resume-toast"
 import { getMarketplaceCart } from "@/lib/marketplace/cart"
 import { GlobalHotkeys } from "./global-hotkeys"
 import { GlobalInteractionDialog } from "./global-interaction-dialog"
@@ -143,6 +142,33 @@ function prefetchTabChunks() {
   void import("./create-hub-sheet")
 }
 
+/**
+ * Shown under the boot spinners. Never forces registration (the identity gate stays authoritative),
+ * it only gives a person who is stuck on a spinner a way out instead of waiting forever.
+ */
+function BootRetryHint({ afterMs = 12_000 }: { afterMs?: number }) {
+  const [slow, setSlow] = useState(false)
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSlow(true), afterMs)
+    return () => window.clearTimeout(timer)
+  }, [afterMs])
+  if (!slow) return null
+  return (
+    <div role="status" className="mt-6 flex max-w-xs flex-col items-center text-center">
+      <p className="text-[12px] leading-relaxed text-white/60">
+        This is taking longer than usual. You can keep waiting or reload. Nothing on your account has changed.
+      </p>
+      <button
+        type="button"
+        onClick={() => window.location.reload()}
+        className="mt-3 min-h-11 rounded-full bg-emerald-600/90 px-5 text-sm font-medium text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050a08]"
+      >
+        Reload
+      </button>
+    </div>
+  )
+}
+
 function ScreenBoundary({ children, label, onReset, onDismiss }: { children: ReactNode; label: string; onReset?: () => void; onDismiss?: () => void }) {
   return (
     <ErrorBoundary
@@ -171,17 +197,20 @@ function ScreenBoundary({ children, label, onReset, onDismiss }: { children: Rea
             >
               Try Again
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                retry()
-                onDismiss?.()
-                onReset?.()
-              }}
-              className="mt-3 min-h-11 w-full text-sm font-semibold text-muted-foreground underline underline-offset-2"
-            >
-              Dismiss
-            </button>
+            {/* Dismiss only exists for overlays that can actually be closed. On tab screens it was a
+                second "Try Again". It also closes first so a screen that keeps crashing is never re-run. */}
+            {onDismiss ? (
+              <button
+                type="button"
+                onClick={() => {
+                  onDismiss()
+                  onReset?.()
+                }}
+                className="mt-3 min-h-11 w-full rounded-xl text-sm font-semibold text-muted-foreground underline underline-offset-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+              >
+                Close
+              </button>
+            ) : null}
             <p className="mt-3 text-xs text-muted-foreground">No progress or profile data was removed.</p>
           </div>
         </div>
@@ -434,7 +463,11 @@ export function GHConnectApp() {
 
   useEffect(() => {
     void refreshSectionAttention()
-    const timer = window.setInterval(() => void refreshSectionAttention(), 15_000)
+    // Do not poll while the tab is hidden; the visibilitychange handler below refreshes on return.
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "hidden") return
+      void refreshSectionAttention()
+    }, 15_000)
     const onAttention = () => void refreshSectionAttention()
     const onNotificationsRead = () => {
       setSocialAttentionCount(0)
@@ -547,6 +580,9 @@ export function GHConnectApp() {
       const userId = String(detail?.userId || detail?.id || "").trim()
       if (!userId) return
       const requestId = ++publicProfileRequestRef.current
+      // The preview lives in the main shell; Settings/Wallet/Marketplace/Ecosystem replace that shell,
+      // so close them first or the request would succeed invisibly.
+      window.dispatchEvent(new CustomEvent("ghc:close-overlays"))
       if (userId === String(profile?.id || "")) {
         setPeerProfile(null)
         startTransition(() => setTab("profile"))
@@ -699,6 +735,7 @@ export function GHConnectApp() {
   const [marketplaceOrderId, setMarketplaceOrderId] = useState<string | null>(null)
   const [marketplaceResponseAt, setMarketplaceResponseAt] = useState<number | null>(null)
   const [marketplaceResponseAction, setMarketplaceResponseAction] = useState<string | null>(null)
+  const [marketplaceBucket, setMarketplaceBucket] = useState<"browse" | "orders" | "saved" | "sell" | "mine" | "cart" | null>(null)
   /** Auto-hide bottom nav while scrolling down; reveal on scroll-up or tap */
   const [bottomNavHidden, setBottomNavHidden] = useState(false)
   useEffect(() => {
@@ -710,7 +747,34 @@ export function GHConnectApp() {
     return () => window.removeEventListener("ghc:message-typing", onTyping as EventListener)
   }, [])
 
+  /** Single place that dismisses every full-screen overlay so cross-screen navigation never stacks or hides. */
+  const closeAllOverlays = useCallback(() => {
+    setSettingsOpen(false)
+    setSettingsInitialSection("main")
+    setWalletOpen(false)
+    setWalletNotificationTarget(null)
+    setMarketplaceOpen(false)
+    setMarketplaceListingId(null)
+    setMarketplaceOrderId(null)
+    setMarketplaceResponseAt(null)
+    setMarketplaceResponseAction(null)
+    setMarketplaceBucket(null)
+    setEcosystemOpen(false)
+    setEcosystemFocus(null)
+    setShowCreateHub(false)
+  }, [])
+  useEffect(() => {
+    window.addEventListener("ghc:close-overlays", closeAllOverlays)
+    return () => window.removeEventListener("ghc:close-overlays", closeAllOverlays)
+  }, [closeAllOverlays])
+
   const openSettings = useCallback((section: typeof settingsInitialSection = "main") => {
+    // Rewards/membership/wallet settings must not sit under marketplace or wallet overlays.
+    setMarketplaceOpen(false)
+    setMarketplaceBucket(null)
+    setWalletOpen(false)
+    setWalletNotificationTarget(null)
+    setEcosystemOpen(false)
     setSettingsInitialSection(section)
     setSettingsOpen(true)
     setShowCreateHub(false)
@@ -725,6 +789,11 @@ export function GHConnectApp() {
   }, [])
   const openWallet = useCallback(() => {
     setMarketplaceOpen(false)
+    // Settings and Ecosystem also replace the shell; leaving them open meant Back from Wallet
+    // landed on a screen the person had not asked for.
+    setSettingsOpen(false)
+    setSettingsInitialSection("main")
+    setEcosystemOpen(false)
     setWalletOpen(true)
     setShowCreateHub(false)
     setBottomNavHidden(false)
@@ -758,6 +827,7 @@ export function GHConnectApp() {
       let orderId: string | null = null
       let responseAt: number | null = null
       let responseAction: string | null = null
+      let bucket: "browse" | "orders" | "saved" | "sell" | "mine" | "cart" | null = null
       if (detail && typeof detail === "object" && typeof (detail as { listingId?: unknown }).listingId === "string") {
         listingId = String((detail as { listingId: string }).listingId).trim() || null
       }
@@ -771,6 +841,13 @@ export function GHConnectApp() {
       if (detail && typeof detail === "object" && typeof (detail as { responseAction?: unknown }).responseAction === "string") {
         responseAction = String((detail as { responseAction: string }).responseAction).slice(0, 80) || null
       }
+      if (detail && typeof detail === "object" && typeof (detail as { bucket?: unknown }).bucket === "string") {
+        const raw = String((detail as { bucket: string }).bucket).trim()
+        if (raw === "browse" || raw === "orders" || raw === "saved" || raw === "sell" || raw === "mine" || raw === "cart") {
+          bucket = raw
+        }
+      }
+      if (orderId && !bucket) bucket = "orders"
       setSettingsOpen(false)
       setWalletOpen(false)
       setWalletNotificationTarget(null)
@@ -781,6 +858,7 @@ export function GHConnectApp() {
       setMarketplaceOrderId(orderId)
       setMarketplaceResponseAt(responseAt)
       setMarketplaceResponseAction(responseAction)
+      setMarketplaceBucket(bucket)
       setMarketplaceOpen(true)
     }
     window.addEventListener("ghc:open-marketplace", openMarketplace)
@@ -830,12 +908,12 @@ export function GHConnectApp() {
       const userId = String(d.userId || "").trim()
       const userName = String(d.userName || d.name || d.displayName || "Pioneer").trim()
       const userPhoto = String(d.userPhoto || d.photo || d.avatar || "").trim()
+      closeAllOverlays()
       if (userId && startConversation) {
-        try {
-          void startConversation(userId, userName || "Pioneer", userPhoto || "")
-        } catch {
-          /* */
-        }
+        // startConversation is async: a try/catch alone never sees its rejection.
+        void Promise.resolve()
+          .then(() => startConversation(userId, userName || "Pioneer", userPhoto || ""))
+          .catch(() => addToast("Could not open this conversation. Please try again.", "error"))
       }
       startTransition(() => setTab("messages"))
     }
@@ -858,6 +936,7 @@ export function GHConnectApp() {
     const onOpenCommunity = (e: Event) => {
       const d = (e as CustomEvent).detail || {}
       const groupId = String(d.groupId || d.id || "").trim()
+      closeAllOverlays()
       startTransition(() => setTab("communities"))
       if (!groupId) return
       window.setTimeout(() => {
@@ -882,7 +961,7 @@ export function GHConnectApp() {
       window.removeEventListener("ghc:start-chat", onStartChat)
       window.removeEventListener("ghc:ensure-community-tab", onOpenCommunity)
     }
-  }, [openWallet, openSettings, startConversation, setTab, addToast])
+  }, [openWallet, openSettings, closeAllOverlays, startConversation, setTab, addToast])
   /** Mount a tab once visited so switches stay instant without loading all 6 at boot */
   const [visitedTabs, setVisitedTabs] = useState<Set<string>>(() => new Set(["home"]))
 
@@ -988,6 +1067,7 @@ export function GHConnectApp() {
       const commentId = typeof detail.commentId === "string" ? detail.commentId.trim() : undefined
       const parentId = typeof detail.parentId === "string" ? detail.parentId.trim() : undefined
       const threadRootId = typeof detail.threadRootId === "string" ? detail.threadRootId.trim() : undefined
+      closeAllOverlays()
       startTransition(() => setTab("home"))
       window.setTimeout(() => {
         window.dispatchEvent(new CustomEvent("ghc:open-post-ready", { detail: { postId, action, commentId, parentId, threadRootId } }))
@@ -995,7 +1075,7 @@ export function GHConnectApp() {
     }
     window.addEventListener("ghc:open-post-request", onOpenPost as EventListener)
     return () => window.removeEventListener("ghc:open-post-request", onOpenPost as EventListener)
-  }, [setTab])
+  }, [setTab, closeAllOverlays])
 
   // Browser back / page show: clear disposable overlays without wiping domain state
   useEffect(() => {
@@ -1046,6 +1126,9 @@ export function GHConnectApp() {
       const dest = resolveDestination(raw) || raw
       // Primary tabs → shell tab state
       if (isPrimaryTab(dest)) {
+        // Switching to the tab that is already active does not re-run the tab-change effect,
+        // so overlays must be dismissed explicitly or the request appears to do nothing.
+        closeAllOverlays()
         startTransition(() => setTab(dest))
         return
       }
@@ -1059,32 +1142,88 @@ export function GHConnectApp() {
       window.removeEventListener("ghc:navigate-tab", handleNavigate)
       window.removeEventListener("ghc:navigate", handleNavigate)
     }
-  }, [setTab])
+  }, [setTab, closeAllOverlays])
 
+  // One timer per toast, keyed by id. Previously timers were only armed for the first two toasts in the
+  // raw list, so a third toast that moved up after the first two expired never got a timer and stayed
+  // on screen forever; every re-render of the list also restarted the timers of toasts already showing.
+  const toastTimersRef = useRef<Map<string, number>>(new Map())
   useEffect(() => {
-    const visibleToasts = (toasts ?? []).slice(0, 2)
-    const timers = visibleToasts.map((toast) =>
-      window.setTimeout(() => {
-        setHiddenToastIds((current) => {
-          const next = new Set(current)
-          next.add(toast.id)
-          return next
-        })
-      }, 3200),
-    )
-    return () => timers.forEach((timer) => window.clearTimeout(timer))
-  }, [toasts])
+    const timers = toastTimersRef.current
+    const all = toasts ?? []
+    const live = new Set(all.map((toast) => toast.id))
+    for (const [id, timer] of Array.from(timers.entries())) {
+      if (!live.has(id)) {
+        window.clearTimeout(timer)
+        timers.delete(id)
+      }
+    }
+    // Forget hidden ids for toasts the provider already removed so the set cannot grow without bound.
+    setHiddenToastIds((current) => {
+      let changed = false
+      const next = new Set<string>()
+      current.forEach((id) => {
+        if (live.has(id)) next.add(id)
+        else changed = true
+      })
+      return changed ? next : current
+    })
+    for (const toast of all.filter((item) => !hiddenToastIds.has(item.id)).slice(0, 2)) {
+      if (timers.has(toast.id)) continue
+      // Errors stay longer: three seconds is too short to read and act on a failure message.
+      const duration = toast.type === "error" ? 6500 : 3200
+      const id = toast.id
+      timers.set(
+        id,
+        window.setTimeout(() => {
+          timers.delete(id)
+          setHiddenToastIds((current) => {
+            const next = new Set(current)
+            next.add(id)
+            return next
+          })
+        }, duration),
+      )
+    }
+  }, [toasts, hiddenToastIds])
+  useEffect(() => {
+    const timers = toastTimersRef.current
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer))
+      timers.clear()
+    }
+  }, [])
 
   const visibleToasts = (toasts ?? []).filter((toast) => !hiddenToastIds.has(toast.id)).slice(0, 2)
 
-  // Keyboard navigation support (number keys 1-7 for tabs)
+  /**
+   * Toasts used to exist only in the main shell, so anything triggered from Settings, Wallet, Marketplace
+   * or Ecosystem (saved, copied, failed, …) was silently invisible. Overlays have no bottom nav, so they
+   * anchor to the safe-area edge instead of the nav inset.
+   */
+  const renderToastHost = (anchoredToNav: boolean) => (
+    <div
+      className={`gh-toast-host pointer-events-none fixed inset-x-0 ${
+        anchoredToNav
+          ? "bottom-[var(--gh-toast-bottom-inset,var(--gh-fixed-nav-content-inset))]"
+          : "bottom-[max(1rem,env(safe-area-inset-bottom,0px))]"
+      } z-[220] mx-auto flex max-w-[min(24rem,calc(100vw-1.25rem))] flex-col items-center gap-2 px-3 pb-2`}
+      aria-live="polite"
+    >
+      {visibleToasts.map((toast) => (
+        <Toast key={toast.id} message={toast.message} type={toast.type} />
+      ))}
+    </div>
+  )
+
+  // Keyboard navigation support (number keys 1-6 for tabs)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Number-key tab shortcuts are for the passive app shell only. In particular,
       // never interpret digits entered into wallet amounts, withdrawal PINs, or forms
       // as navigation commands. The wallet is a modal workflow over the shell and must
       // remain mounted for the full financial interaction.
-      if (settingsOpen || walletOpen || e.defaultPrevented || e.isComposing || e.altKey || e.ctrlKey || e.metaKey) return
+      if (settingsOpen || walletOpen || marketplaceOpen || ecosystemOpen || e.defaultPrevented || e.isComposing || e.altKey || e.ctrlKey || e.metaKey) return
       const target = e.target
       if (target instanceof HTMLElement) {
         const tag = target.tagName
@@ -1103,7 +1242,7 @@ export function GHConnectApp() {
     }
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [setTab, settingsOpen, walletOpen])
+  }, [setTab, settingsOpen, walletOpen, marketplaceOpen, ecosystemOpen])
 
   // Always mount ThemeApplier so appearance updates even on loading / onboarding shells
   const themeLayer = <ThemeApplier />
@@ -1122,6 +1261,7 @@ export function GHConnectApp() {
           <div className="mt-8 h-8 w-8 animate-spin rounded-full border-2 border-emerald-500/20 border-t-emerald-400" role="status" aria-label="Loading" />
           <p className="mt-5 text-sm font-semibold tracking-wide text-emerald-300/90">Welcome</p>
           <p className="mt-1 text-[11px] text-white/40">Loading your profile…</p>
+          <BootRetryHint />
         </div>
       </div>
       </>
@@ -1159,7 +1299,7 @@ export function GHConnectApp() {
         {themeLayer}
         <div className="relative flex h-screen flex-col items-center justify-center overflow-hidden bg-[#050a08] px-6">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(239,68,68,0.12)_0%,transparent_60%)]" />
-          <div className="relative z-10 flex max-w-sm flex-col items-center text-center">
+          <div role="alert" className="relative z-10 flex max-w-sm flex-col items-center text-center">
             <p className="text-sm font-semibold tracking-wide text-red-300/90">Identity service unavailable</p>
             <p className="mt-2 text-[12px] leading-relaxed text-white/50">
               GreenHaven could not load your account securely. This is a server configuration issue, not a new-user state.
@@ -1167,7 +1307,7 @@ export function GHConnectApp() {
             </p>
             <button
               type="button"
-              className="mt-6 rounded-full bg-emerald-600/90 px-5 py-2 text-sm font-medium text-white"
+              className="mt-6 min-h-11 rounded-full bg-emerald-600/90 px-5 py-2 text-sm font-medium text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050a08]"
               onClick={() => window.location.reload()}
             >
               Retry
@@ -1192,6 +1332,7 @@ export function GHConnectApp() {
             <div className="mt-8 h-8 w-8 animate-spin rounded-full border-2 border-emerald-500/20 border-t-emerald-400" role="status" aria-label="Loading" />
             <p className="mt-5 text-sm font-semibold tracking-wide text-emerald-300/90">Welcome</p>
             <p className="mt-1 text-[11px] text-white/40">Confirming your GreenHaven identity…</p>
+            <BootRetryHint />
           </div>
         </div>
       </>
@@ -1231,6 +1372,8 @@ export function GHConnectApp() {
                 </Suspense>
               </div>
             </ScreenBoundary>
+            <GlobalInteractionDialog />
+            {renderToastHost(false)}
           </div>
         </ConsentGate>
       </>
@@ -1241,6 +1384,7 @@ export function GHConnectApp() {
     return (
       <>
         {themeLayer}
+        <DirectCallSheet />
         <ConsentGate>
           {/* Full-viewport shell so h-full children (Wallet / Rewards / Membership / Settings) size correctly */}
           <div className="gh-app-shell flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground max-w-[var(--gh-content-max,28rem)] mx-auto relative w-full">
@@ -1255,6 +1399,8 @@ export function GHConnectApp() {
                 </Suspense>
               </div>
             </ScreenBoundary>
+            <GlobalInteractionDialog />
+            {renderToastHost(false)}
           </div>
         </ConsentGate>
       </>
@@ -1276,6 +1422,7 @@ export function GHConnectApp() {
                 setMarketplaceOrderId(null)
                 setMarketplaceResponseAt(null)
                 setMarketplaceResponseAction(null)
+                setMarketplaceBucket(null)
               }}
             >
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -1287,15 +1434,19 @@ export function GHConnectApp() {
                       setMarketplaceOrderId(null)
                       setMarketplaceResponseAt(null)
                       setMarketplaceResponseAction(null)
+                      setMarketplaceBucket(null)
                     }}
                     initialListingId={marketplaceListingId}
                     initialOrderId={marketplaceOrderId}
                     initialResponseAt={marketplaceResponseAt}
                     initialResponseAction={marketplaceResponseAction}
+                    initialBucket={marketplaceBucket}
                   />
                 </Suspense>
               </div>
             </ScreenBoundary>
+            <GlobalInteractionDialog />
+            {renderToastHost(false)}
           </div>
         </ConsentGate>
       </>
@@ -1329,6 +1480,8 @@ export function GHConnectApp() {
                 </Suspense>
               </div>
             </ScreenBoundary>
+            <GlobalInteractionDialog />
+            {renderToastHost(false)}
           </div>
         </ConsentGate>
       </>
@@ -1558,11 +1711,12 @@ export function GHConnectApp() {
                       </span>
                     ) : null}
                   </span>
-                    {((id === "home" && socialAttentionCount > 0 && tab !== "home") ||
-                      (id === "messages" && unreadMessageCount > 0 && tab !== "messages") ||
-                      (id === "communities" && unreadGroupCount > 0 && tab !== "communities") ||
-                      (id === "profile" && economyAttentionCount > 0 && tab !== "profile")) ? (
+                    {((id === "home" && socialAttentionCount > 0 && activeTab !== "home") ||
+                      (id === "messages" && unreadMessageCount > 0 && activeTab !== "messages") ||
+                      (id === "communities" && unreadGroupCount > 0 && activeTab !== "communities") ||
+                      (id === "profile" && economyAttentionCount > 0 && activeTab !== "profile")) ? (
                       <span
+                        role="img"
                         className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-card"
                         aria-label={
                           id === "home"
@@ -1627,11 +1781,14 @@ export function GHConnectApp() {
           } catch { /* */ }
         }}
       />
-      {showShortVideo && (
+        </Suspense>
+      ) : null}
+
+      {/* Was nested inside the create-hub block, so it only rendered while the hub was open
+          and unmounted the moment the hub closed. It is an independent full-screen flow. */}
+      {showShortVideo ? (
         <Suspense fallback={null}>
           <ShortVideoScreen open={showShortVideo} onClose={() => setShowShortVideo(false)} />
-        </Suspense>
-      )}
         </Suspense>
       ) : null}
 
@@ -1654,7 +1811,7 @@ export function GHConnectApp() {
         onClose={() => dismissMatchCelebration?.()}
         onContinue={() => {
           dismissMatchCelebration?.()
-          setTab("discover")
+          startTransition(() => setTab("discover"))
         }}
         onMessage={() => {
           const id = matchCelebration?.userId
@@ -1662,13 +1819,10 @@ export function GHConnectApp() {
           const photo = matchCelebration?.userPhoto || ""
           dismissMatchCelebration?.()
           if (id) {
-            void startConversation?.(id, name, photo)
-            setTab("messages")
-            try {
-              window.dispatchEvent(new CustomEvent("ghc:navigate-tab", { detail: "messages" }))
-            } catch {
-              /* */
-            }
+            void Promise.resolve()
+              .then(() => startConversation?.(id, name, photo))
+              .catch(() => addToast("Could not open this conversation. Please try again.", "error"))
+            startTransition(() => setTab("messages"))
           }
         }}
       />
@@ -1682,7 +1836,7 @@ export function GHConnectApp() {
             onBack={() => { publicProfileRequestRef.current += 1; setPeerProfile(null) }}
             onMessage={() => {
               const target = peerProfile
-              void startConversation(target.id, target.name, target.photo).then(() => {
+              void Promise.resolve(startConversation(target.id, target.name, target.photo)).then(() => {
                 publicProfileRequestRef.current += 1
                 setPeerProfile(null)
                 startTransition(() => setTab("messages"))
@@ -1706,14 +1860,7 @@ export function GHConnectApp() {
       <CreatorStudioOverlay />
       <ProfileStorySection creatorHost />
 
-      <div
-        className="gh-toast-host pointer-events-none fixed inset-x-0 bottom-[var(--gh-toast-bottom-inset,var(--gh-fixed-nav-content-inset))] z-[220] mx-auto flex max-w-[min(24rem,calc(100vw-1.25rem))] flex-col items-center gap-2 px-3 pb-2"
-        aria-live="polite"
-      >
-        {visibleToasts.map((toast) => (
-          <Toast key={toast.id} message={toast.message} type={toast.type} />
-        ))}
-      </div>
+      {renderToastHost(true)}
     </div>
     </ConsentGate>
     </>

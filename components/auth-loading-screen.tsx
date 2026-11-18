@@ -1,6 +1,8 @@
 "use client"
 
+import { useState } from "react"
 import { usePiAuth } from "@/contexts/pi-auth-context"
+import { buildPiAuthDiagnosticReport } from "@/lib/pi-runtime"
 import { allowLocalAuthFallback } from "@/lib/system-config"
 import { BrandLogo } from "@/components/ghc/brand-logo"
 import { SignInWithPiButton } from "@/components/auth/sign-in-with-pi-button"
@@ -8,6 +10,19 @@ import { isPiBrowserRuntime, markPiBrowserRuntime } from "@/lib/pi-native"
 
 export function AuthLoadingScreen() {
   const { authMessage, hasError, reinitialize, continueLocalPreview } = usePiAuth()
+  const [diagnosticReport, setDiagnosticReport] = useState<string | null>(null)
+  const [diagnosticCopied, setDiagnosticCopied] = useState(false)
+  async function showDiagnostics() {
+    const report = buildPiAuthDiagnosticReport()
+    setDiagnosticReport(report)
+    try {
+      await navigator.clipboard.writeText(report)
+      setDiagnosticCopied(true)
+    } catch {
+      // Clipboard can be blocked in embedded browsers; the report stays visible to screenshot.
+      setDiagnosticCopied(false)
+    }
+  }
   // Soft-connect mode: if we already know this is Pi Browser, remember it for the session
   // so a slow SDK bridge does not surface a hard "Couldn’t sign you in".
   if (typeof window !== "undefined" && isPiBrowserRuntime()) {
@@ -118,6 +133,18 @@ export function AuthLoadingScreen() {
                 </p>
               )}
             </>
+            <button
+              type="button"
+              onClick={() => void showDiagnostics()}
+              className="text-[11px] font-semibold text-white/45 underline underline-offset-2"
+            >
+              {diagnosticReport ? (diagnosticCopied ? "Diagnostics copied" : "Diagnostics shown below") : "Copy sign-in diagnostics"}
+            </button>
+            {diagnosticReport ? (
+              <pre className="max-h-48 w-full overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/40 p-3 text-left text-[10px] leading-snug text-white/60">
+                {diagnosticReport}
+              </pre>
+            ) : null}
           </div>
         ) : null}
       </div>
