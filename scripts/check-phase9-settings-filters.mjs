@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /** Phase 9 Settings & Filters (programme) source contracts. */
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { hasProjectDoc } from './lib/read-project-doc.mjs'
 
 const root = process.cwd()
 const read = (p) => readFileSync(join(root, p), 'utf8')
@@ -33,7 +34,10 @@ test('filter utils normalize text and count active filters', /normalizeFilterTex
 test('active filter summary is accessible copy', /describeActiveFilterSummary/.test(filterUtils))
 test('package and app release versions agree', release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`))
 test('phase 9 settings-filters checker is registered in prebuild', Boolean(pkg.scripts?.['prebuild:checks']?.includes('check-phase9-settings-filters.mjs')))
-test('phase 9 programme doc exists', existsSync(join(root, 'docs/PHASE-9-SETTINGS-FILTERS-2026-11-08.md')))
+test(
+  'phase 9 programme doc exists in canonical or preserved historical documentation',
+  hasProjectDoc('docs/PHASE-9-SETTINGS-FILTERS-2026-11-08.md')
+)
 
 const failed = checks.filter((x) => !x).length
 console.log(`\nPhase 9 settings & filters: ${checks.length - failed}/${checks.length} passed`)
