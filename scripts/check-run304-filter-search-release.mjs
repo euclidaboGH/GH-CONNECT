@@ -18,6 +18,9 @@ const shareSheet = read('components/ghc/share-sheet.tsx')
 const messageComponents = read('components/ghc/message-components.tsx')
 const settings = read('components/ghc/settings.tsx')
 const env = read('.env.example')
+const historicalWorklog = 'docs/archive/historical-implementation-records/docs__UPGRADE-WORKLOG-0.338.67.md'
+const worklogPath = existsSync('docs/UPGRADE-WORKLOG-0.338.67.md') ? 'docs/UPGRADE-WORKLOG-0.338.67.md' : historicalWorklog
+const worklog = existsSync(worklogPath) ? read(worklogPath) : ''
 const e2e = read('e2e/responsive-screen-review.spec.ts')
 const checks = []
 const test = (name, ok) => { checks.push(Boolean(ok)); console.log(`${ok ? 'PASS' : 'FAIL'} Run #304: ${name}`) }
@@ -51,7 +54,7 @@ test('responsive e2e review toggles and measures filter panels', e2e.includes('a
 test('safe environment template exists and has no populated private credentials', existsSync('.env.example') && !/^SUPABASE_SERVICE_ROLE_KEY[ \t]*=[ \t]*\S+/m.test(env) && !/^PI_SERVER_API_KEY[ \t]*=[ \t]*\S+/m.test(env) && !/^PI_WALLET_PRIVATE_SEED[ \t]*=[ \t]*\S+/m.test(env))
 test('safe environment template separates public and server-only settings', env.includes('Public application URLs') && env.includes('Server-only Supabase configuration'))
 test('release hygiene validates private template values', read('scripts/check-release-hygiene.mjs').includes('environment template contains no populated private credentials'))
-test('no migrations, financial execution or payment mutations introduced by this run', !/supabase\/migrations/.test(read('docs/UPGRADE-WORKLOG-0.338.67.md')) && !/createPayment\(|executeSpend\(|settlePayment\(/.test(panel + discovery))
+test('no migrations, financial execution or payment mutations introduced by this run', worklog.length > 0 && !/supabase\/migrations/.test(worklog) && !/createPayment\(|executeSpend\(|settlePayment\(/.test(panel + discovery))
 
 const failed = checks.filter((value) => !value).length
 console.log(`\nRun #304 filter/search release: ${checks.length - failed}/${checks.length} passed; ${failed} failed.`)
