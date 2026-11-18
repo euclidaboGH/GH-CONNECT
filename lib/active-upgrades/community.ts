@@ -5,3 +5,6 @@ export function clampCommunityPage(value: unknown, size = 24): number { const n 
 export function safeCommunityResourceUrl(value: unknown): string | null { try { const u = new URL(String(value ?? '').trim()); return ['https:', 'http:'].includes(u.protocol) ? u.toString() : null } catch { return null } }
 export function communityActivityLabel(posts: unknown, members: unknown): string { const p = Number(posts), m = Number(members); if (!Number.isFinite(p) || !Number.isFinite(m) || p < 0 || m < 0) return 'Activity unavailable'; return p === 0 ? 'Getting started' : `${Math.floor(p)} recent posts · ${Math.floor(m)} members` }
 export function canShowCommunityChat(input: { isMember?: boolean; chatEnabled?: boolean; revoked?: boolean }): boolean { return input.isMember === true && input.chatEnabled === true && input.revoked !== true }
+
+export function safeCommunityCount(value: unknown): number { const count = Number(value); return Number.isSafeInteger(count) && count >= 0 ? count : 0 }
+export function safeCommunityCountTotal(values: readonly unknown[]): number { return values.reduce((sum, value) => Math.min(Number.MAX_SAFE_INTEGER, sum + safeCommunityCount(value)), 0) }

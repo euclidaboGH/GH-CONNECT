@@ -459,6 +459,8 @@ export interface Message {
   id: string
   senderId: string
   sharedPostId?: string
+  sharedType?: string
+  sharedId?: string
   text: string
   createdAt: number
   // Enhanced message features

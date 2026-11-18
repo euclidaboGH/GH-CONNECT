@@ -32,6 +32,7 @@ import { apiTouchConversationPresence, apiEnsureConversationMember } from "@/lib
 import { buildRelationshipOutcome } from "@/lib/relationship-outcomes"
 import { FilterSummary } from "./filtering/filter-summary"
 import { FilterPanel } from "./filtering/filter-panel"
+import { GroupInvitesPanel } from "./group-invites-panel"
 import { matchesFilterQuery } from "@/lib/filtering/filter-utils"
 
 const MESSAGE_WINDOW = 40
@@ -136,6 +137,13 @@ export function MessageScreen() {
   const [serverSearchError, setServerSearchError] = useState("")
   const [sharedMediaOpen, setSharedMediaOpen] = useState(false)
   const [conversationDetailsOpen, setConversationDetailsOpen] = useState(false)
+  const [groupCreateOpen, setGroupCreateOpen] = useState(false)
+  const [groupTitle, setGroupTitle] = useState("")
+  const [groupRequestId, setGroupRequestId] = useState("")
+  const [groupInviteIds, setGroupInviteIds] = useState<string[]>([])
+  const [groupCreateBusy, setGroupCreateBusy] = useState(false)
+  const [contactShareBusy, setContactShareBusy] = useState(false)
+  const [contactShareRequest, setContactShareRequest] = useState<{ conversationId: string; id: string } | null>(null)
   const messageSearchInputRef = useRef<HTMLInputElement>(null)
   const [peerPresence, setPeerPresence] = useState<PeerPresence | null>(null)
   const [threadContext, setThreadContext] = useState<{ type?: string; orderId?: string; listingId?: string } | null>(null)
@@ -505,6 +513,59 @@ export function MessageScreen() {
       null
     )
   }, [list, conversations, selectedId])
+
+  const createGroupFromSelectedDm = async () => {
+    if (!selected || groupCreateBusy || !groupTitle.trim()) return
+    setGroupCreateBusy(true)
+    try {
+      const response = await fetch("/api/messaging/conversations/group", {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceConversationId: selected.id, title: groupTitle.trim(), invitedUserIds: groupInviteIds, clientRequestId: groupRequestId }), cache: "no-store",
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok || !payload?.ok || !payload?.conversationId) throw new Error(payload?.error || "GROUP_CREATE_UNAVAILABLE")
+      setGroupCreateOpen(false); setGroupTitle(""); setGroupRequestId(""); setGroupInviteIds([]); setConversationDetailsOpen(false)
+      await ghc.refreshConversations?.()
+      await (ghc as { loadConversations?: () => Promise<unknown> }).loadConversations?.()
+      window.dispatchEvent(new CustomEvent("ghc:group-invites-refresh"))
+      window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: `Group created. ${Number(payload.invitedCount) || 0} invitations sent; members join after accepting.`, type: "success" } }))
+    } catch (error) {
+      window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: error instanceof Error ? error.message : "Could not create group", type: "error" } }))
+    } finally { setGroupCreateBusy(false) }
+  }
+
+  const shareOwnContactInSelected = async () => {
+    if (!selected || contactShareBusy) return
+    setContactShareBusy(true)
+    const requestId = contactShareRequest?.conversationId === selected.id
+      ? contactShareRequest.id
+      : (globalThis.crypto?.randomUUID?.() || `profile-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`)
+    setContactShareRequest({ conversationId: selected.id, id: requestId })
+    try {
+      const response = await fetch(`/api/messaging/conversations/${encodeURIComponent(selected.id)}/contacts`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientMessageId: requestId }), cache: "no-store",
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok || !payload?.ok) throw new Error(payload?.error || "CONTACT_SHARE_UNAVAILABLE")
+      await loadConversationMessages?.(selected.id)
+      setContactShareRequest(null)
+      window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: "Your public GreenHaven profile was shared", type: "success" } }))
+    } catch (error) {
+      window.dispatchEvent(new CustomEvent("ghc:toast", { detail: { message: error instanceof Error ? error.message : "Could not share profile", type: "error" } }))
+    } finally { setContactShareBusy(false) }
+  }
+
+  const groupCandidates = useMemo(() => {
+    const byId = new Map<string, { id: string; name: string }>()
+    for (const item of [...ghc.friends, ...ghc.candidates]) {
+      const id = typeof item === "string" ? item.trim() : String((item as any)?.userId || (item as any)?.id || (item as any)?.ghUserId || "").trim()
+      if (!id || id === selected?.participantId || (ghc.blockedUsers || []).map(String).includes(id)) continue
+      const name = typeof item === "string" ? item : String((item as any)?.name || (item as any)?.displayName || (item as any)?.username || id)
+      byId.set(id, { id, name: name.slice(0, 120) })
+    }
+    return [...byId.values()].slice(0, 30)
+  }, [ghc.friends, ghc.candidates, ghc.blockedUsers, selected?.participantId])
 
   const allMessages: Message[] = useMemo(() => {
     const raw = selected?.messages
@@ -933,8 +994,31 @@ export function MessageScreen() {
               <div className="grid grid-cols-2 gap-2">
                 <button type="button" onClick={() => { setConversationDetailsOpen(false); setSharedMediaOpen(true) }} className="rounded-xl border border-border bg-card px-3 py-3 text-sm font-semibold text-foreground hover:bg-muted"><Images size={16} className="mr-2 inline" />Shared media</button>
                 {!isCommunity ? <button type="button" onClick={() => { setConversationDetailsOpen(false); window.dispatchEvent(new CustomEvent("ghc:open-profile", { detail: { userId: selected.participantId, name: selected.participantName } })) }} className="rounded-xl border border-border bg-card px-3 py-3 text-sm font-semibold text-foreground hover:bg-muted">View profile</button> : null}
+                {!isCommunity ? <button type="button" disabled={contactShareBusy} onClick={() => void shareOwnContactInSelected()} className="rounded-xl border border-border bg-card px-3 py-3 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50">{contactShareBusy ? "Sharing…" : "Share my profile"}</button> : null}
+                {!isCommunity && selected.conversationType !== "group" ? <button type="button" onClick={() => { setGroupTitle(`${selected.participantName || "Friends"} group`.slice(0, 80)); setGroupRequestId(globalThis.crypto?.randomUUID?.() || `group-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`); setGroupInviteIds([]); setGroupCreateOpen(true) }} className="rounded-xl border border-border bg-card px-3 py-3 text-sm font-semibold text-foreground hover:bg-muted">Create group from chat</button> : null}
               </div>
-              <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">This is the Phase 1 information-centre foundation. Durable nicknames, quick-reaction defaults, read-receipt preferences, contact sharing and group-creation workflows will only be enabled after their member-scoped persistence and privacy contracts pass review.</p>
+              {groupCreateOpen ? (
+                <section className="rounded-2xl border border-emerald-300/60 bg-card p-3" aria-label="Create group from direct message">
+                  <h3 className="text-sm font-bold text-foreground">Create a group</h3>
+                  <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">The person in this direct chat will receive an invitation. Additional people you select must accept before they become group members.</p>
+                  <label className="mt-3 block text-[11px] font-semibold text-foreground" htmlFor="gh-group-title">Group name</label>
+                  <input id="gh-group-title" value={groupTitle} onChange={(event) => setGroupTitle(event.target.value.slice(0, 80))} maxLength={80} className="mt-1 min-h-10 w-full rounded-xl border border-border bg-background px-3 text-sm" />
+                  <p className="mt-3 text-[11px] font-semibold text-foreground">Invite additional people</p>
+                  <div className="mt-1 max-h-44 space-y-1 overflow-y-auto">
+                    {groupCandidates.map((candidate) => (
+                      <label key={candidate.id} className="flex min-h-9 items-center gap-2 rounded-lg px-2 text-xs text-foreground hover:bg-muted/60">
+                        <input type="checkbox" checked={groupInviteIds.includes(candidate.id)} onChange={(event) => setGroupInviteIds((current) => event.target.checked ? [...current, candidate.id].slice(0, 19) : current.filter((id) => id !== candidate.id))} />
+                        <span className="truncate">{candidate.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    <button type="button" disabled={groupCreateBusy || !groupTitle.trim()} onClick={() => void createGroupFromSelectedDm()} className="min-h-10 flex-1 rounded-xl bg-[var(--gh-green)] px-3 text-xs font-bold text-white disabled:opacity-50">{groupCreateBusy ? "Creating…" : "Create and invite"}</button>
+                    <button type="button" disabled={groupCreateBusy} onClick={() => { setGroupCreateOpen(false); setGroupRequestId(""); setGroupInviteIds([]) }} className="min-h-10 rounded-xl border border-border px-3 text-xs font-semibold">Cancel</button>
+                  </div>
+                </section>
+              ) : null}
+              <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">Contact sharing sends only your public GreenHaven profile. It does not disclose private contact details or share another member’s identity without their consent.</p>
             </div>
           </div>
         ) : null}
@@ -1442,6 +1526,7 @@ export function MessageScreen() {
           })()
         }}
       >
+        <GroupInvitesPanel />
         {inboxRefreshing ? (
           <p className="px-3 py-1.5 text-center text-[11px] font-medium text-muted-foreground">Refreshing inbox…</p>
         ) : null}

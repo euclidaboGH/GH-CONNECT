@@ -38,9 +38,10 @@ export async function POST(request: Request) {
   }
 
   const kindRaw = String(parsed.value.kind || "general")
-  const kind = (["situation", "result", "survey", "general"].includes(kindRaw)
-    ? kindRaw
-    : "general") as FieldReportKind
+  if (!["situation", "result", "survey", "general"].includes(kindRaw)) {
+    return NextResponse.json({ ok: false, error: "INVALID_KIND" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+  }
+  const kind = kindRaw as FieldReportKind
   const body = typeof parsed.value.body === "string" ? parsed.value.body : ""
   const locationHint = typeof parsed.value.locationHint === "string" ? parsed.value.locationHint : undefined
   const surveyId = typeof parsed.value.surveyId === "string" ? parsed.value.surveyId : undefined

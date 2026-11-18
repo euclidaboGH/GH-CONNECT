@@ -10,40 +10,41 @@ This inventory scans every canonical 'supabase/migrations/*.sql' file. It does n
 
 ## Inventory totals
 
-- Canonical migration files scanned: **224**
-- 'create_table': **155**
-- 'alter_table': **240**
-- 'create_function': **479**
+- Canonical migration files scanned: **229**
+- 'create_table': **179**
+- 'alter_table': **251**
+- 'create_function': **483**
 - 'create_procedure': **0**
 - 'create_view': **0**
 - 'create_type': **0**
-- 'create_index': **259**
+- 'create_index': **293**
 - 'create_policy': **159**
-- 'create_trigger': **23**
-- 'security_definer': **494**
-- 'enable_rls': **158**
+- 'create_trigger': **25**
+- 'security_definer': **497**
+- 'enable_rls': **165**
 - 'force_rls': **0**
-- 'drop_statement': **182**
+- 'drop_statement': **184**
 - 'truncate_statement': **1**
 - 'delete_statement': **43**
-- 'update_statement': **389**
-- 'dynamic_execute': **5**
-- 'grant_statement': **578**
-- 'revoke_statement': **580**
-- 'transaction_begin': **629**
-- 'transaction_commit': **17**
+- 'update_statement': **394**
+- 'dynamic_execute': **8**
+- 'grant_statement': **588**
+- 'revoke_statement': **592**
+- 'transaction_begin': **637**
+- 'transaction_commit': **20**
 - 'transaction_rollback': **0**
 
 ## Per-file review signals
 
-- 'REVIEW_DATA_MUTATION': present in **134** migration file(s).
-- 'REVIEW_DESTRUCTIVE_DDL': present in **90** migration file(s).
-- 'REVIEW_TRIGGER_ORDER_AND_SIDE_EFFECTS': present in **15** migration file(s).
+- 'REVIEW_DATA_MUTATION': present in **136** migration file(s).
+- 'REVIEW_DESTRUCTIVE_DDL': present in **91** migration file(s).
+- 'REVIEW_TRIGGER_ORDER_AND_SIDE_EFFECTS': present in **16** migration file(s).
 - 'REVIEW_FUNCTION_ACL_EVIDENCE': present in **14** migration file(s).
 - 'REVIEW_SECURITY_DEFINER_SEARCH_PATH': present in **6** migration file(s).
-- 'REVIEW_DYNAMIC_SQL': present in **4** migration file(s).
+- 'REVIEW_DYNAMIC_SQL': present in **5** migration file(s).
 - 'REVIEW_TABLE_RLS_CONTEXT': present in **1** migration file(s).
 - 'REVIEW_STORAGE_DEPENDENCY': present in **1** migration file(s).
+- 'REVIEW_EXTENSION_PREREQUISITE': present in **1** migration file(s).
 
 Full per-migration counts and flags are in 'MIGRATION-STRUCTURAL-INVENTORY-2026-11-09.csv'.
 

@@ -149,7 +149,7 @@ export async function apiSendMessageWithRetry(
 ) {
   const first = await apiSendMessage(conversationId, text, clientMessageId, replyToMessageId, sharedPostId)
   if (first.httpOk || first.ok === true) return first
-  if (typeof first.error === "string" && /AUTH|FORBIDDEN|BLOCKED|PRIVACY_RESTRICTED|PRIVACY_SETTINGS_UNCONFIGURED|SHARED_POST_PRIVATE|INVALID_SHARED_POST|VALIDATION|TOO_LONG|EMPTY_BODY|REPLY_TARGET|INVALID_REPLY/i.test(first.error)) return first
+  if (typeof first.error === "string" && /AUTH|FORBIDDEN|BLOCKED|PRIVACY_RESTRICTED|PRIVACY_SETTINGS_UNCONFIGURED|SHARED_POST_PRIVATE|INVALID_SHARED_POST|VALIDATION|TOO_LONG|EMPTY_BODY|REPLY_TARGET|INVALID_REPLY|IDEMPOTENCY_CONFLICT/i.test(first.error)) return first
   await new Promise((r) => setTimeout(r, 800))
   return apiSendMessage(conversationId, text, clientMessageId, replyToMessageId, sharedPostId)
 }

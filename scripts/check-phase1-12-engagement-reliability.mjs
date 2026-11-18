@@ -26,7 +26,7 @@ const checks = [
   ["downvote tap submits an authoritative downvote directly", /voteBtn\("downvote"\)/.test(card) && /onVote\(c\)/.test(card)],
   ["vote clicks do not open the reaction picker or bubble into post navigation", /setShowReactions\(false\)[\s\S]*?void handleCuration\(c\)/.test(card) && /e\.stopPropagation\(\)/.test(card) && !/setCurationReactionKind\("positive"\)[\s\S]{0,100}setShowReactions\(\(visible\) => !visible\)/.test(card)],
   ["long press still opens voter roster without submitting an accidental vote", /pressProps\(up \? "upvotes" : "downvotes"\)/.test(card) && /startCurationRosterLongPress\(kind\)/.test(card) && /curationRosterLongPressRef\.current/.test(card)],
-  ["vote counts and selection reset from canonical props between post cards", /setUpvoteCount\(typeof propUp === "number"[\s\S]*?setDownvoteCount\(typeof propDown === "number"[\s\S]*?setCurationChoice\(propViewerChoice/.test(card)],
+  ["vote counts and selection reset from canonical props between post cards", /setUpvoteCount\(safeCommunityCount\(propUp\)\)[\s\S]*?setDownvoteCount\(safeCommunityCount\(propDown\)\)[\s\S]*?setCurationChoice\(propViewerChoice/.test(card)],
 ]
 let failed = 0
 for (const [label, ok] of checks) { console.log(`${ok ? "PASS" : "FAIL"} ${label}`); if (!ok) failed++ }

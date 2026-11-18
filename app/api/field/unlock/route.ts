@@ -17,7 +17,8 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 export async function POST(request: Request) {
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown"
+  const rawIp = request.headers.get("x-real-ip")?.trim() || "unknown"
+  const ip = /^[0-9a-fA-F:.]{1,64}$/.test(rawIp) ? rawIp : "unknown"
   const rate = await checkDurableRateLimit(`field-unlock:${ip}`, 10, 60_000, { onUnavailable: "deny" })
   if (!rate.ok) {
     return NextResponse.json(

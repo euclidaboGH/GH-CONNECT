@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS public.gh_research_geo_units (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   country_code char(2) NOT NULL CHECK (country_code ~ '^[A-Z]{2}$'),
   level_key text NOT NULL,
-  parent_id uuid NULL REFERENCES public.gh_research_geo_units(id) ON DELETE RESTRICT,
+  parent_id uuid NULL,
   external_code text NULL CHECK (external_code IS NULL OR char_length(external_code)<=100),
   name text NOT NULL CHECK (char_length(name) BETWEEN 1 AND 180),
   normalized_name text NOT NULL CHECK (char_length(normalized_name) BETWEEN 1 AND 180),
@@ -67,10 +67,14 @@ CREATE TABLE IF NOT EXISTS public.gh_research_geo_units (
   is_active boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE(country_code,level_key,parent_id,normalized_name)
+  UNIQUE(country_code,level_key,parent_id,normalized_name),
+  UNIQUE(id,country_code),
+  FOREIGN KEY(country_code,level_key) REFERENCES public.gh_research_geo_levels(country_code,level_key) ON DELETE RESTRICT,
+  FOREIGN KEY(parent_id,country_code) REFERENCES public.gh_research_geo_units(id,country_code) ON DELETE RESTRICT
 );
 CREATE UNIQUE INDEX IF NOT EXISTS gh_research_geo_units_identity_idx ON public.gh_research_geo_units(country_code,level_key,COALESCE(parent_id,'00000000-0000-0000-0000-000000000000'::uuid),normalized_name);
 CREATE INDEX IF NOT EXISTS gh_research_geo_units_parent_idx ON public.gh_research_geo_units(country_code,parent_id,normalized_name);
+CREATE INDEX IF NOT EXISTS gh_research_geo_units_parent_country_fk_idx ON public.gh_research_geo_units(parent_id,country_code) WHERE parent_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS gh_research_geo_units_code_idx ON public.gh_research_geo_units(country_code,level_key,external_code) WHERE external_code IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS public.gh_research_election_contests (
@@ -78,14 +82,16 @@ CREATE TABLE IF NOT EXISTS public.gh_research_election_contests (
   project_id uuid NOT NULL REFERENCES public.gh_research_projects(id) ON DELETE CASCADE,
   title text NOT NULL CHECK (char_length(title) BETWEEN 1 AND 180),
   election_type text NOT NULL CHECK (election_type IN ('presidential','gubernatorial','senatorial','house','state_assembly','local','referendum','other')),
-  country_code char(2) NOT NULL,
+  country_code char(2) NOT NULL CHECK (country_code ~ '^[A-Z]{2}$'),
   election_date date NULL,
-  geo_unit_id uuid NULL REFERENCES public.gh_research_geo_units(id) ON DELETE RESTRICT,
+  geo_unit_id uuid NULL,
   status text NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','active','closed','archived')),
   created_by text NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE(project_id,title)
+  UNIQUE(project_id,title),
+  UNIQUE(id,project_id),
+  FOREIGN KEY(geo_unit_id,country_code) REFERENCES public.gh_research_geo_units(id,country_code) ON DELETE RESTRICT
 );
 CREATE TABLE IF NOT EXISTS public.gh_research_candidates (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -119,7 +125,7 @@ CREATE INDEX IF NOT EXISTS gh_research_assignments_scope_idx ON public.gh_resear
 CREATE TABLE IF NOT EXISTS public.gh_research_tallies (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id uuid NOT NULL REFERENCES public.gh_research_projects(id) ON DELETE CASCADE,
-  contest_id uuid NOT NULL REFERENCES public.gh_research_election_contests(id) ON DELETE CASCADE,
+  contest_id uuid NOT NULL,
   geo_unit_id uuid NOT NULL REFERENCES public.gh_research_geo_units(id) ON DELETE RESTRICT,
   polling_unit_code text NOT NULL CHECK (char_length(polling_unit_code) BETWEEN 1 AND 120),
   agent_user_id text NOT NULL,
@@ -134,7 +140,8 @@ CREATE TABLE IF NOT EXISTS public.gh_research_tallies (
   submitted_at timestamptz NOT NULL DEFAULT now(),
   reviewed_by text NULL,
   reviewed_at timestamptz NULL,
-  UNIQUE(contest_id,polling_unit_code,agent_user_id)
+  UNIQUE(contest_id,polling_unit_code,agent_user_id),
+  FOREIGN KEY(contest_id,project_id) REFERENCES public.gh_research_election_contests(id,project_id) ON DELETE CASCADE
 );
 CREATE UNIQUE INDEX IF NOT EXISTS gh_research_tallies_id_contest_unique_idx ON public.gh_research_tallies(id,contest_id);
 CREATE TABLE IF NOT EXISTS public.gh_research_tally_candidate_votes (

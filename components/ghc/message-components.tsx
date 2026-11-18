@@ -485,6 +485,9 @@ function MessageBubbleBase({
     senderId: string
     createdAt: number
     replyTo?: string
+    sharedType?: string
+    sharedId?: string
+    sharedPostId?: string
     replyToPreview?: { senderName: string; text: string }
     reactions?: Record<string, string[]>
     isEdited?: boolean
@@ -650,6 +653,12 @@ function MessageBubbleBase({
               <p className="opacity-80">View original in feed · ref {(message as any).sharedPostId.slice(0, 8)}…</p>
             </div>
           )}
+          {message.sharedType === "profile" && message.sharedId ? (
+            <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("ghc:open-profile", { detail: { userId: message.sharedId } }))} className={`mt-2 flex w-full items-center gap-2 rounded-xl border px-3 py-2 text-left text-xs ${isSentByCurrentUser ? "border-emerald-400/40 bg-emerald-500/20 text-emerald-50" : "border-border/80 bg-card text-foreground/90"}`}>
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" aria-hidden="true">GH</span>
+              <span className="min-w-0"><strong className="block">Shared GreenHaven profile</strong><span className="opacity-75">Open public profile</span></span>
+            </button>
+          ) : null}
           <p className={`mt-1 flex items-center gap-1 text-xs opacity-70 ${isSentByCurrentUser ? "justify-end text-emerald-900 dark:text-emerald-100" : "text-muted-foreground"}`}>
             <span>{timestamp}</span>
             {message.isEdited ? <span>(edited)</span> : null}

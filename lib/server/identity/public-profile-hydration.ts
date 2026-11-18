@@ -77,7 +77,7 @@ export async function hydratePublicProfileIdentity<T extends Row>(items: T[]): P
       select: "gh_user_id,display_name,username,photos",
       limit: String(ids.length),
     })
-    const response = await supabaseRest<unknown>(`gh_user_profiles?${query.toString()}`, { method: "GET", timeoutMs: 5000, maxResponseBytes: 1024 * 1024 })
+    const response = await supabaseRest<unknown>(`gh_user_profiles?${query.toString()}`, { method: "GET", cache: "no-store", timeoutMs: 5000, maxResponseBytes: 1024 * 1024 })
     if (!response.ok || !Array.isArray(response.data) || response.data.length > ids.length) return items
     const data = response.data
     const requestedIds = new Set(ids)

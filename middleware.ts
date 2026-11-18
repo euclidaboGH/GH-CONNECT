@@ -60,12 +60,24 @@ export function middleware(request: NextRequest) {
     if (origin) {
       try {
         if (new URL(origin).origin !== request.nextUrl.origin) {
+          console.warn("[middleware] blocked cross-origin API mutation", {
+            requestId,
+            isPiAuthRoute: path === "/api/auth/pi",
+            method: request.method.toUpperCase(),
+            reason: "ORIGIN_MISMATCH",
+          })
           return NextResponse.json(
             { ok: false, error: "CROSS_ORIGIN_MUTATION_BLOCKED", requestId },
             { status: 403, headers: { "Cache-Control": "no-store", "Vary": "Origin", "X-Request-ID": requestId } }
           )
         }
       } catch {
+        console.warn("[middleware] blocked API mutation with invalid origin", {
+          requestId,
+          isPiAuthRoute: path === "/api/auth/pi",
+          method: request.method.toUpperCase(),
+          reason: "INVALID_ORIGIN",
+        })
         return NextResponse.json(
           { ok: false, error: "INVALID_ORIGIN", requestId },
           { status: 403, headers: { "Cache-Control": "no-store", "Vary": "Origin", "X-Request-ID": requestId } }
@@ -73,6 +85,12 @@ export function middleware(request: NextRequest) {
       }
     }
     if (fetchSite === "cross-site") {
+      console.warn("[middleware] blocked cross-site API mutation", {
+        requestId,
+        isPiAuthRoute: path === "/api/auth/pi",
+        method: request.method.toUpperCase(),
+        reason: "FETCH_SITE_CROSS_SITE",
+      })
       return NextResponse.json(
         { ok: false, error: "CROSS_ORIGIN_MUTATION_BLOCKED", requestId },
         { status: 403, headers: { "Cache-Control": "no-store", "Vary": "Origin", "X-Request-ID": requestId } }

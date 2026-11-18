@@ -52,6 +52,7 @@ import { socialRecordAttention, socialSetCuration } from "@/lib/social/client"
 import { shouldSendAttention } from "@/lib/social/attention-client"
 import { PostRewardPanel } from "@/components/ghc/post-reward/post-reward-panel"
 import { QuotedPostPreview } from "./quoted-post-preview"
+import { safeCommunityCount, safeCommunityCountTotal } from "@/lib/active-upgrades/community"
 
 const REACTIONS: PostReaction[] = [
   { type: "support", emoji: "💪", label: "Support" },
@@ -182,20 +183,18 @@ function EnhancedPostCardInner({
     setRosterKind(kind)
     setRosterOpen(true)
   }
-  const seedUp = Number(
+  const seedUp = safeCommunityCount(
     (post as { upvoteCount?: number; upvote_count?: number }).upvoteCount ??
       (post as { upvote_count?: number }).upvote_count ??
       0
   )
-  const seedDown = Number(
+  const seedDown = safeCommunityCount(
     (post as { downvoteCount?: number; downvote_count?: number }).downvoteCount ??
       (post as { downvote_count?: number }).downvote_count ??
       0
   )
-  const [upvoteCount, setUpvoteCount] = useState(() => (Number.isFinite(seedUp) ? Math.max(0, seedUp) : 0))
-  const [downvoteCount, setDownvoteCount] = useState(() =>
-    Number.isFinite(seedDown) ? Math.max(0, seedDown) : 0
-  )
+  const [upvoteCount, setUpvoteCount] = useState(seedUp)
+  const [downvoteCount, setDownvoteCount] = useState(seedDown)
   const [curationBusy, setCurationBusy] = useState(false)
   const [rewardPercentage, setRewardPercentage] = useState(100)
   const lastCurationAtRef = useRef(0)
@@ -225,8 +224,8 @@ function EnhancedPostCardInner({
   const propDown = (post as { downvoteCount?: number; downvote_count?: number }).downvoteCount ?? (post as { downvote_count?: number }).downvote_count
   const propViewerChoice = String((post as { viewerCurationChoice?: string }).viewerCurationChoice || "").toLowerCase()
   useEffect(() => {
-    setUpvoteCount(typeof propUp === "number" && Number.isFinite(propUp) ? Math.max(0, propUp) : 0)
-    setDownvoteCount(typeof propDown === "number" && Number.isFinite(propDown) ? Math.max(0, propDown) : 0)
+    setUpvoteCount(safeCommunityCount(propUp))
+    setDownvoteCount(safeCommunityCount(propDown))
     setCurationChoice(propViewerChoice === "upvote" || propViewerChoice === "downvote" ? propViewerChoice : "neutral")
   }, [post.id, propUp, propDown, propViewerChoice])
   const visibleCommentCount = Math.max(0, Number(post.engagement?.comments ?? post.comments?.length ?? 0) || 0)
@@ -269,8 +268,8 @@ function EnhancedPostCardInner({
       }
       if (res.ok && res.choice) {
         setCurationChoice(res.choice as "upvote" | "downvote" | "neutral")
-        const nextUp = typeof res.upvoteCount === "number" ? res.upvoteCount : upvoteCount
-        const nextDown = typeof res.downvoteCount === "number" ? res.downvoteCount : downvoteCount
+        const nextUp = typeof res.upvoteCount === "number" ? safeCommunityCount(res.upvoteCount) : upvoteCount
+        const nextDown = typeof res.downvoteCount === "number" ? safeCommunityCount(res.downvoteCount) : downvoteCount
         if (typeof res.upvoteCount === "number") setUpvoteCount(res.upvoteCount)
         if (typeof res.downvoteCount === "number") setDownvoteCount(res.downvoteCount)
         const redistributed = Boolean(res.redistribute?.credited) && Number(res.redistribute?.amount) > 0
@@ -496,7 +495,7 @@ function EnhancedPostCardInner({
       style={{ contentVisibility: "auto", containIntrinsicSize: "320px" }}
       data-post-id={post.id}
       data-post-surface={surface}
-      data-sentiment={(() => { const t = upvoteCount + downvoteCount; if (t < 5) return "none"; const r = upvoteCount / t; return r >= 0.7 ? "positive" : r <= 0.35 ? "critical" : "mixed" })()}
+      data-sentiment={(() => { const t = safeCommunityCountTotal([upvoteCount, downvoteCount]); if (t < 5) return "none"; const r = upvoteCount / t; return r >= 0.7 ? "positive" : r <= 0.35 ? "critical" : "mixed" })()}
       tabIndex={onOpenPost ? 0 : undefined}
       aria-busy={curationBusy || undefined}
       aria-label={post.authorName ? `Post by ${displayAuthor}` : "Post"}

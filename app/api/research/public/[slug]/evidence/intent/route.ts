@@ -13,7 +13,7 @@ export async function POST(request: Request, context: { params: Promise<{ slug: 
   const body = parsed.value as Record<string, unknown>
   const submissionKey = String(body.submissionKey || "")
   if (!/^[A-Za-z0-9_-]{16,80}$/.test(submissionKey) || !/^[A-Za-z0-9_-]{20,64}$/.test(slug)) return NextResponse.json({ ok: false, error: "INVALID_UPLOAD_SCOPE" }, { status: 400, headers: noStore })
-  const rawIp = request.headers.get("x-real-ip")?.trim() || request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown"
+  const rawIp = request.headers.get("x-real-ip")?.trim() || "unknown"
   const ip = /^[0-9a-fA-F:.]{1,64}$/.test(rawIp) ? rawIp : "unknown"
   const rate = await checkDurableRateLimit(`research-public-evidence:${slug}:${ip}`, 10, 60 * 60_000, { onUnavailable: "deny" })
   if (!rate.ok) return NextResponse.json({ ok: false, error: durableRateLimitCode(rate) }, { status: durableRateLimitStatus(rate), headers: noStore })

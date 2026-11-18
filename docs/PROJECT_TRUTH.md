@@ -1,14 +1,15 @@
-# Current project truth — 0.338.99 (2026-11-17)
+# Current project truth — 0.338.99 RUN332 (2026-11-18)
 
 **Current source version:** `0.338.99`  
 **Package identity:** `gh-connect@0.338.99`  
-**Authoritative source archive:** `GREENHAVEN-0.338.93-RUN312-NOTIFICATION-RPC-FIX-2026-11-17.zip`  
-**SHA-256:** `dcab57c8f9b43d6f9476745fa8d862b3d26ab33938e00b0bea67132ca2e523ec`  
+**Latest user-provided source archive:** `GREENHAVEN-0.338.99-RUN331-PHASE1-6-GAP-REGISTER-PHASE7-COMMUNITIES.zip`  
+**RUN331 archive SHA-256:** `851ac3a540b76572b1325c6e06a35de069649f37db5cb11d24aca124d239fafa`  
+**Current local working derivative:** RUN332 advanced audit/remediation candidate; not pushed or deployed.  
 **Current status:** **NOT APPROVED** for production.
 
 ## Source authority
 
-The supplied 0.338.93 RUN312 archive is the exact user-designated source of truth and supersedes every earlier archive wherever they conflict. Version 0.338.99 is a local remediation derivative of that archive; it does not replace the user-designated source archive. Preserve the existing GitHub repository, Vercel project, Pi integrations, wallet and financial boundaries, and migration history.
+RUN331 is the latest user-provided 0.338.99 archive and the baseline for this RUN332 local remediation candidate. Earlier RUN324/RUN325 records remain historical lineage, not the current source. RUN332 does not change the live GitHub branch or trigger a Vercel deployment. Preview/testnet-only Vercel environment update requests were accepted; sensitive values are masked and runtime verification awaits a fresh preview build. Preserve the existing GreenHaven and Pi identity, wallet and financial boundaries, and migration history.
 
 ## 0.338.92 implementation
 
@@ -142,3 +143,12 @@ The current visible shell navigation contains six destinations, in order: Home �
 - Added a nine-assertion Run 315 source regression gate to prelint, prebuild checks and static verification.
 - No Supabase changes, migration application, GitHub push, Vercel deployment, wallet/payment changes, payout enablement or Mainnet operations.
 - Local workspace has no installed dependencies and runs Node 22.16.0; the required Node 24.15.0 dependency-backed lint and production build remain unverified. Production remains NOT APPROVED.
+
+
+## 0.338.99 Run 324 — Phase 2 / Phase 3 local source derivative (2026-11-17)
+
+The current local working candidate adds timed examination delivery/review and election-observation administration to the RUN323 derivative. Exam answer keys are excluded from public projections; respondents use a server-HMAC-hashed session key; deadlines, attempt limits, autosave, server scoring and owner-controlled result release are implemented in source. Election contest/candidate/agent administration is owner-scoped. The Phase 3 increment hardens marketplace search/quantity validation, poll vote presentation and feed/profile/community post engagement counts.
+
+Verification: `npm run verify:static` passed. New exam/election source contract 22/22; membership API 13/13; field intake 7/7; research integrity 12/12; marketplace search 6/6; community poll accessibility 10/10; post count contract 6/6 and runtime 9/9; active-module runtime 58/58; changed TS/TSX syntax transpilation 10/10. The full prebuild/typecheck/lint/build remain unverified because this workspace has Node 22.16.0 and lacks installed project dependencies (including `typescript`); the repository requires Node 24.15.0.
+
+Phase 2 is not operationally closed: the Research Intelligence migration remains REVIEW_REQUIRED and unapplied; election tally submission still requires an atomic database RPC and reconciliation tests; authoritative geographic datasets and the trusted malware-scanning provider remain external prerequisites; real Testnet/device acceptance is outstanding. Phase 3 remains an ongoing product-quality programme, not a completed global-launch certification. No GitHub push, Vercel deployment, Supabase migration, live DB mutation, wallet/payment operation or Mainnet action occurred. Production remains NOT APPROVED. See `docs/RUN324-PHASE2-EXAM-ELECTION-AND-PHASE3-QUALITY-2026-11-17.md`.

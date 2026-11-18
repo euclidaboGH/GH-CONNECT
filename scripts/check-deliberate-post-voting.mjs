@@ -16,7 +16,7 @@ const checks = [
   ["vote buttons retain accessible labels and pressed state", /aria-label=\{active \? `Change vote to \${c}`/.test(actionBar) && /aria-pressed=\{active\}/.test(actionBar)],
   ["vote controls retain 44px touch targets and visible focus rings", /min-h-11 min-w-\[3\.25rem\]/.test(actionBar) && /focus-visible:ring-2/.test(actionBar)],
   ["GHC movement is only handled from server response", /res\.redistribute\?\.credited/.test(card) && /res\.reward\?\.credited/.test(card)],
-  ["vote state is rehydrated from canonical post props", /setUpvoteCount\(typeof propUp === "number"[\s\S]*?setDownvoteCount\(typeof propDown === "number"[\s\S]*?setCurationChoice\(propViewerChoice/.test(card)],
+  ["vote state is rehydrated from canonical post props", /setUpvoteCount\(safeCommunityCount\(propUp\)\)[\s\S]*?setDownvoteCount\(safeCommunityCount\(propDown\)\)[\s\S]*?setCurationChoice\(propViewerChoice/.test(card)],
 ]
 let failed = 0
 for (const [name, ok] of checks) { console.log(`${ok ? "PASS" : "FAIL"} ${name}`); if (!ok) failed++ }

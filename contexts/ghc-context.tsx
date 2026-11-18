@@ -4904,6 +4904,8 @@ const dismissMatchCelebration = useCallback(() => {
               isDeleted: Boolean(raw.deletedAt || raw.deleted_at || String(raw.status || "") === "deleted"),
               deletedAt: typeof raw.deletedAt === "number" ? raw.deletedAt : raw.deletedAt || raw.deleted_at ? Date.parse(String(raw.deletedAt || raw.deleted_at)) : undefined,
               sharedPostId: typeof raw.sharedPostId === "string" ? raw.sharedPostId : undefined,
+              sharedType: typeof raw.sharedType === "string" ? raw.sharedType : undefined,
+              sharedId: typeof raw.sharedId === "string" ? raw.sharedId : undefined,
               replyTo: typeof raw.replyTo === "string" ? raw.replyTo : undefined,
               replyToPreview: raw.replyToPreview && typeof raw.replyToPreview === "object"
                 ? raw.replyToPreview as { senderName: string; text: string }
@@ -4943,6 +4945,8 @@ const dismissMatchCelebration = useCallback(() => {
           isDeleted?: boolean
           deletedAt?: number
           sharedPostId?: string
+          sharedType?: string
+          sharedId?: string
           replyTo?: string
           replyToPreview?: { senderName: string; text: string }
           mediaAttachments?: Message["mediaAttachments"]
@@ -4982,6 +4986,8 @@ const dismissMatchCelebration = useCallback(() => {
                 isDeleted: m.isDeleted,
                 deletedAt: m.deletedAt,
                 sharedPostId: m.sharedPostId,
+                sharedType: m.sharedType,
+                sharedId: m.sharedId,
                 replyTo: m.replyTo,
                 replyToPreview: m.replyToPreview,
                 mediaAttachments: Array.isArray((m as { mediaAttachments?: unknown }).mediaAttachments)

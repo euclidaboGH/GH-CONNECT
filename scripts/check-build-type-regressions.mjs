@@ -18,7 +18,7 @@ test("wallet intent response list is typed as unknown[] before normalization", /
 test("payment order metadata is narrowed to a record and arrays rejected", /body\.metadata as Record<string, unknown>/.test(orders) && /!Array\.isArray\(body\.metadata\)/.test(orders))
 test("donation amount rejects booleans and non-decimal coercion", /validAmountType/.test(orders) && /typeof rawAmount === "number"/.test(orders) && /\\d\{1,6\}/.test(orders))
 test("governance report payload is narrowed before communityId and id access", /payload\.report && typeof payload\.report === "object" && !Array\.isArray\(payload\.report\)/.test(reports) && /payload\.report as Record<string, unknown>/.test(reports) && /const communityId = id\(report\.communityId\)/.test(reports) && /const reportId = id\(report\.id\)/.test(reports))
-test("CI uses Node-24-compatible action majors", /actions\/checkout@v5/.test(ci) && /actions\/setup-node@v5/.test(ci))
+test("CI pins Node-24-compatible GitHub Actions to immutable SHAs", /actions\/checkout@[0-9a-f]{40}.*# v5/.test(ci) && /actions\/setup-node@[0-9a-f]{40}.*# v5/.test(ci))
 test("CI OS image is pinned against ubuntu-latest migration drift", /runs-on: ubuntu-24\.04/.test(ci))
 const failed = checks.filter((ok) => !ok).length
 console.log(`\nBuild type-regression guard: ${checks.length - failed}/${checks.length} passed`)

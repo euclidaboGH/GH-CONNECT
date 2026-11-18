@@ -2,6 +2,9 @@
 -- Quarantine is fail-closed: no evidence is served until a trusted scanner attests clean.
 BEGIN;
 
+-- The append-only chain trigger uses extensions.digest(); declare the dependency explicitly.
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+
 ALTER TABLE public.gh_research_evidence
   ADD COLUMN IF NOT EXISTS submission_key text NULL CHECK (submission_key IS NULL OR submission_key ~ '^[A-Za-z0-9_-]{16,80}$'),
   ADD COLUMN IF NOT EXISTS uploader_type text NOT NULL DEFAULT 'owner' CHECK (uploader_type IN ('owner','public_respondent','field_agent','administrator')),

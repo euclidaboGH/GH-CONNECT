@@ -112,7 +112,7 @@ export async function getReferralStatus(userId: string): Promise<{
 
     const [attrAsReferred, attrAsReferrer, rewards] = await Promise.all([
       fetch(
-        `ghc_referral_attributions?referred_user_id=eq.${encodeURIComponent(userId)}&select=referrer_user_id,created_at&limit=1`,
+        `ghc_referral_attributions?referred_user_id=eq.${encodeURIComponent(userId)}&select=referrer_user_id,attributed_at&limit=1`,
         { headers, cache: "no-store" },
       ),
       fetch(

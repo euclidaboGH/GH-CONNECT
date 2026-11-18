@@ -16,27 +16,6 @@ import { offlineSupport } from "@/lib/offline";
 import "@/lib/auth/install-api-auth-fetch";
 import { startWebVitalsCollector } from "@/lib/web-vitals-collector";
 
-/**
- * Public routes that must render without Pi sign-in (Pi Portal listing,
- * domain claim, legal compliance). Do not expand this list to app shell tabs.
- */
-const PUBLIC_PATH_PREFIXES = [
-  "/privacy",
-  "/terms",
-  "/support",
-  "/portal-setup",
-  "/validation-key.txt",
-] as const;
-
-function isPublicPath(pathname: string | null): boolean {
-  if (!pathname) return false;
-  const path = pathname.split("?")[0] || "";
-  if (path === "/" || path === "") return false;
-  return PUBLIC_PATH_PREFIXES.some(
-    (prefix) => path === prefix || path.startsWith(`${prefix}/`),
-  );
-}
-
 function AccessibilitySetup() {
   useEffect(() => {
     startWebVitalsCollector();
@@ -113,32 +92,47 @@ function OfflineListener() {
 }
 
 function AppContent({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
   const { isAuthenticated } = usePiAuth();
-
-  // Legal / portal pages must be crawlable and open without Pi auth.
-  if (isPublicPath(pathname)) {
-    return <>{children}</>;
-  }
 
   if (!isAuthenticated) return <AuthLoadingScreen />;
   return <SessionLockGate>{children}</SessionLockGate>;
 }
 
-export function AppWrapper({ children }: { children: ReactNode }) {
+function PublicRouteShell({ children }: { children: ReactNode }) {
+  // This shell intentionally mounts no PiAuthProvider, IdentityProvider,
+  // session-lock provider, or Pi SDK bootstrap. Public links work in any browser.
   return (
-    <ErrorBoundary>
-      <PiAuthProvider>
-        <IdentityProvider>
-          <SessionLockProvider>
-            <RegionalContextProvider>
+    <>
+      <AccessibilitySetup />
+      <OfflineListener />
+      {children}
+    </>
+  )
+}
+
+function AuthenticatedRouteShell({ children }: { children: ReactNode }) {
+  return (
+    <PiAuthProvider>
+      <IdentityProvider>
+        <SessionLockProvider>
+          <RegionalContextProvider>
             <AccessibilitySetup />
             <OfflineListener />
             <AppContent>{children}</AppContent>
-            </RegionalContextProvider>
-          </SessionLockProvider>
-        </IdentityProvider>
-      </PiAuthProvider>
+          </RegionalContextProvider>
+        </SessionLockProvider>
+      </IdentityProvider>
+    </PiAuthProvider>
+  )
+}
+
+export function AppWrapper({ children }: { children: ReactNode }) {
+  const pathname = usePathname()
+  return (
+    <ErrorBoundary>
+      {isPublicRoutePath(pathname)
+        ? <PublicRouteShell>{children}</PublicRouteShell>
+        : <AuthenticatedRouteShell>{children}</AuthenticatedRouteShell>}
     </ErrorBoundary>
-  );
+  )
 }

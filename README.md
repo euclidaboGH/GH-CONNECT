@@ -130,3 +130,7 @@ Adds durable conversation nicknames, quick-reaction/read-receipt preferences, re
 ## Latest implementation — 0.338.87 / Field Research foundation
 
 Adds the Field Research Ecosystem destination, a redesigned public field-agent portal, dedicated field-session secret enforcement, 4+ character access-code compatibility, durable-storage fail-closed behavior, the reviewed Testnet field-report migration, and the 30-track Field Research / Challenge / Polls transformation plan. See `docs/FIELD-RESEARCH-PLATFORM-UPGRADE-PLAN.md`. Full public form authoring, anonymous public submissions, evidence media, analytics and in-app central notifications remain future implementation stages; this release does not claim those are shipped.
+
+## Current source-only work — RUN328 Phase 4
+
+RUN328 coordinates the user-selected Identity & Authentication, Community discussion/participation, and Messenger community communications tracks. It adds session step-up ordering hardening, a held atomic session-cap proposal, a privacy-aware community member directory, recipient-accepted group invitations and consent-based sharing of the user's own public GreenHaven profile. See `docs/RUN328-PHASE4-IDENTITY-COMMUNITY-MESSAGING-2026-11-18.md`. The SQL proposal is not applied; full Node 24.15.x dependency-backed build and PostgreSQL/Testnet/device acceptance remain required. This is not a deployment or production approval.

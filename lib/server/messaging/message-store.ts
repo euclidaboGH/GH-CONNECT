@@ -891,6 +891,22 @@ function rowToMessage(row: Record<string, unknown>): DurableMessage {
   }
 }
 
+
+function matchesMessageIdempotencyPayload(
+  existing: DurableMessage,
+  expected: { body: string; replyToMessageId?: string | null; sharedPostId?: string | null; mediaAttachments: DurableMediaAttachment[] },
+): boolean {
+  const stableAttachments = (items: DurableMediaAttachment[] | undefined) =>
+    JSON.stringify((items || []).map((item) => ({
+      id: item.id, type: item.type, url: item.url, fileName: item.fileName || "",
+      mimeType: item.mimeType || "", sizeBytes: item.sizeBytes ?? null,
+    })))
+  return existing.body === expected.body
+    && (existing.replyTo || "") === String(expected.replyToMessageId || "")
+    && (existing.sharedPostId || "") === String(expected.sharedPostId || "")
+    && stableAttachments(existing.mediaAttachments) === stableAttachments(expected.mediaAttachments)
+}
+
 async function validateSharedPostForConversation(input: { senderId: string; conversationId: string; postId: string }): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!dbConfigured()) return { ok: false, error: "STORE_UNAVAILABLE" }
   const postResult = await rest<Array<{ id: string; author_id: string; visibility: string; deleted_at: string | null }>>(
@@ -963,6 +979,8 @@ export async function appendMessage(input: {
   const clientMessageId = input.clientMessageId
     ? String(input.clientMessageId).trim().slice(0, 80)
     : null
+  const expectedReplyToMessageId = String(input.replyToMessageId || "").trim().slice(0, 180)
+  const expectedSharedPostId = String(input.sharedPostId || "").trim().slice(0, 180)
 
   if (!body && !mediaAttachments.length) return { ok: false, error: "EMPTY_BODY" }
   if (input.mediaAttachments && Array.isArray(input.mediaAttachments) && input.mediaAttachments.length && !mediaAttachments.length) {
@@ -1004,7 +1022,11 @@ export async function appendMessage(input: {
     const q = `gh_messages?conversation_id=eq.${encodeURIComponent(cid)}&sender_id=eq.${encodeURIComponent(uid)}&client_message_id=eq.${encodeURIComponent(clientMessageId)}&select=*&limit=1`
     const existing = await rest<Array<Record<string, unknown>>>(q)
     if (existing.ok && existing.data?.[0]) {
-      return { ok: true, message: rowToMessage(existing.data[0]), idempotent: true }
+      const prior = rowToMessage(existing.data[0])
+      if (!matchesMessageIdempotencyPayload(prior, { body, replyToMessageId: expectedReplyToMessageId, sharedPostId: expectedSharedPostId, mediaAttachments })) {
+        return { ok: false, error: "IDEMPOTENCY_CONFLICT" }
+      }
+      return { ok: true, message: prior, idempotent: true }
     }
   }
 
@@ -1088,11 +1110,11 @@ export async function appendMessage(input: {
         const q = `gh_messages?conversation_id=eq.${encodeURIComponent(cid)}&sender_id=eq.${encodeURIComponent(uid)}&client_message_id=eq.${encodeURIComponent(clientMessageId)}&select=*&limit=1`
         const existing = await rest<Array<Record<string, unknown>>>(q)
         if (existing.ok && existing.data?.[0]) {
-          return {
-            ok: true,
-            message: rowToMessage(existing.data[0]),
-            idempotent: true,
+          const prior = rowToMessage(existing.data[0])
+          if (!matchesMessageIdempotencyPayload(prior, { body, replyToMessageId: expectedReplyToMessageId, sharedPostId: expectedSharedPostId, mediaAttachments })) {
+            return { ok: false, error: "IDEMPOTENCY_CONFLICT" }
           }
+          return { ok: true, message: prior, idempotent: true }
         }
       }
       if (isProd()) return { ok: false, error: "PERSIST_FAILED" }
@@ -1129,11 +1151,11 @@ export async function appendMessage(input: {
 
   const list = memMessages.get(cid) || []
   if (clientMessageId && list.some((m) => m.clientMessageId === clientMessageId)) {
-    return {
-      ok: true,
-      message: list.find((m) => m.clientMessageId === clientMessageId)!,
-      idempotent: true,
+    const prior = list.find((m) => m.clientMessageId === clientMessageId)!
+    if (!matchesMessageIdempotencyPayload(prior, { body, replyToMessageId: expectedReplyToMessageId, sharedPostId: expectedSharedPostId, mediaAttachments })) {
+      return { ok: false, error: "IDEMPOTENCY_CONFLICT" }
     }
+    return { ok: true, message: prior, idempotent: true }
   }
   list.push(msg)
   memMessages.set(cid, list)

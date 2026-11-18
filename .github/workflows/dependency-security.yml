@@ -22,9 +22,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24.15.0
           cache: npm
@@ -57,7 +59,7 @@ jobs:
 
       - name: Upload full advisory report
         if: always() && hashFiles('npm-audit.json') != ''
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: npm-audit-${{ github.run_id }}-${{ github.run_attempt }}
           path: npm-audit.json
@@ -66,7 +68,13 @@ jobs:
 
       - name: Enforce zero known vulnerabilities
         if: always() && steps.audit.outcome == 'success'
+        env:
+          AUDIT_EXIT: ${{ steps.audit.outputs.audit_exit }}
         run: |
+          if [ "$AUDIT_EXIT" != "0" ]; then
+            echo "npm audit command failed with exit code $AUDIT_EXIT." >&2
+            exit 1
+          fi
           node --input-type=module <<'NODE'
           import { readFileSync } from 'node:fs'
           const report = JSON.parse(readFileSync('npm-audit.json', 'utf8'))

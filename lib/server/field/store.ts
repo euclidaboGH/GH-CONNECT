@@ -91,6 +91,12 @@ export async function persistFieldReport(input: {
     return { ok: false, error: "FIELD_REPORT_PERSIST_FAILED" }
   }
 
+  // A process-local buffer is useful only for local development. In production,
+  // a successful HTTP response must always represent durable storage; otherwise
+  // a serverless instance restart could silently erase a field report.
+  if (process.env.NODE_ENV === "production") {
+    return { ok: false, error: "FIELD_REPORT_STORAGE_UNAVAILABLE" }
+  }
   pushMemory(report)
   return { ok: true, report }
 }

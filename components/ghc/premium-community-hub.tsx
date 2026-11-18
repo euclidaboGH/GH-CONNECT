@@ -440,6 +440,50 @@ export function PremiumCommunityHub({
   const [reportActionBusy, setReportActionBusy] = useState<string | null>(null)
   const [serverGovernanceLog, setServerGovernanceLog] = useState<any[] | null>(null)
   const [serverGovernanceReports, setServerGovernanceReports] = useState<any[] | null>(null)
+  const [serverMemberDirectory, setServerMemberDirectory] = useState<Array<{ id: string; name: string; photo?: string; role?: string }>>([])
+  const [memberDirectoryLoading, setMemberDirectoryLoading] = useState(false)
+  const [memberDirectoryUnavailable, setMemberDirectoryUnavailable] = useState(false)
+  const [memberDirectoryHasMore, setMemberDirectoryHasMore] = useState(false)
+  const memberDirectoryLengthRef = useRef(0)
+  const memberDirectoryLoadingRef = useRef(false)
+
+  const loadMemberDirectory = useCallback(async (append = false) => {
+    if (memberDirectoryLoadingRef.current) return
+    memberDirectoryLoadingRef.current = true
+    setMemberDirectoryLoading(true)
+    try {
+      const offset = append ? memberDirectoryLengthRef.current : 0
+      const response = await fetch(`/api/communities/${encodeURIComponent(community.id)}/members?limit=50&offset=${offset}`, { credentials: "include", cache: "no-store" })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok || !payload?.ok || payload.durable !== true || !Array.isArray(payload.members)) throw new Error("DIRECTORY_UNAVAILABLE")
+      const rows = payload.members.filter((row: any) => row && typeof row.id === "string").map((row: any) => ({ id: String(row.id), name: String(row.name || "GreenHaven member").slice(0, 120), photo: typeof row.photo === "string" ? row.photo : undefined, role: typeof row.role === "string" ? row.role : "member" }))
+      setServerMemberDirectory((current) => {
+        let next = rows
+        if (append) {
+          const byId = new Map<string, (typeof rows)[number]>(current.map((row) => [row.id, row] as const))
+          for (const row of rows) byId.set(row.id, row)
+          next = [...byId.values()]
+        }
+        memberDirectoryLengthRef.current = next.length
+        return next
+      })
+      setMemberDirectoryHasMore(Boolean(payload.hasMore))
+      setMemberDirectoryUnavailable(false)
+    } catch {
+      setMemberDirectoryUnavailable(true)
+    } finally {
+      memberDirectoryLoadingRef.current = false
+      setMemberDirectoryLoading(false)
+    }
+  }, [community.id])
+
+  useEffect(() => {
+    if (tab !== "members") return
+    memberDirectoryLengthRef.current = 0
+    setServerMemberDirectory([])
+    setMemberDirectoryHasMore(false)
+    void loadMemberDirectory(false)
+  }, [tab, community.id, loadMemberDirectory])
 
   useEffect(() => {
     if (!isMod) {
@@ -500,35 +544,10 @@ export function PremiumCommunityHub({
   }
 
   const membersWithRoles = (() => {
-    if (memberPreview.length > 0) return memberPreview
-    const roster: Array<{ id: string; name: string; role?: string; photo?: string }> = []
-    const creator = (community as { createdBy?: string }).createdBy
-    if (creator) {
-      roster.push({
-        id: creator,
-        name: creator === "current-user" ? "You" : creator,
-        role: "owner",
-      })
-    }
-    const members = Array.isArray((community as { members?: string[] }).members)
-      ? ((community as { members?: string[] }).members as string[])
-      : []
-    for (const m of members) {
-      if (roster.some((r) => r.id === m)) continue
-      roster.push({
-        id: m,
-        name: m === "current-user" ? "You" : m.charAt(0).toUpperCase() + m.slice(1),
-        role: community.role && m === "current-user" ? community.role : "member",
-      })
-    }
-    if (community.isJoined && !roster.some((r) => r.id === "current-user")) {
-      roster.unshift({
-        id: "current-user",
-        name: "You",
-        role: community.role || "member",
-      })
-    }
-    return roster
+    if (serverMemberDirectory.length > 0) return serverMemberDirectory
+    // A local membership snapshot may identify the current viewer only. Never
+    // derive other people's display labels from opaque account IDs.
+    return memberPreview
   })()
 
   const memberIdsForSuggestions = Array.isArray((community as { members?: string[] }).members)
@@ -1666,7 +1685,11 @@ export function PremiumCommunityHub({
         {tab === "members" && (
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-[11px] text-muted-foreground">Roles: Owner · Admin · Moderator · Member</p>
+              <div className="min-w-0">
+                <p className="text-[11px] text-muted-foreground">Roles: Owner · Admin · Moderator · Member</p>
+                {memberDirectoryLoading ? <p className="mt-1 text-[10px] text-muted-foreground" role="status">Loading verified member directory…</p> : null}
+                {memberDirectoryUnavailable ? <p className="mt-1 text-[10px] text-amber-700 dark:text-amber-300" role="status">Live member directory is unavailable. Showing only the available membership snapshot; names and roles may be incomplete.</p> : null}
+              </div>
               {isMod && onInviteMember ? (
                 <button
                   type="button"
@@ -1822,6 +1845,12 @@ export function PremiumCommunityHub({
                 )
               })
             )}
+
+            {memberDirectoryHasMore ? (
+              <button type="button" disabled={memberDirectoryLoading} onClick={() => void loadMemberDirectory(true)} className="min-h-10 w-full rounded-xl border border-border bg-card px-3 text-xs font-semibold text-foreground disabled:opacity-50">
+                {memberDirectoryLoading ? "Loading members…" : "Load more members"}
+              </button>
+            ) : null}
 
             {community.isJoined ? (
               <CommunityPeopleYouMayKnow

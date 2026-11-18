@@ -8,11 +8,16 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 const root = join(process.cwd(), 'supabase', 'migrations')
-const files = readdirSync(root).filter((name) => name.endsWith('.sql')).sort()
+const proposalRoot = join(process.cwd(), 'supabase', 'proposals')
+const files = [
+  ...readdirSync(root).filter((name) => name.endsWith('.sql')).sort().map((name) => ({ name: `migrations/${name}`, path: join(root, name) })),
+  ...readdirSync(proposalRoot).filter((name) => name.endsWith('.sql')).sort().map((name) => ({ name: `proposals/${name}`, path: join(proposalRoot, name) })),
+]
 const failures = []
 
-for (const name of files) {
-  const source = readFileSync(join(root, name), 'utf8')
+for (const file of files) {
+  const { name, path } = file
+  const source = readFileSync(path, 'utf8')
   let state = 'normal'
   let dollarTag = ''
   let depth = 0
@@ -63,4 +68,4 @@ if (failures.length) {
   console.error(`SQL lexical integrity: ${files.length} migrations scanned; ${failures.length} issue(s)`)
   process.exit(1)
 }
-console.log(`SQL lexical integrity: PASS (${files.length} migrations; strings, comments, dollar quotes and parentheses balanced)`)
+console.log(`SQL lexical integrity: PASS (${files.length} migration/proposal files; strings, comments, dollar quotes and parentheses balanced)`)

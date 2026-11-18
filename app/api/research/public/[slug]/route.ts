@@ -16,12 +16,13 @@ export async function GET(_request: Request, context: { params: Promise<{ slug: 
   const result = await supabaseRest<Array<Record<string, unknown>>>(`gh_research_projects?slug=eq.${encodeURIComponent(slug)}&status=eq.published&select=id,slug,title,description,project_type,form_schema,settings&limit=1`)
   const project = result.ok ? result.data?.[0] : null
   if (!project) return NextResponse.json({ ok: false, error: "RESEARCH_NOT_FOUND" }, { status: 404, headers: NO_STORE })
-  return NextResponse.json({ ok: true, project: { slug: project.slug, title: project.title, description: project.description, projectType: project.project_type, questions: (project.form_schema as { questions?: Question[] })?.questions || [], allowEvidenceUploads: (project.settings as Record<string, unknown>)?.allow_evidence_uploads !== false } }, { headers: NO_STORE })
+  return NextResponse.json({ ok: true, project: { slug: project.slug, title: project.title, description: project.description, projectType: project.project_type, isExam: project.project_type === "examination", questions: ((project.form_schema as { questions?: Question[] })?.questions || []).map((question) => { const { correctAnswer: _correctAnswer, answerKey: _answerKey, points: _points, ...publicQuestion } = question as Question & { correctAnswer?: unknown; answerKey?: unknown; points?: unknown }; return publicQuestion }), allowEvidenceUploads: project.project_type !== "examination" && (project.settings as Record<string, unknown>)?.allow_evidence_uploads !== false } }, { headers: NO_STORE })
 }
 
 export async function POST(request: Request, context: { params: Promise<{ slug: string }> }) {
   const { slug } = await context.params
-  const rawIp = request.headers.get("x-real-ip")?.trim() || request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown"
+  if (!/^[A-Za-z0-9_-]{20,64}$/.test(slug)) return NextResponse.json({ ok: false, error: "RESEARCH_NOT_FOUND" }, { status: 404, headers: NO_STORE })
+  const rawIp = request.headers.get("x-real-ip")?.trim() || "unknown"
   const ip = /^[0-9a-fA-F:.]{1,64}$/.test(rawIp) ? rawIp : "unknown"
   const rate = await checkDurableRateLimit(`research-public-submit:${slug}:${ip}`, 8, 60 * 60_000, { onUnavailable: "deny" })
   if (!rate.ok) return NextResponse.json({ ok: false, error: durableRateLimitCode(rate) }, { status: durableRateLimitStatus(rate), headers: NO_STORE })
@@ -32,9 +33,10 @@ export async function POST(request: Request, context: { params: Promise<{ slug: 
   const consent = payload.consent === true
   if (!answers || !consent) return NextResponse.json({ ok: false, error: "CONSENT_AND_ANSWERS_REQUIRED" }, { status: 400, headers: NO_STORE })
   if (!getServiceSupabaseConfig()) return NextResponse.json({ ok: false, error: "RESEARCH_STORAGE_UNAVAILABLE" }, { status: 503, headers: NO_STORE })
-  const projectResult = await supabaseRest<Array<Record<string, unknown>>>(`gh_research_projects?slug=eq.${encodeURIComponent(slug)}&status=eq.published&select=id,form_schema,settings&limit=1`)
+  const projectResult = await supabaseRest<Array<Record<string, unknown>>>(`gh_research_projects?slug=eq.${encodeURIComponent(slug)}&status=eq.published&select=id,project_type,form_schema,settings&limit=1`)
   const project = projectResult.ok ? projectResult.data?.[0] : null
   if (!project) return NextResponse.json({ ok: false, error: "RESEARCH_NOT_FOUND" }, { status: 404, headers: NO_STORE })
+  if (project.project_type === "examination") return NextResponse.json({ ok: false, error: "EXAM_SUBMISSION_REQUIRED" }, { status: 409, headers: NO_STORE })
   const questions = ((project.form_schema as { questions?: Question[] })?.questions || []).slice(0, 80)
   const normalized: Record<string, string | string[] | number> = {}
   for (const q of questions) {
@@ -71,8 +73,12 @@ export async function POST(request: Request, context: { params: Promise<{ slug: 
   if (!responseRow?.id) return NextResponse.json({ ok: false, error: "RESPONSE_REFERENCE_UNAVAILABLE" }, { status: 503, headers: NO_STORE })
   // Bind only uploads created under this exact project + unguessable submission key.
   const pendingEvidence = await supabaseRest<Array<{ id: string }>>(`gh_research_evidence?project_id=eq.${project.id}&submission_key=eq.${encodeURIComponent(idempotencyKey)}&response_id=is.null&select=id&limit=6`)
-  if (pendingEvidence.ok && pendingEvidence.data.length) {
-    await supabaseRest(`gh_research_evidence?project_id=eq.${project.id}&submission_key=eq.${encodeURIComponent(idempotencyKey)}&response_id=is.null`, { method: "PATCH", headers: { "Content-Type": "application/json", Prefer: "return=minimal" }, body: JSON.stringify({ response_id: responseRow.id }) })
+  if (!pendingEvidence.ok) return NextResponse.json({ ok: false, error: "RESPONSE_EVIDENCE_RECONCILIATION_PENDING" }, { status: 503, headers: NO_STORE })
+  if (pendingEvidence.data.length) {
+    const attached = await supabaseRest(`gh_research_evidence?project_id=eq.${project.id}&submission_key=eq.${encodeURIComponent(idempotencyKey)}&response_id=is.null`, { method: "PATCH", headers: { "Content-Type": "application/json", Prefer: "return=minimal" }, body: JSON.stringify({ response_id: responseRow.id }) })
+    if (!attached.ok) return NextResponse.json({ ok: false, error: "RESPONSE_EVIDENCE_RECONCILIATION_PENDING" }, { status: 503, headers: NO_STORE })
   }
-  return NextResponse.json({ ok: true, message: "Your response has been received.", duplicate: !saved.data?.length, evidenceCount: pendingEvidence.ok ? pendingEvidence.data.length : 0 }, { status: 201, headers: NO_STORE })
+  const attachedEvidence = await supabaseRest<Array<{ id: string }>>(`gh_research_evidence?project_id=eq.${project.id}&response_id=eq.${responseRow.id}&select=id&limit=6`)
+  if (!attachedEvidence.ok) return NextResponse.json({ ok: false, error: "RESPONSE_EVIDENCE_RECONCILIATION_PENDING" }, { status: 503, headers: NO_STORE })
+  return NextResponse.json({ ok: true, message: "Your response has been received.", duplicate: !saved.data?.length, evidenceCount: attachedEvidence.data.length }, { status: 201, headers: NO_STORE })
 }

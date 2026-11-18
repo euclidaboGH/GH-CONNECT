@@ -39,6 +39,19 @@ export async function POST(request: Request) {
     const forwarded = forwardedParts.length ? forwardedParts[forwardedParts.length - 1] : ""
     const clientIp = request.headers.get("x-real-ip")?.trim() || forwarded || "unknown"
     const correlationId = requestCorrelationId(request)
+    const fetchSiteHeader = request.headers.get("sec-fetch-site")?.toLowerCase() || "unknown"
+    const fetchSite = ["same-origin", "same-site", "cross-site", "none"].includes(fetchSiteHeader)
+      ? fetchSiteHeader
+      : "other"
+    // Safe, token-free arrival telemetry distinguishes a request that reached
+    // the route from browser, middleware, or network failures before the route.
+    console.info("[auth/pi] request_received", { correlationId, originPresent: Boolean(request.headers.get("origin")), fetchSite })
+    void appendSecurityEvent({
+      eventType: "auth.pi.request_received",
+      outcome: "challenged",
+      correlationId,
+      metadata: { originPresent: Boolean(request.headers.get("origin")), fetchSite },
+    })
     const rate = await checkDurableRateLimit(`pi-auth:${createHash("sha256").update(clientIp).digest("hex").slice(0, 24)}`, 12, 60_000, { onUnavailable: "deny" })
     if (!rate.ok) {
       void appendSecurityEvent({ eventType: "auth.pi.rate_limited", outcome: "blocked", reasonCode: durableRateLimitCode(rate), correlationId })

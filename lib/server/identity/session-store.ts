@@ -9,7 +9,7 @@
 
 import { createHash, randomBytes } from "crypto"
 import { readGhcServerEnv, hasPrivilegedDatabase } from "@/lib/server/economy/env"
-import { supabaseRest } from "@/lib/server/supabase/rest-client"
+import { supabaseRest, supabaseRpc } from "@/lib/server/supabase/rest-client"
 
 /** Cookie name for GH server session */
 export const GH_SESSION_COOKIE = "gh_session"
@@ -185,6 +185,24 @@ async function dbInsert(rec: SessionRecord): Promise<boolean> {
   }
 }
 
+
+/** Atomically revoke overflow sessions and insert the replacement under a per-user DB lock. */
+async function dbIssueWithCap(rec: SessionRecord): Promise<boolean> {
+  const result = await supabaseRpc<{ ok?: boolean; error?: string }>("gh_session_issue_with_cap", {
+    p_id: rec.id,
+    p_token_hash: rec.tokenHash,
+    p_gh_user_id: rec.ghUserId,
+    p_created_at: new Date(rec.createdAt).toISOString(),
+    p_last_seen_at: new Date(rec.lastSeenAt).toISOString(),
+    p_expires_at: new Date(rec.expiresAt).toISOString(),
+    p_absolute_expires_at: new Date(rec.absoluteExpiresAt).toISOString(),
+    p_user_agent_hash: rec.userAgentHash,
+    p_meta: rec.deviceLabel ? { deviceLabel: rec.deviceLabel } : {},
+    p_max_active: SESSION_MAX_ACTIVE_PER_USER,
+  }, { timeoutMs: 10_000 })
+  return result.ok && Boolean(result.data && typeof result.data === "object" && result.data.ok === true)
+}
+
 async function dbSelectByHash(tokenHash: string): Promise<SessionRecord | null> {
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return null
@@ -254,30 +272,31 @@ export async function createSession(input: {
     }
   }
 
-  // Phase 4: enforce concurrent session ceiling (oldest active first)
-  {
-    const active = (await listSessionsForUser(ghUserId)).filter(
-      (s) => s.revokedAt == null && !isExpired(s)
-    )
+  // Atomic durable issuance is opt-in until its held SQL proposal has been
+  // rehearsed and applied. Existing deployments retain the proven REST path.
+  const atomicSessionCapEnabled = process.env.GHC_ATOMIC_SESSION_CAP_RPC_ENABLED === "1"
+  if (!dbConfigured()) {
+    const active = [...memByHash.values()].filter((session) => session.ghUserId === ghUserId && session.revokedAt == null && !isExpired(session))
     if (active.length >= SESSION_MAX_ACTIVE_PER_USER) {
-      const overflow = active
-        .slice()
-        .sort((a, b) => a.lastSeenAt - b.lastSeenAt)
-        .slice(0, Math.max(0, active.length - SESSION_MAX_ACTIVE_PER_USER + 1))
+      const overflow = active.sort((a, b) => a.lastSeenAt - b.lastSeenAt).slice(0, active.length - SESSION_MAX_ACTIVE_PER_USER + 1)
       for (const old of overflow) {
-        if (dbConfigured()) {
-          const persisted = await dbPatch(old.id, { revoked_at: new Date(t).toISOString() })
-          if (!persisted) throw new Error("SESSION_REVOCATION_UNAVAILABLE")
-        }
         const revoked = { ...old, revokedAt: t }
         memById.set(old.id, revoked)
         memByHash.set(old.tokenHash, revoked)
       }
-      console.info("[session] SESSION_CAP_ENFORCED", {
-        userId: ghUserId,
-        revoked: overflow.length,
-        cap: SESSION_MAX_ACTIVE_PER_USER,
-      })
+    }
+  } else if (!atomicSessionCapEnabled) {
+    const active = (await listSessionsForUser(ghUserId)).filter((session) => session.revokedAt == null && !isExpired(session))
+    if (active.length >= SESSION_MAX_ACTIVE_PER_USER) {
+      const overflow = active.slice().sort((a, b) => a.lastSeenAt - b.lastSeenAt).slice(0, active.length - SESSION_MAX_ACTIVE_PER_USER + 1)
+      for (const old of overflow) {
+        const persisted = await dbPatch(old.id, { revoked_at: new Date(t).toISOString() })
+        if (!persisted) throw new Error("SESSION_REVOCATION_UNAVAILABLE")
+        const revoked = { ...old, revokedAt: t }
+        memById.set(old.id, revoked)
+        memByHash.set(old.tokenHash, revoked)
+      }
+      console.info("[session] SESSION_CAP_ENFORCED", { userId: ghUserId, revoked: overflow.length, cap: SESSION_MAX_ACTIVE_PER_USER })
     }
   }
 
@@ -309,7 +328,8 @@ export async function createSession(input: {
       throw new Error("SESSION_DURABILITY_UNAVAILABLE")
     }
   } else {
-    const ok = await dbInsert(rec)
+    const ok = atomicSessionCapEnabled ? await dbIssueWithCap(rec) : await dbInsert(rec)
+    if (ok && atomicSessionCapEnabled) console.info("[session] SESSION_CAP_ENFORCED", { userId: ghUserId, cap: SESSION_MAX_ACTIVE_PER_USER })
     if (!ok) {
       if (isProd) {
         console.error("[session] durable insert failed; refusing memory session in production")

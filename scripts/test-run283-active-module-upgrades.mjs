@@ -30,6 +30,9 @@ check(!matches.canSendMatchSignal({viewerId:'a',targetId:'b',eligible:false}), '
 const market = loaded.marketplace
 check(market.safeListingQuantity(2, 5) === 2, 'listing quantity')
 check(market.safeListingQuantity(2, 0) === 0, 'zero stock preserved')
+check(market.safeListingQuantity(9, 10, 5.5) === 5, 'listing quantity cap is always an integer')
+check(market.safeListingQuantity(9, 10, Number.NaN) === 9, 'invalid quantity cap uses a safe default')
+check(market.safeListingQuantity(9, 10, 2000) === 9, 'listing quantity cap is bounded')
 check(market.normalizeListingSearch('  shoes  ') === 'shoes', 'listing search')
 check(market.listingAvailability(0) === 'out_of_stock', 'out of stock')
 check(!market.canAddListingToCart({listingActive:true,ownListing:true,stock:2}), 'own listing blocked')

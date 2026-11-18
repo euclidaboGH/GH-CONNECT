@@ -49,6 +49,7 @@ import {
   type CommunityPrivacyFilter,
 } from "@/lib/community/discovery"
 import { resolveJoinCta } from "@/lib/community/join-status"
+import { communityAccountStorageKey, parseCommunityBoardCache, parseCommunityJoinedIds } from "@/lib/community/account-scoped-cache"
 import { PremiumCommunityHub } from "./premium-community-hub"
 import { CollapsingAppHeader } from "./collapsing-app-header"
 import { PremiumSurfaceActions } from "./premium-surface-actions"
@@ -339,10 +340,13 @@ export function CommunitiesScreen() {
     () => (Array.isArray(conversationsRaw) ? conversationsRaw : []),
     [conversationsRaw],
   )
+  const [communityIdentityId, setCommunityIdentityId] = useState(() => IdentityService.getCurrentUserId() || "anonymous")
+  const [communityCacheOwnerId, setCommunityCacheOwnerId] = useState(() => IdentityService.getCurrentUserId() || "anonymous")
+  const activeCommunityIdentityRef = useRef(communityIdentityId)
   const [directory, setDirectory] = useState<DirectoryTab>("my")
   const [directoryOffset, setDirectoryOffset] = useState(0)
   const changeDirectory = useCallback((value: DirectoryTab) => { setDirectoryOffset(0); setDirectory(value) }, [])
-  const filterPrefs = useAccountFilterState("communities", IdentityService.getCurrentUserId() || "anonymous", DEFAULT_COMMUNITY_FILTERS, validateCommunityFilters)
+  const filterPrefs = useAccountFilterState("communities", communityIdentityId, DEFAULT_COMMUNITY_FILTERS, validateCommunityFilters)
   const { searchQuery, sortBy, privacyFilter, categoryFilter, communityAttentionFilter } = filterPrefs.value
   const setSearchQuery = useCallback((value: string) => { setDirectoryOffset(0); filterPrefs.update("searchQuery", value) }, [filterPrefs])
   const setSortBy = useCallback((value: CommunityFilterPrefs["sortBy"]) => filterPrefs.update("sortBy", value), [filterPrefs])
@@ -376,21 +380,13 @@ export function CommunitiesScreen() {
   const [localJoined, setLocalJoined] = useState<string[]>(() => {
     if (typeof window === "undefined") return []
     try {
-      // Phase 3: session markers always; durable local only when demo policy allows.
-      const sessionRaw = window.sessionStorage.getItem("ghc.community.joinedIds.session")
-      const durableRaw = communityLocalCacheAllowed()
-        ? window.localStorage.getItem("ghc.community.joinedIds")
-        : null
-      const parse = (raw: string | null): string[] => {
-        if (!raw) return []
-        try {
-          const parsed = JSON.parse(raw) as string[]
-          return Array.isArray(parsed) ? parsed.filter(Boolean) : []
-        } catch {
-          return []
-        }
-      }
-      return Array.from(new Set([...parse(sessionRaw), ...parse(durableRaw)]))
+      // Local membership hints are isolated by account and remain non-authoritative.
+      const identity = IdentityService.getCurrentUserId() || "anonymous"
+      const sessionKey = communityAccountStorageKey("ghc.community.joinedIds.session", identity)
+      const durableKey = communityAccountStorageKey("ghc.community.joinedIds", identity)
+      const sessionRaw = sessionKey ? window.sessionStorage.getItem(sessionKey) : null
+      const durableRaw = communityLocalCacheAllowed() && durableKey ? window.localStorage.getItem(durableKey) : null
+      return Array.from(new Set([...parseCommunityJoinedIds(sessionRaw), ...parseCommunityJoinedIds(durableRaw)]))
     } catch {
       return []
     }
@@ -451,7 +447,7 @@ export function CommunitiesScreen() {
         return { ...fallback, serverFiltered: false }
       })
       .then((res) => {
-        if (cancelled) return
+        if (cancelled || activeCommunityIdentityRef.current !== communityIdentityId) return
         if (!res.ok) throw new Error("Community directory unavailable")
         setDirectoryServerFilterAvailable(res.serverFiltered)
         const rows: CommunityRow[] = []
@@ -544,7 +540,7 @@ export function CommunitiesScreen() {
         }
       })
       .catch(() => {
-        if (!cancelled) {
+        if (!cancelled && activeCommunityIdentityRef.current === communityIdentityId) {
           if (directoryOffset === 0) setRemoteDirectory([])
           setDirectoryDurable(false)
           setDirectoryError(directoryOffset > 0 ? "Could not load more communities. Try again." : "Could not load the community directory")
@@ -559,21 +555,26 @@ export function CommunitiesScreen() {
       window.clearTimeout(debounce)
       if (hardTimeout != null) window.clearTimeout(hardTimeout)
     }
-  }, [directoryTick, directory, searchQuery, categoryFilter, directoryOffset])
+  }, [directoryTick, directory, searchQuery, categoryFilter, directoryOffset, communityIdentityId])
 
   useEffect(() => {
+    // A queued state update from the previous account must never be written under
+    // the next account's key during an identity transition.
+    if (activeCommunityIdentityRef.current !== communityIdentityId || communityCacheOwnerId !== communityIdentityId) return
+    const sessionKey = communityAccountStorageKey("ghc.community.joinedIds.session", communityIdentityId)
+    const durableKey = communityAccountStorageKey("ghc.community.joinedIds", communityIdentityId)
     try {
-      window.sessionStorage.setItem("ghc.community.joinedIds.session", JSON.stringify(localJoined))
+      if (sessionKey) window.sessionStorage.setItem(sessionKey, JSON.stringify(localJoined))
     } catch {
-      /* */
+      /* storage is an optional UI cache */
     }
-    if (!communityLocalCacheAllowed()) return
+    if (!communityLocalCacheAllowed() || !durableKey) return
     try {
-      window.localStorage.setItem("ghc.community.joinedIds", JSON.stringify(localJoined))
+      window.localStorage.setItem(durableKey, JSON.stringify(localJoined))
     } catch {
-      /* */
+      /* storage is an optional UI cache */
     }
-  }, [localJoined])
+  }, [localJoined, communityIdentityId, communityCacheOwnerId])
 
   useEffect(() => {
     const onOpen = (e: Event) => {
@@ -590,19 +591,20 @@ export function CommunitiesScreen() {
   useEffect(() => {
     if (!selectedCommunityId) return
     let cancelled = false
+    const requestIdentity = communityIdentityId
     setPlatformLoading(true)
     void fetch(`/api/communities/${encodeURIComponent(selectedCommunityId)}/platform`, { credentials: "include", cache: "no-store" })
       .then(async (r) => ({ ok: r.ok, payload: await r.json().catch(() => ({})) }))
       .then(({ ok, payload }) => {
-        if (cancelled) return
+        if (cancelled || activeCommunityIdentityRef.current !== requestIdentity) return
         if (ok && payload?.durable === true && payload?.community) {
           setPlatformSnapshots((prev) => ({ ...prev, [selectedCommunityId]: payload.community }))
         }
       })
       .catch(() => {})
-      .finally(() => { if (!cancelled) setPlatformLoading(false) })
+      .finally(() => { if (!cancelled && activeCommunityIdentityRef.current === requestIdentity) setPlatformLoading(false) })
     return () => { cancelled = true }
-  }, [selectedCommunityId, hubKey])
+  }, [selectedCommunityId, hubKey, communityIdentityId])
   useEffect(() => {
     const onRefresh = (e: Event) => {
       const id = String((e as CustomEvent).detail?.communityId || "").trim()
@@ -623,23 +625,61 @@ export function CommunitiesScreen() {
     if (typeof window === "undefined") return {}
     if (!communityLocalCacheAllowed()) return {}
     try {
-      const raw = window.localStorage.getItem("ghc.community.boardPosts")
-      if (!raw) return {}
-      const parsed = JSON.parse(raw) as Record<string, NonNullable<CommunityRow["boardPosts"]>>
-      return parsed && typeof parsed === "object" ? parsed : {}
+      const key = communityAccountStorageKey("ghc.community.boardPosts", IdentityService.getCurrentUserId())
+      const raw = key ? window.localStorage.getItem(key) : null
+      return parseCommunityBoardCache<NonNullable<CommunityRow["boardPosts"]>[number]>(raw)
     } catch {
       return {}
     }
   })
 
   useEffect(() => {
-    if (!communityLocalCacheAllowed()) return
+    if (activeCommunityIdentityRef.current !== communityIdentityId || communityCacheOwnerId !== communityIdentityId || !communityLocalCacheAllowed()) return
+    const key = communityAccountStorageKey("ghc.community.boardPosts", communityIdentityId)
+    if (!key) return
     try {
-      window.localStorage.setItem("ghc.community.boardPosts", JSON.stringify(localBoard))
+      window.localStorage.setItem(key, JSON.stringify(localBoard))
     } catch {
-      /* quota */
+      /* quota; local cache is optional and non-authoritative */
     }
-  }, [localBoard])
+  }, [localBoard, communityIdentityId, communityCacheOwnerId])
+
+  useEffect(() => IdentityService.subscribe((identity) => {
+    const nextIdentity = identity.userId || "anonymous"
+    if (nextIdentity === activeCommunityIdentityRef.current) return
+    // Fence old-account writes before clearing any account-owned UI state.
+    activeCommunityIdentityRef.current = nextIdentity
+    // Keep persistence disabled until both cache snapshots belong to the new account.
+    setCommunityCacheOwnerId("")
+    const sessionKey = communityAccountStorageKey("ghc.community.joinedIds.session", nextIdentity)
+    const durableKey = communityAccountStorageKey("ghc.community.joinedIds", nextIdentity)
+    const boardKey = communityAccountStorageKey("ghc.community.boardPosts", nextIdentity)
+    let nextJoined: string[] = []
+    let nextBoard: Record<string, NonNullable<CommunityRow["boardPosts"]>> = {}
+    try {
+      nextJoined = parseCommunityJoinedIds(sessionKey ? window.sessionStorage.getItem(sessionKey) : null)
+      if (communityLocalCacheAllowed()) {
+        nextJoined = Array.from(new Set([...nextJoined, ...parseCommunityJoinedIds(durableKey ? window.localStorage.getItem(durableKey) : null)]))
+        nextBoard = parseCommunityBoardCache<NonNullable<CommunityRow["boardPosts"]>[number]>(boardKey ? window.localStorage.getItem(boardKey) : null)
+      }
+    } catch {
+      /* unavailable storage means empty local hints */
+    }
+    setLocalJoined(nextJoined)
+    setLocalBoard(nextBoard)
+    setCommunityIdentityId(nextIdentity)
+    setCommunityCacheOwnerId(nextIdentity)
+    setSelectedCommunityId(null)
+    setCreatedSnapshot(null)
+    setJoinGate(null)
+    setJoinPickerRow(null)
+    setPlatformSnapshots({})
+    setPlatformLoading(false)
+    setRemoteDirectory([])
+    setDirectoryOffset(0)
+    setDirectoryLoading(true)
+    setDirectoryTick((value) => value + 1)
+  }), [])
 
   const { compact: headerCompact, hidden: headerHidden, onScroll: onHeaderScroll } =
     useScrollHeader({ threshold: 48 })
@@ -1240,21 +1280,13 @@ export function CommunitiesScreen() {
           onPost={(body: string, kind?: "text" | "question" | "resource") =>
             handleBoardPost(selected.id, body, kind)
           }
-          memberPreview={[
-            {
-              id: "current-user",
-              name: profile?.displayName || "You",
-              role: role === "guest" ? "member" : role,
-            },
-            ...(selected.members || [])
-              .filter((m) => m !== "current-user")
-              .slice(0, 8)
-              .map((m) => ({
-                id: m,
-                name: m.charAt(0).toUpperCase() + m.slice(1),
-                role: selected.createdBy === m ? "owner" : "member",
-              })),
-          ]}
+          // Until the canonical public member-directory RPC is installed, do not
+          // invent member display names from opaque user IDs or expose those IDs as labels.
+          memberPreview={selected.isJoined ? [{
+            id: "current-user",
+            name: profile?.displayName || "You",
+            role: role === "guest" ? "member" : role,
+          }] : []}
         />
       </div>
     )

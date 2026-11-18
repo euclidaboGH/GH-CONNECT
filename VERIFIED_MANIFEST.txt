@@ -248,6 +248,6 @@ ALL_MIGRATIONS_ORDERED_FOR_REVIEW:
 [REVIEW_REQUIRED] size=20602 path=supabase/migrations/20261116045934_pi_wallet_scope_consent_provider_address_discovery.sql
 [REQUIRED] size=1763 path=supabase/migrations/20261116170409_gh_field_reports_public_intake.sql
 [REVIEW_REQUIRED] size=3058 path=supabase/migrations/20261116171144_gh_research_studio_public_forms.sql
-[REVIEW_REQUIRED] size=20908 path=supabase/migrations/20261116182000_gh_research_intelligence_platform_foundation.sql
+[REVIEW_REQUIRED] size=21430 path=supabase/migrations/20261116182000_gh_research_intelligence_platform_foundation.sql
 [REVIEW_REQUIRED] size=2576 path=supabase/migrations/20261116190000_gh_media_evidence_engine.sql
-[REVIEW_REQUIRED] size=10235 path=supabase/migrations/20261117010001_gh_evidence_scoped_upload_chain_of_custody.sql
+[REVIEW_REQUIRED] size=10394 path=supabase/migrations/20261117010001_gh_evidence_scoped_upload_chain_of_custody.sql

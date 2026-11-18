@@ -13,16 +13,32 @@ export type PlatformCapability = {
   engagementOnly?: boolean
 }
 
+export function resolvePiPlatformEnvironment(): "sandbox" | "production" | "unknown" {
+  const piEnv = String(process.env.PI_ENV || "").trim().toLowerCase()
+  const publicSandbox = String(process.env.NEXT_PUBLIC_PI_SANDBOX || "").trim().toLowerCase()
+  const network = String(process.env.PI_NETWORK || "").trim().toLowerCase()
+
+  // The explicit SDK sandbox switch is authoritative. PI_ENV=production is also
+  // used by the official Pi Platform API while the blockchain remains on Testnet.
+  // Never let that API-mode label override an explicit Testnet sandbox selection.
+  if (publicSandbox === "true") return network === "mainnet" ? "unknown" : "sandbox"
+  if (publicSandbox === "false") return network === "testnet" ? "unknown" : "production"
+
+  if (piEnv === "sandbox" || network === "testnet" || process.env.VERCEL_ENV === "preview" || process.env.VERCEL_ENV === "development") {
+    return "sandbox"
+  }
+  if (piEnv === "production" || network === "mainnet" || process.env.VERCEL_ENV === "production") {
+    return "production"
+  }
+  return "unknown"
+}
+
 export function buildPlatformCapabilities(): {
   environment: "sandbox" | "production" | "unknown"
   capabilities: PlatformCapability[]
   principles: string[]
 } {
-  const piEnv = String(process.env.PI_ENV || "").toLowerCase()
-  const publicSandbox = String(process.env.NEXT_PUBLIC_PI_SANDBOX || "").toLowerCase()
-  let environment: "sandbox" | "production" | "unknown" = "unknown"
-  if (piEnv === "production" || publicSandbox === "false") environment = "production"
-  else if (piEnv === "sandbox" || publicSandbox === "true") environment = "sandbox"
+  const environment = resolvePiPlatformEnvironment()
 
   const hasApiKey = Boolean(String(process.env.PI_API_KEY || "").trim())
   const stakingFlag =

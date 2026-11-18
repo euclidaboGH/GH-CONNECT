@@ -2,7 +2,6 @@ import type React from "react"
 import type { Metadata, Viewport } from "next"
 import { GeistSans } from "geist/font/sans"
 import { GeistMono } from "geist/font/mono"
-import Script from "next/script"
 import { AppWrapper } from "@/components/app-wrapper"
 import "./globals.css"
 
@@ -65,10 +64,6 @@ export default function RootLayout({
   return (
     <html lang="en" className="bg-background" suppressHydrationWarning>
       <head>
-        <link rel="preconnect" href="https://sdk.minepi.com" crossOrigin="anonymous" />
-        <link rel="dns-prefetch" href="https://sdk.minepi.com" />
-        <link rel="preconnect" href="https://api.minepi.com" crossOrigin="anonymous" />
-        <link rel="dns-prefetch" href="https://api.minepi.com" />
         <style>{`
 html {
   font-family: ${GeistSans.style.fontFamily};
@@ -76,11 +71,6 @@ html {
   --font-mono: ${GeistMono.variable};
 }
         `}</style>
-        {/* Official Pi SDK — required; Pi Browser does NOT inject window.Pi for you */}
-        <Script
-          src="https://sdk.minepi.com/pi-sdk.js"
-          strategy="beforeInteractive"
-        />
       </head>
       <body className="bg-background antialiased">
         <AppWrapper>{children}</AppWrapper>

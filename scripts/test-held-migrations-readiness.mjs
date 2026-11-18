@@ -13,6 +13,7 @@ const files = {
   a2u: '20261110210001_pi_a2u_ecosystem_qualification.sql',
 };
 const sql = Object.fromEntries(Object.entries(files).map(([k, f]) => [k, fs.readFileSync(path.join(dir, f), 'utf8')]));
+const phase4 = fs.readFileSync(path.join(root, 'supabase/proposals/20261118_phase4_identity_group_contact.sql'), 'utf8');
 const definer = (s) => [...s.matchAll(/SECURITY\s+DEFINER[\s\S]{0,100}?SET\s+search_path\s*=\s*([^\n$]+)/gi)].map(m => m[1].trim());
 
 assert.match(sql.membership, /BEFORE UPDATE OF tier, active, expires_at/);
@@ -60,7 +61,21 @@ for (const [name, source] of Object.entries(sql)) {
   for (const p of paths) assert.match(p, /^pg_catalog,\s*public,\s*pg_temp/i, `${name}: unsafe search_path ${p}`);
 }
 
-console.log('PASS held-migration source safety: 6/6 migrations inspected');
+assert.match(phase4, /gh_session_issue_with_cap/);
+assert.match(phase4, /gh_messaging_group_create_from_dm/);
+assert.match(phase4, /gh_messaging_group_create_from_dm\(text,text,text,text,text\[\],text\)/);
+assert.match(phase4, /uq_gh_conversations_creator_request/);
+assert.match(phase4, /gh_messaging_sync_member_count/);
+assert.match(phase4, /gh_social_notification_create/);
+assert.match(phase4, /gh_messaging_group_invite_respond/);
+assert.match(phase4, /gh_messaging_share_own_contact/);
+assert.match(phase4, /gh_community_member_directory/);
+assert.match(phase4, /gh_conversation_invites_no_client/);
+assert.match(phase4, /REVOKE ALL ON FUNCTION public\.gh_messaging_group_create_from_dm/);
+assert.match(phase4, /REVOKE ALL ON FUNCTION public\.gh_community_member_directory/);
+assert.doesNotMatch(phase4, /GRANT EXECUTE ON FUNCTION public\.gh_(?:session_issue_with_cap|messaging_group_create_from_dm|messaging_group_invite_respond|messaging_share_own_contact|community_member_directory)[^;]* TO authenticated/i);
+assert.equal(fs.readdirSync(dir).some((name) => name.includes('20261118_phase4_identity_group_contact')), false);
+console.log('PASS held-migration source safety: 6/6 existing migrations inspected + Phase 4 proposal ACL/dependency review');
 console.log('PASS wallet payout cancellation preserves Run 291 provider-evidence release boundary');
 console.log('PASS marketplace variant transition refuses inventory underflow');
 console.log('PASS all SECURITY DEFINER routines use pinned search_path');

@@ -90,6 +90,7 @@ import { sellerTrustBadges, stockBadge } from "@/lib/marketplace/listing-badges"
 import { computeLandedCost, formatLandedCostLine } from "@/lib/marketplace/landed-cost"
 import { checklistProgress, sellerChecklist } from "@/lib/marketplace/seller-checklist"
 import { rankByRelevance } from "@/lib/marketplace/search-ranking"
+import { normalizeListingSearch } from "@/lib/active-upgrades/marketplace"
 import { isPromotedNow, limitPromotedShare, promotionLabel } from "@/lib/marketplace/boost-disclosure"
 import { averageHoursToComplete, completedRevenueByCurrency, restockCandidates, staleListings, topSellingListings } from "@/lib/marketplace/seller-insights"
 import { returnGuideFor } from "@/lib/marketplace/returns"
@@ -2064,7 +2065,7 @@ function validateMarketplaceBrowseFilters(value: unknown): MarketplaceBrowseFilt
   const minPrice = amount(raw.minPrice), maxPrice = amount(raw.maxPrice)
   const invalidPriceOrder = minPrice !== "" && maxPrice !== "" && Number(minPrice) > Number(maxPrice)
   return {
-    query: typeof raw.query === "string" ? raw.query.slice(0,120) : "",
+    query: normalizeListingSearch(raw.query),
     category: typeof raw.category === "string" && MARKETPLACE_CATEGORIES.some((category) => category === raw.category) ? raw.category : "",
     kind: ["all", "product", "service", "opportunity"].includes(String(raw.kind)) ? raw.kind as MarketplaceBrowseFilters["kind"] : "all",
     delivery: ["all", "meetup", "shipping", "digital", "service"].includes(String(raw.delivery)) ? raw.delivery as MarketplaceBrowseFilters["delivery"] : "all",
@@ -2095,7 +2096,7 @@ export function MarketplaceScreen({
   const category = categoryValue || null
   const [browseOffset, setBrowseOffset] = useState(0)
   const resetBrowsePage = useCallback(() => setBrowseOffset(0), [])
-  const setQuery = useCallback((value: string) => { resetBrowsePage(); browseFilters.update("query", value) }, [browseFilters, resetBrowsePage])
+  const setQuery = useCallback((value: string) => { resetBrowsePage(); browseFilters.update("query", normalizeListingSearch(value)) }, [browseFilters, resetBrowsePage])
   const setCategory = useCallback((value: string | null) => { resetBrowsePage(); browseFilters.update("category", value || "") }, [browseFilters, resetBrowsePage])
   const setKindFilter = useCallback((value: ListingKind | "all") => { resetBrowsePage(); browseFilters.update("kind", value) }, [browseFilters, resetBrowsePage])
   const setDeliveryFilter = useCallback((value: DeliveryMode | "all") => { resetBrowsePage(); browseFilters.update("delivery", value) }, [browseFilters, resetBrowsePage])

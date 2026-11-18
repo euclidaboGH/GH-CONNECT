@@ -179,6 +179,8 @@ export async function POST(request: Request, ctx: Ctx) {
           ? 403
           : result.error === "PRIVACY_SETTINGS_UNCONFIGURED"
             ? 409
+          : result.error === "IDEMPOTENCY_CONFLICT"
+            ? 409
           : result.error === "EMPTY_BODY" || result.error === "INVALID_ATTACHMENTS" || result.error === "INVALID_REPLY_TARGET"
             ? 400
             : result.error === "REPLY_TARGET_NOT_FOUND" || result.error === "INVALID_SHARED_POST"
