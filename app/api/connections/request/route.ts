@@ -1,0 +1,199 @@
+/**
+ * POST /api/connections/request
+ * Durable connection request + intents (requires migration applied).
+ * Does not replace session graph — dual-writes when DB available.
+ */
+import { NextResponse } from "next/server"
+import { humanizeRelationshipError, sanitizeTargetUserId } from "@/lib/server/social/relationship-integrity"
+import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
+import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { normalizeIntents } from "@/lib/connection-intents"
+import { validateConnectionIntents } from "@/lib/domains/adapters/unified-connection-request"
+import { nonDurableWriteResponse } from "@/lib/server/production-guard"
+import { emitSocialNotification } from "@/lib/server/social/notifications"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+import { enforceUserMutationRateLimit } from "@/lib/server/security/user-rate-limit"
+
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
+
+export async function POST(req: Request) {
+  try {
+    const auth = await resolveAuthenticatedUser(req.headers)
+    if (!auth?.userId) {
+      return NextResponse.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 })
+    }
+    const __rateLimited = await enforceUserMutationRateLimit(auth.userId, "connections/request:POST", 60, 60_000, { failClosed: true })
+    if (__rateLimited) return __rateLimited
+    const parsedBody = await readBoundedJson(req, 8 * 1024)
+    if (!parsedBody.ok) {
+      return NextResponse.json(
+        { ok: false, error: parsedBody.error },
+        { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400 },
+      )
+    }
+    const body = parsedBody.value as {
+      toUserId?: string
+      intents?: string[]
+      note?: string
+      source?: string
+    }
+    if (typeof body.toUserId !== "string") {
+      return NextResponse.json({ ok: false, error: "INVALID_PAIR" }, { status: 400 })
+    }
+    const toUserId = body.toUserId.trim()
+    if (!toUserId || toUserId === auth.userId) {
+      return NextResponse.json({ ok: false, error: "INVALID_PAIR" }, { status: 400 })
+    }
+    if (body.note !== undefined && (typeof body.note !== "string" || body.note.length > 500)) {
+      return NextResponse.json({ ok: false, error: "INVALID_NOTE" }, { status: 400 })
+    }
+    if (body.source !== undefined && (typeof body.source !== "string" || body.source.length > 80)) {
+      return NextResponse.json({ ok: false, error: "INVALID_SOURCE" }, { status: 400 })
+    }
+    const validated = validateConnectionIntents(body.intents || [])
+    if (!validated.ok) {
+      return NextResponse.json({ ok: false, error: validated.error }, { status: 400 })
+    }
+    const intents = validated.intents
+    // Relationship state is re-checked server-side when durable RPCs exist; never trust client "already connected"
+    const env = readGhcServerEnv()
+    if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
+      const nd = nonDurableWriteResponse("Connection request", {
+        extra: {
+          message: "SERVER_DB_UNAVAILABLE — session graph remains authority until migration + env",
+          intents,
+        },
+      })
+      return NextResponse.json(nd.body, { status: nd.status })
+    }
+
+    const res = await fetch(`${env.supabaseUrl}/rest/v1/rpc/ghc_connection_request_upsert`, {
+      method: "POST",
+      headers: {
+        apikey: env.supabaseServiceRoleKey,
+        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        p_from_user_id: auth.userId,
+        p_to_user_id: toUserId,
+        p_intents: intents,
+        p_note: body.note || null,
+        p_source: body.source || "discover",
+      }),
+    })
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "")
+      // Function missing until migration applied
+      const nd = nonDurableWriteResponse("Connection request", {
+        extra: {
+          message: "RPC_UNAVAILABLE",
+          detail: text.slice(0, 200),
+          intents,
+        },
+      })
+      return NextResponse.json(nd.body, { status: nd.status })
+    }
+    const row = await res.json().catch(() => null)
+    // Phase 8: notify recipient of durable connection request
+    void emitSocialNotification({
+      recipientUserId: toUserId,
+      actorUserId: auth.userId,
+      type: "connection",
+      entityType: "user",
+      entityId: auth.userId,
+      title: "Connection request",
+      body: "New connection request — open Matches → Requests to respond",
+      dedupeKey: `connection_request:${auth.userId}:${toUserId}`,
+      metadata: { kind: "connection_request", intents, source: body.source || "discover" },
+    })
+    return NextResponse.json({ ok: true, durable: true, request: row, intents })
+  } catch (e) {
+    return NextResponse.json(
+      { ok: false, error: e instanceof Error ? e.message : "request_failed" },
+      { status: 500 }
+    )
+  }
+}
+
+
+/** List pending connection requests for the authenticated user (incoming + outgoing). */
+export async function GET(req: Request) {
+  try {
+    const auth = await resolveAuthenticatedUser(req.headers)
+    if (!auth?.userId) {
+      return NextResponse.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 })
+    }
+    const env = readGhcServerEnv()
+    if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
+      return NextResponse.json({
+        ok: true,
+        durable: false,
+        incoming: [],
+        outgoing: [],
+        message: "DB_UNAVAILABLE",
+      })
+    }
+    const uid = auth.userId
+    const base = env.supabaseUrl.replace(/\/$/, "")
+    const headers = {
+      apikey: env.supabaseServiceRoleKey,
+      Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+      Accept: "application/json",
+    }
+    // Incoming: to_user_id = me, pending
+    // status pending (and legacy open/requested if present)
+    const statusFilter = "status=in.(pending,open,requested)"
+    const inUrl =
+      `${base}/rest/v1/ghc_connection_requests` +
+      `?to_user_id=eq.${encodeURIComponent(uid)}&${statusFilter}&select=*&order=created_at.desc&limit=50`
+    const outUrl =
+      `${base}/rest/v1/ghc_connection_requests` +
+      `?from_user_id=eq.${encodeURIComponent(uid)}&${statusFilter}&select=*&order=created_at.desc&limit=50`
+    const [inRes, outRes] = await Promise.all([
+      fetch(inUrl, { headers, cache: "no-store" }),
+      fetch(outUrl, { headers, cache: "no-store" }),
+    ])
+    if (!inRes.ok || !outRes.ok) {
+      return NextResponse.json({
+        ok: true,
+        durable: false,
+        incoming: [],
+        outgoing: [],
+        message: "QUERY_FAILED",
+      })
+    }
+    const incomingRows = (await inRes.json().catch(() => [])) as Array<Record<string, unknown>>
+    const outgoingRows = (await outRes.json().catch(() => [])) as Array<Record<string, unknown>>
+    const mapRow = (row: Record<string, unknown>, direction: "incoming" | "outgoing") => ({
+      id: String(row.id || ""),
+      fromUserId: String(row.from_user_id || ""),
+      toUserId: String(row.to_user_id || ""),
+      direction,
+      status: String(row.status || "pending"),
+      intents: Array.isArray(row.intents) ? row.intents : [],
+      note: row.note ? String(row.note) : undefined,
+      source: row.source ? String(row.source) : undefined,
+      createdAt: row.created_at ? new Date(String(row.created_at)).getTime() : Date.now(),
+    })
+    const incoming = (Array.isArray(incomingRows) ? incomingRows : []).map((r) =>
+      mapRow(r, "incoming")
+    )
+    const outgoing = (Array.isArray(outgoingRows) ? outgoingRows : []).map((r) =>
+      mapRow(r, "outgoing")
+    )
+    return NextResponse.json({
+      ok: true,
+      durable: true,
+      incoming,
+      outgoing,
+    })
+  } catch (e) {
+    return NextResponse.json(
+      { ok: false, error: e instanceof Error ? e.message : "list_failed" },
+      { status: 500 }
+    )
+  }
+}

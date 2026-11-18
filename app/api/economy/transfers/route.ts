@@ -1,0 +1,193 @@
+/**
+ * POST /api/economy/transfers — Phase C.1 / D6
+ * Intent only. Sender from verified session. Atomic money move via ghc_execute_transfer RPC.
+ * Notifications recorded only after authoritative success (deduped by referenceId).
+ */
+import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
+import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+import {
+  executeAuthoritativeTransfer,
+  getProcessGhcStore,
+} from "@/lib/server/economy/store"
+import { rpcExecuteTransfer } from "@/lib/server/economy/db"
+import {
+  allowMemoryServer,
+  isDatabaseConfigured,
+  jsonErr,
+  jsonOk,
+} from "@/lib/server/economy/http"
+import { notifyTransferCompleted } from "@/lib/server/economy/notifications"
+import { attachLedgerCorrelation, buildCorrelationEnvelope } from "@/lib/server/economy/correlation"
+import { checkDurableRateLimit, durableRateLimitStatus, durableRateLimitCode } from "@/lib/server/security/control-plane"
+import { requireRecentStepUp } from "@/lib/server/identity/step-up-store"
+import { resolvePublicIdentity } from "@/lib/server/economy/public-id"
+import { isValidGreenHavenIdFormat, normalizeGreenHavenId } from "@/lib/domains/greenhaven-id"
+
+const MAX_TRANSFER_BODY_CHARS = 16_384
+const MAX_TRANSFER_REFERENCE_CHARS = 200
+const MAX_TRANSFER_REQUEST_ID_CHARS = 128
+
+export async function POST(request: Request) {
+  const auth = await resolveAuthenticatedUser(request.headers)
+  if (!auth) return jsonErr("AUTH_REQUIRED", "Authentication required", 401)
+
+  // Phase 4: server-verifiable step-up required for transfers
+  const stepUpErr = await requireRecentStepUp(auth)
+  if (stepUpErr) {
+    return jsonErr(stepUpErr.code, stepUpErr.message, stepUpErr.status)
+  }
+
+  const rl = await checkDurableRateLimit(`transfer:${auth.userId}`, 30, 60_000, { onUnavailable: "deny" })
+  if (!rl.ok) {
+    return jsonErr(durableRateLimitCode(rl), rl.unavailable ? "Transfer protection is temporarily unavailable" : `Too many transfers; retry in ${rl.retryAfterSec}s`, durableRateLimitStatus(rl))
+  }
+
+  // Enforce the limit while streaming. Content-Length alone is not trustworthy
+  // and buffering first can consume excessive memory before a size check runs.
+  const parsedBody = await readBoundedJson(request, MAX_TRANSFER_BODY_CHARS)
+  if (!parsedBody.ok) {
+    const status = parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400
+    const code = parsedBody.error === "INVALID_JSON" ? "INVALID_JSON" : parsedBody.error
+    return jsonErr(code, code === "REQUEST_TOO_LARGE" ? "Transfer request body is too large" : "Invalid transfer request body", status)
+  }
+  const body = parsedBody.value
+
+  // Sender is ONLY auth.userId — ignore client-supplied sender/user fields
+  void body.senderId
+  void body.fromUserId
+  void body.userId
+  void body.balance
+
+  const rawGreenHavenId = String(
+    body.toGreenHavenId || body.recipientGreenHavenId || body.toUserId || ""
+  ).trim()
+  const referenceId = String(body.referenceId || "").trim()
+  const note = body.note != null ? String(body.note).replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 120) : undefined
+  const requestId = body.requestId != null ? String(body.requestId).trim() : undefined
+
+  if (!rawGreenHavenId) return jsonErr("GREENHAVEN_ID_REQUIRED", "Recipient GreenHaven ID required", 400)
+  if (!isValidGreenHavenIdFormat(rawGreenHavenId)) {
+    return jsonErr("GREENHAVEN_ID_REQUIRED", "Enter a valid recipient GreenHaven ID (GH-XXXXXX)", 400)
+  }
+  if (!referenceId) return jsonErr("TRANSFER_FAILED", "referenceId required", 400)
+  if (referenceId.length > MAX_TRANSFER_REFERENCE_CHARS || /[\r\n]/.test(referenceId)) {
+    return jsonErr("INVALID_REFERENCE_ID", "Transfer reference is invalid", 400)
+  }
+  if (requestId && (requestId.length > MAX_TRANSFER_REQUEST_ID_CHARS || /[\r\n]/.test(requestId))) {
+    return jsonErr("INVALID_REQUEST_ID", "Request ID is invalid", 400)
+  }
+
+  // Resolve the recipient using the durable public directory. Never trust an internal
+  // account key or display name supplied by the client as the transfer destination.
+  const recipient = await resolvePublicIdentity(normalizeGreenHavenId(rawGreenHavenId))
+  if (!recipient) {
+    return jsonErr("INVALID_RECIPIENT", "GreenHaven ID could not be resolved", 404)
+  }
+  const toUserId = recipient.userId
+  const toUserName = recipient.displayName || "GreenHaven member"
+
+  const { validatePositiveGhcAmount } = await import("@/lib/server/economy/amount")
+  const amt = validatePositiveGhcAmount(body.amount, { max: 5_000 })
+  if (!amt.ok) {
+    return jsonErr(amt.code, amt.message, 400)
+  }
+  const amount = amt.amount
+
+  if (toUserId === auth.userId) {
+    return jsonErr("SELF_TRANSFER", "Cannot send to yourself", 400)
+  }
+
+  if (isDatabaseConfigured()) {
+    const result = await rpcExecuteTransfer({
+      senderId: auth.userId,
+      toUserId,
+      amount,
+      referenceId,
+      note,
+      requestId,
+    })
+    if (!result.ok) {
+      const status =
+        result.error.code === "AUTH_REQUIRED"
+          ? 401
+          : result.error.code === "INSUFFICIENT_BALANCE"
+            ? 402
+            : result.error.code === "SERVER_UNAVAILABLE" || result.error.code === "NETWORK_TIMEOUT"
+              ? 503
+              : 400
+      return jsonErr(result.error.code, result.error.message, status)
+    }
+    const transferRef = result.referenceId || referenceId
+    await Promise.allSettled([
+      attachLedgerCorrelation({ userId: auth.userId, referenceId: transferRef, envelope: buildCorrelationEnvelope({ kind: "transfer", event: "GHC_TRANSFER_SENT", counterpartyId: toUserId, requestId }) }),
+      attachLedgerCorrelation({ userId: toUserId, referenceId: transferRef, envelope: buildCorrelationEnvelope({ kind: "transfer", event: "GHC_TRANSFER_RECEIVED", counterpartyId: auth.userId, requestId }) }),
+    ])
+    try {
+      await notifyTransferCompleted({
+        senderId: auth.userId,
+        recipientId: toUserId,
+        amount,
+        referenceId: result.referenceId || referenceId,
+        recipientName: toUserName,
+      })
+    } catch {
+      /* non-blocking */
+    }
+    return jsonOk({
+      ok: true,
+      idempotent: result.idempotent,
+      referenceId: result.referenceId,
+      debitTx: result.debitTx,
+      creditTx: result.creditTx,
+      wallet: result.wallet,
+    })
+  }
+
+  if (!allowMemoryServer()) {
+    return jsonErr(
+      "SERVER_UNAVAILABLE",
+      "Authoritative GHC transfers require SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (or DATABASE_URL) after applying migrations. In-memory transfers are disabled on this deployment.",
+      503
+    )
+  }
+
+  const result = await executeAuthoritativeTransfer(getProcessGhcStore(), {
+    senderId: auth.userId,
+    toUserId,
+    amount,
+    referenceId,
+    note,
+    requestId,
+  })
+
+  if (!result.ok) {
+    const status =
+      result.error.code === "AUTH_REQUIRED"
+        ? 401
+        : result.error.code === "INSUFFICIENT_BALANCE"
+          ? 402
+          : 400
+    return jsonErr(result.error.code, result.error.message, status)
+  }
+
+  try {
+    await notifyTransferCompleted({
+      senderId: auth.userId,
+      recipientId: toUserId,
+      amount,
+      referenceId: result.referenceId || referenceId,
+      recipientName: toUserName,
+    })
+  } catch {
+    /* non-blocking */
+  }
+
+  return jsonOk({
+    ok: true,
+    idempotent: result.idempotent,
+    referenceId: result.referenceId,
+    debitTx: result.debitTx,
+    creditTx: result.creditTx,
+    wallet: result.wallet,
+  })
+}

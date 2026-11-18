@@ -1,0 +1,564 @@
+"use client"
+
+/**
+ * GH Pay — real Pi commerce surface (not a checklist test card).
+ *
+ * - Payment intents bind Pi approve/complete to purpose + user + order
+ * - Pi (π) and GHC stay separate — no conversion rate
+ * - Verification is a small status chip, not the product
+ */
+
+import { useCallback, useEffect, useState } from "react"
+import {
+  ShieldCheck,
+  ShieldAlert,
+  Crown,
+  Zap,
+  ShoppingBag,
+  ExternalLink,
+  Loader2,
+  CheckCircle2,
+} from "lucide-react"
+import { classifyPaymentError } from "@/lib/pi-payment-errors"
+import { recoverIncompletePayment } from "@/lib/pi-incomplete-payment"
+import {
+  isPiPaymentsAvailable,
+  waitForPiPayments,
+  probePiPayments,
+  ghPayPurchase,
+  ghPayMembership,
+  ghPayListMyOrders,
+  retryMembershipActivation,
+} from "@/lib/gh-pay"
+import type { GhPayOrder } from "@/lib/gh-pay/types"
+import { getProduct } from "@/lib/gh-pay/catalog"
+import { ASSET_POLICY } from "@/lib/asset-separation"
+import { getMembershipPiPrice } from "@/lib/membership-pricing"
+
+const VERIFY_KEY = "gh_pay_pi_verified_v1"
+
+function readVerified(): boolean {
+  try {
+    return localStorage.getItem(VERIFY_KEY) === "1"
+  } catch {
+    return false
+  }
+}
+
+function writeVerified() {
+  try {
+    localStorage.setItem(VERIFY_KEY, "1")
+  } catch {
+    /* */
+  }
+}
+
+/** Optional toast sink — levels match GHC addToast; type may be omitted by callers. */
+type ToastFn = (msg: string, type?: "success" | "error" | "info") => void
+
+function statusLabel(status: GhPayOrder["status"]): string {
+  switch (status) {
+    case "created":
+    case "awaiting_approval":
+      return "Pending approval"
+    case "awaiting_user":
+      return "Waiting for you in Pi"
+    case "awaiting_completion":
+      return "Completing…"
+    case "completed":
+    case "fulfilled":
+      return "Completed"
+    case "failed":
+      return "Failed"
+    case "cancelled":
+      return "Cancelled"
+    case "refunded":
+      return "Refunded"
+    default:
+      return status
+  }
+}
+
+export function GhPayPanel({
+  compact,
+  onToast,
+}: {
+  compact?: boolean
+  onToast?: ToastFn
+}) {
+  const [verified, setVerified] = useState(false)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [lastProductId, setLastProductId] = useState<string | null>(null)
+  const [lastLabel, setLastLabel] = useState<string | null>(null)
+  const [lastPaymentId, setLastPaymentId] = useState<string | null>(null)
+  const [recovering, setRecovering] = useState(false)
+  const [orders, setOrders] = useState<GhPayOrder[]>([])
+  const [inPi, setInPi] = useState(false)
+  const [piProbe, setPiProbe] = useState<ReturnType<typeof probePiPayments> | null>(null)
+
+  const refreshOrders = useCallback(() => {
+    try {
+      setOrders(ghPayListMyOrders().slice(0, 5))
+    } catch {
+      setOrders([])
+    }
+  }, [])
+
+  useEffect(() => {
+    setVerified(readVerified())
+    refreshOrders()
+    // Pi SDK often injects after first paint — poll until createPayment exists
+    let cancelled = false
+    const sync = () => {
+      if (cancelled) return
+      setInPi(isPiPaymentsAvailable())
+      setPiProbe(probePiPayments())
+    }
+    sync()
+    void waitForPiPayments(15000, 300).then((ok) => {
+      if (cancelled) return
+      setInPi(ok)
+      setPiProbe(probePiPayments())
+    })
+    const id = window.setInterval(sync, 2000)
+    return () => {
+      cancelled = true
+      window.clearInterval(id)
+    }
+  }, [refreshOrders])
+
+  const notify = useCallback(
+    (msg: string, type: "success" | "error" | "info" = "info") => {
+      onToast?.(msg, type)
+    },
+    [onToast]
+  )
+
+  const runProduct = useCallback(
+    async (productId: string, label: string) => {
+      setError(null)
+      setLastProductId(productId)
+      setLastLabel(label)
+      let ready = isPiPaymentsAvailable()
+      if (!ready) {
+        notify("Connecting to Pi…", "info")
+        ready = await waitForPiPayments(8000, 250)
+        setInPi(ready)
+        setPiProbe(probePiPayments())
+      }
+      if (!ready) {
+        const probe = probePiPayments()
+        const msg = probe.hasWindowPi
+          ? "Pi is present but payments are not ready yet. Wait a moment, then try again. Confirm this URL is opened inside the Pi Browser (not Chrome/Safari)."
+          : "Pi payments need the Pi Browser. Open this same Vercel URL from inside the Pi Browser app (Develop → your app, or the production link). GHC stays separate from π."
+        setError(msg)
+        notify(classifyPaymentError(msg).title, "error")
+        return
+      }
+      setBusy(productId)
+      try {
+        // Lifecycle (UX only — PIN is device unlock; Pi Wallet authorizes π)
+        notify("Preparing Pi payment…", "info")
+        const result = await ghPayPurchase(productId)
+        if (result.ok) {
+          if (productId === "pipeline_verification") writeVerified()
+          setVerified(readVerified() || productId === "pipeline_verification")
+          notify(`${label} completed`, "success")
+          refreshOrders()
+          return
+        }
+        if (result.cancelled) {
+          const pinRelated =
+            typeof result.error === "string" &&
+            (result.error.includes("PIN") || result.error.includes("Device PIN"))
+          notify(
+            pinRelated
+              ? "Device PIN was not confirmed — payment was not started"
+              : "Payment cancelled in Pi Wallet — nothing was charged",
+            "info"
+          )
+          return
+        }
+        const msg = result.error || "Payment could not be completed"
+        setError(msg)
+        const pid = (result as { paymentId?: string }).paymentId
+        if (pid) setLastPaymentId(String(pid))
+        notify(classifyPaymentError(msg).title, "error")
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Payment could not be completed"
+        setError(msg)
+        notify(classifyPaymentError(msg).title, "error")
+      } finally {
+        setBusy(null)
+      }
+    },
+    [notify, refreshOrders]
+  )
+
+  const tryRecover = useCallback(async () => {
+    if (!lastPaymentId || recovering) return
+    setRecovering(true)
+    setError(null)
+    try {
+      notify("Checking Pi for an incomplete payment…", "info")
+      const result = await recoverIncompletePayment({
+        paymentId: lastPaymentId,
+        identifier: lastPaymentId,
+      })
+      if (result.ok) {
+        notify(
+          result.action === "already_fulfilled" || result.action === "already_completed"
+            ? "Payment already completed"
+            : "Previous Pi payment recovered",
+          "success",
+        )
+        setLastPaymentId(null)
+        refreshOrders()
+        try {
+          window.dispatchEvent(new CustomEvent("ghc:payment-recovered", { detail: result }))
+        } catch {
+          /* */
+        }
+      } else {
+        const msg = result.error || "Could not recover payment"
+        setError(msg)
+        notify(classifyPaymentError(msg).title, "error")
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Recovery failed"
+      setError(msg)
+      notify(classifyPaymentError(msg).title, "error")
+    } finally {
+      setRecovering(false)
+    }
+  }, [lastPaymentId, recovering, notify, refreshOrders])
+
+  const membershipProducts = ([
+    { tier: "vip", period: 1, periodId: "monthly", title: "VIP · 1 month", blurb: "1 paid month + 1 bonus month" },
+    { tier: "vip", period: 4, periodId: "four_months", title: "VIP · 4 months", blurb: "5% off + 1 bonus month" },
+    { tier: "vip", period: 8, periodId: "eight_months", title: "VIP · 8 months", blurb: "10% off + 1 bonus month" },
+    { tier: "vip", period: 12, periodId: "yearly", title: "VIP · 12 months", blurb: "20% off + 1 bonus month" },
+    { tier: "vvip", period: 1, periodId: "monthly", title: "VVIP · 1 month", blurb: "1 paid month + 1 bonus month" },
+    { tier: "vvip", period: 4, periodId: "four_months", title: "VVIP · 4 months", blurb: "5% off + 1 bonus month" },
+    { tier: "vvip", period: 8, periodId: "eight_months", title: "VVIP · 8 months", blurb: "10% off + 1 bonus month" },
+    { tier: "vvip", period: 12, periodId: "yearly", title: "VVIP · 12 months", blurb: "20% off + 1 bonus month" },
+  ] as const).map((plan) => ({
+    id: `membership_${plan.tier}_${plan.periodId}`,
+    icon: Crown,
+    title: plan.title,
+    amount: getProduct(`membership_${plan.tier}_${plan.periodId}`)?.amountPi ?? getMembershipPiPrice(plan.tier, plan.period).chargePi,
+    blurb: plan.blurb,
+  }))
+  const products = [
+    ...membershipProducts,
+    {
+      id: "profile_boost",
+      icon: Zap,
+      title: "Profile boost",
+      amount: getProduct("profile_boost")?.amountPi ?? 0.5,
+      blurb: "24h extra exposure on Discover",
+    },
+  ]
+
+  return (
+    <section
+      className={
+        compact
+          ? "rounded-2xl border border-border/80 bg-card p-3.5"
+          : "rounded-2xl border border-border bg-card p-4 shadow-sm"
+      }
+      aria-label="GH Pay commerce"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-400">
+            GH Pay
+          </p>
+          <h2 className="mt-0.5 text-[15px] font-black tracking-tight text-foreground">
+            Pay with π
+          </h2>
+          <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+            {ASSET_POLICY.piRailsCopy} {ASSET_POLICY.piPeerCopy} GHC stays on the GreenHaven
+            ledger — never mixed or converted here.
+          </p>
+        </div>
+        <div
+          className={`flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold ${
+            verified
+              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+              : "bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+          }`}
+        >
+          {verified ? <ShieldCheck size={12} /> : <ShieldAlert size={12} />}
+          {verified ? "Ready" : "Setup"}
+        </div>
+      </div>
+
+      {!inPi ? (
+        <div className="mt-3 rounded-xl border border-amber-200/80 bg-amber-50/80 px-3 py-2.5 text-[11px] leading-relaxed text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+          <p className="font-bold">Open this app in the Pi Browser</p>
+          <p className="mt-1">
+            π payments require the official Pi Browser (not Chrome/Safari). Use your live GreenHaven
+            URL from Develop → your app, or the production link inside Pi. Device PIN is not a π charge.
+          </p>
+        </div>
+      ) : null}
+
+      {busy ? (
+        <p className="mt-2 rounded-xl border border-emerald-200/70 bg-emerald-50/70 px-3 py-2 text-[11px] text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100" role="status">
+          Preparing payment… If asked, enter your <strong>GreenHaven device PIN</strong> (unlocks this app only). Pi Wallet still authorizes the π charge.
+        </p>
+      ) : null}
+
+      {/* Commerce products */}
+      <ul className="mt-3 space-y-2">
+        {products.map((p) => {
+          const Icon = p.icon
+          const isBusy = busy === p.id
+          return (
+            <li key={p.id}>
+              <button
+                type="button"
+                disabled={Boolean(busy)}
+                aria-busy={isBusy}
+                onClick={() => void runProduct(p.id, p.title)}
+                className="flex w-full min-h-[48px] items-center gap-3 rounded-xl border border-border/70 bg-muted/20 px-3 py-2.5 text-left transition hover:bg-muted/40 disabled:opacity-60 active:scale-[0.99]"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-600/10 text-emerald-700 dark:text-emerald-300">
+                  <Icon size={16} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13px] font-bold text-foreground">{p.title}</span>
+                  <span className="block text-[11px] text-muted-foreground">{p.blurb}</span>
+                </span>
+                <span className="shrink-0 text-right">
+                  <span className="block text-[13px] font-black tabular-nums text-foreground">
+                    {p.amount} π
+                  </span>
+                  <span className="block text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
+                    {isBusy ? (
+                      <span className="inline-flex items-center gap-0.5">
+                        <Loader2 size={10} className="animate-spin" aria-hidden /> Processing
+                      </span>
+                    ) : (
+                      "Buy"
+                    )}
+                  </span>
+                </span>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+
+      <div className="mt-2 flex items-center gap-2 rounded-xl border border-dashed border-border/80 px-3 py-2">
+        <ShoppingBag size={14} className="shrink-0 text-muted-foreground" />
+        <p className="text-[11px] text-muted-foreground">
+          Marketplace purchases can be completed with π through GH Pay.
+        </p>
+      </div>
+
+      {/* First-time payment readiness check */}
+      {!verified ? (
+        <div className="mt-3 rounded-xl border border-border/60 bg-muted/15 px-3 py-2.5">
+          <p className="text-[11px] font-semibold text-foreground">First-time Pi setup</p>
+          <p className="mt-0.5 text-[10px] text-muted-foreground">
+            A small 0.01 π check can confirm that Pi payments are ready on this device. It does not change GHC.
+          </p>
+          <button
+            type="button"
+            disabled={Boolean(busy)}
+            onClick={() => void runProduct("pipeline_verification", "Payment check")}
+            className="mt-2 inline-flex min-h-9 w-full items-center justify-center rounded-full border border-border bg-background text-[12px] font-bold text-foreground disabled:opacity-60"
+          >
+            {busy === "pipeline_verification" ? "Waiting for Pi…" : "Confirm with 0.01 π"}
+          </button>
+        </div>
+      ) : (
+        <p className="mt-3 flex items-center gap-1.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+          <CheckCircle2 size={14} />
+          Pi payments ready on this device
+        </p>
+      )}
+
+      {error ? (
+        <div
+          className="mt-2 space-y-2 rounded-xl border border-rose-200/80 bg-rose-50/80 p-2.5 dark:border-rose-900/50 dark:bg-rose-950/30"
+          role="alert"
+        >
+          {(() => {
+            const human = classifyPaymentError(error)
+            return (
+              <>
+                <p className="text-[12px] font-bold text-rose-800 dark:text-rose-200">
+                  {human.title}
+                </p>
+                <p className="text-[11px] leading-snug text-rose-700/90 dark:text-rose-200/90">
+                  {human.body}
+                </p>
+                <p className="text-[10px] text-muted-foreground">{human.actionHint}</p>
+                <div className="mt-1 flex flex-wrap gap-2">
+                  {lastPaymentId ? (
+                    <button
+                      type="button"
+                      disabled={recovering}
+                      onClick={() => void tryRecover()}
+                      className="rounded-lg bg-amber-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-amber-700 disabled:opacity-60"
+                    >
+                      {recovering ? "Recovering…" : "Recover previous payment"}
+                    </button>
+                  ) : null}
+                  {human.retryable && lastProductId ? (
+                    <button
+                      type="button"
+                      disabled={Boolean(busy)}
+                      onClick={() => void runProduct(lastProductId, lastLabel || "Payment")}
+                      className="rounded-lg bg-rose-700 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-rose-800 disabled:opacity-60"
+                    >
+                      {busy ? "Retrying…" : "Retry payment"}
+                    </button>
+                  ) : null}
+                </div>
+              </>
+            )
+          })()}
+          {piProbe ? (
+            <p className="text-[10px] text-muted-foreground">
+              Diagnostic: bridge={piProbe.hasWindowPi ? "yes" : "no"} · createPayment=
+              {piProbe.hasCreatePayment ? "yes" : "no"}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+      {!inPi && !error ? (
+        <p className="mt-2 text-[10px] text-muted-foreground">
+          Waiting for Pi payment bridge… Open this URL inside the Pi Browser if this message stays.
+        </p>
+      ) : null}
+
+      {/* Recent GH Pay orders */}
+      {orders.length > 0 ? (
+        <div className="mt-3 border-t border-border/50 pt-2">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+            Recent Pi orders
+          </p>
+          <ul className="mt-1.5 space-y-1">
+            {orders.map((o) => (
+              <li
+                key={o.orderId}
+                className="flex items-center justify-between gap-2 text-[11px]"
+              >
+                <span className="truncate font-medium text-foreground">
+                  {o.memo || o.productId}
+                </span>
+                <span className="shrink-0 tabular-nums text-muted-foreground">
+                  {o.amountPi} π · {statusLabel(o.status)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <p className="mt-3 flex items-start gap-1 text-[10px] leading-snug text-muted-foreground">
+        <ExternalLink size={10} className="mt-0.5 shrink-0" />
+        Payments are authorized in Pi Wallet and matched to the GreenHaven purchase you selected.
+      </p>
+    </section>
+  )
+}
+
+/**
+ * Membership purchase via GH Pay (Pi U2A).
+ * Keeps Pi and GHC separate — only completes Pi payment for the membership product.
+ */
+export async function runGhPayMembership(
+  tier: "vip" | "vvip",
+  period: "monthly" | "four_months" | "eight_months" | "yearly" = "monthly",
+  onToast?: ToastFn
+): Promise<boolean> {
+  try {
+    let ready = isPiPaymentsAvailable()
+    if (!ready) ready = await waitForPiPayments(8000, 250)
+    if (!ready) {
+      onToast?.(
+        "Pi payments need the Pi Browser. Open this Vercel URL inside Pi Browser, wait for the bridge, then retry.",
+        "error"
+      )
+      return false
+    }
+    onToast?.(`Starting ${tier.toUpperCase()} membership payment…`, "info")
+    const result = await ghPayMembership(tier, period)
+    if (result.ok) {
+      // Payment success ≠ entitlement. Recover if activate stayed pending after internal retries.
+      if (result.membershipActivated === false && result.order?.orderId) {
+        const recovered = await retryMembershipActivation(result.order.orderId)
+        if (recovered.membershipActivated) {
+          onToast?.(`${tier.toUpperCase()} membership activated`, "success")
+          return true
+        }
+        onToast?.(
+          "Payment received, but membership is not active yet. Open Premium again to finish activation — your payment will not be charged again.",
+          "info"
+        )
+        return true
+      }
+      if (result.membershipActivated === false) {
+        onToast?.(
+          "Payment received, but membership activation needs another try. Open Premium again when online.",
+          "info"
+        )
+        return true
+      }
+      onToast?.(`${tier.toUpperCase()} membership payment completed`, "success")
+      return true
+    }
+    if (result.cancelled) {
+      onToast?.("Membership payment cancelled", "info")
+      return false
+    }
+    onToast?.(result.error || "Membership payment failed", "error")
+    return false
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Membership payment failed"
+    onToast?.(msg, "error")
+    return false
+  }
+}
+
+/** Profile / post boost paid in π via GH Pay */
+export async function runGhPayBoost(
+  target: "profile" | "post" = "profile",
+  onToast?: ToastFn
+): Promise<boolean> {
+  try {
+    let ready = isPiPaymentsAvailable()
+    if (!ready) ready = await waitForPiPayments(8000, 250)
+    if (!ready) {
+      onToast?.(
+        "Pi payments need the Pi Browser. Open this Vercel URL inside Pi Browser, wait for the bridge, then retry.",
+        "error"
+      )
+      return false
+    }
+    const productId = target === "post" ? "post_boost" : "profile_boost"
+    onToast?.("Starting boost payment…", "info")
+    const result = await ghPayPurchase(productId)
+    if (result.ok) {
+      onToast?.("Boost payment completed", "success")
+      return true
+    }
+    if (result.cancelled) {
+      onToast?.("Boost cancelled", "info")
+      return false
+    }
+    onToast?.(result.error || "Boost payment failed", "error")
+    return false
+  } catch (e) {
+    onToast?.(e instanceof Error ? e.message : "Boost failed", "error")
+    return false
+  }
+}
+
+export default GhPayPanel

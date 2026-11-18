@@ -1,0 +1,91 @@
+name: Dependency security audit
+
+on:
+  pull_request:
+    branches: [main, master, testnet]
+  push:
+    branches: [main, master, testnet]
+  schedule:
+    - cron: "17 7 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: dependency-security-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Reproducible npm security audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24.15.0
+          cache: npm
+
+      - name: Assert supported Node runtime
+        run: node -e "if (process.versions.node !== '24.15.0') throw new Error('Expected Node 24.15.0; received ' + process.versions.node)"
+
+      - name: Verify lockfile before installation
+        run: node scripts/check-dependency-lock-integrity.mjs
+
+      - name: Clean install from committed lockfile
+        run: npm ci --legacy-peer-deps
+
+      - name: Generate complete npm audit report
+        id: audit
+        shell: bash
+        run: |
+          set +e
+          npm audit --json > npm-audit.json
+          audit_exit=$?
+          set -e
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs'
+          const report = JSON.parse(readFileSync('npm-audit.json', 'utf8'))
+          const counts = report.metadata?.vulnerabilities ?? {}
+          console.log(`npm audit: ${counts.total ?? 'unknown'} total; ${counts.critical ?? 0} critical; ${counts.high ?? 0} high; ${counts.moderate ?? 0} moderate; ${counts.low ?? 0} low`)
+          console.log('Full advisory details are preserved in the workflow artifact.')
+          NODE
+          echo "audit_exit=$audit_exit" >> "$GITHUB_OUTPUT"
+
+      - name: Upload full advisory report
+        if: always() && hashFiles('npm-audit.json') != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: npm-audit-${{ github.run_id }}-${{ github.run_attempt }}
+          path: npm-audit.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Enforce zero known vulnerabilities
+        if: always() && steps.audit.outcome == 'success'
+        env:
+          AUDIT_EXIT: ${{ steps.audit.outputs.audit_exit }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs'
+          const report = JSON.parse(readFileSync('npm-audit.json', 'utf8'))
+          if (report.error) throw new Error(`npm audit could not complete: ${report.error.summary ?? 'registry error'}`)
+          const counts = report.metadata?.vulnerabilities
+          if (!counts || !Number.isSafeInteger(counts.total)) {
+            throw new Error('npm audit did not return a valid vulnerability summary.')
+          }
+          const total = counts.total
+          if (total > 0) {
+            console.error(`Security gate blocked: ${total} known dependency finding(s) — ${counts.critical ?? 0} critical, ${counts.high ?? 0} high, ${counts.moderate ?? 0} moderate, ${counts.low ?? 0} low.`)
+            process.exit(1)
+          }
+          if (process.env.AUDIT_EXIT !== '0') {
+            throw new Error(`npm audit exited with code ${process.env.AUDIT_EXIT} but reported zero vulnerabilities; investigate the registry or audit response.`)
+          }
+          console.log('PASS: npm audit reports zero known vulnerabilities.')
+          NODE

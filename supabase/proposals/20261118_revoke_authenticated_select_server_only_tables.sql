@@ -1,0 +1,4 @@
+-- SUPERSEDED BY APPLIED TESTNET MIGRATION:
+-- supabase/migrations/20261118033839_revoke_client_select_on_server_only_tables.sql
+-- Applied on GH Connect Testnet on 2026-11-18 and postflight-verified.
+-- Retained as an audit record of the original review proposal; do not apply again.
