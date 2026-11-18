@@ -3,6 +3,11 @@
 import fs from 'node:fs'
 import path from 'node:path'
 const read = (file) => fs.readFileSync(path.join(process.cwd(), file), 'utf8')
+const readFirstExisting = (...files) => {
+  const file = files.find((candidate) => fs.existsSync(path.join(process.cwd(), candidate)))
+  if (!file) throw new Error(`Required source file not found: ${files.join(' or ')}`)
+  return read(file)
+}
 const proposal = read('supabase/proposals/20261118_phase4_identity_group_contact.sql')
 const session = read('lib/server/identity/session-store.ts')
 const stepUp = read('app/api/auth/step-up/route.ts')
@@ -17,7 +22,10 @@ const messageScreen = read('components/ghc/message-screen.tsx')
 const messageComponents = read('components/ghc/message-components.tsx')
 const context = read('contexts/ghc-context.tsx')
 const invitePanel = read('components/ghc/group-invites-panel.tsx')
-const phase4Doc = read('docs/RUN328-PHASE4-IDENTITY-COMMUNITY-MESSAGING-2026-11-18.md')
+const phase4Doc = readFirstExisting(
+  'docs/RUN328-PHASE4-IDENTITY-COMMUNITY-MESSAGING-2026-11-18.md',
+  'docs/archive/historical-implementation-records/docs__RUN328-PHASE4-IDENTITY-COMMUNITY-MESSAGING-2026-11-18.md'
+)
 const packageScripts = JSON.parse(read('package.json')).scripts
 const checks = []
 const test = (name, ok) => { checks.push(Boolean(ok)); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}`) }
