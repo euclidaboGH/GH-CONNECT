@@ -6,6 +6,7 @@
  */
 import { readFileSync, existsSync } from 'node:fs'
 import { hasNodeScript } from './lib/prebuild-command-contract.mjs'
+import { hasProjectDoc } from './lib/read-project-doc.mjs'
 
 const read = (path) => readFileSync(path, 'utf8')
 const pkg = JSON.parse(read('package.json'))
@@ -64,7 +65,7 @@ check('phase 10 platform acceptance remains in prebuild and static verification'
 check('migration classification/review gate remains in both suites', prebuild === 'node scripts/run-prebuild-checks.mjs' && prebuildHas('scripts/check-phase24-release-review.mjs') && verifyHas('scripts/check-phase24-release-review.mjs'))
 check('no database push is wired into CI', !/supabase\s+db\s+push/i.test(ci))
 check('production remains explicitly not approved', /NOT APPROVED/i.test(truth))
-check('release report is present', existsSync('docs/PHASE-10-RELEASE-ENGINEERING-ACCEPTANCE-2026-11-09.md'))
+check('release report is present in canonical or preserved historical documentation', hasProjectDoc('docs/PHASE-10-RELEASE-ENGINEERING-ACCEPTANCE-2026-11-09.md'))
 
 const passed = checks.filter(Boolean).length
 console.log(`\nPhase 10 release closure: ${passed}/${checks.length} passed`)
