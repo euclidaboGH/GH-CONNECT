@@ -448,6 +448,10 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
         let ghUserId = identity.uid
         let verifiedUsername = identity.username
         let onboardingStatus: OnboardingStatus = "unknown"
+        // Keep a safe diagnostic available to the later server-verification failure path.
+        let serverDiagnosticCode = identity.accessToken
+          ? "PI_SERVER_VERIFY_FAILED"
+          : "PI_ACCESS_TOKEN_MISSING"
 
         if (identity.accessToken) {
           try {
@@ -540,7 +544,7 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
               bridge?.error === "PI_VERIFICATION_UNAVAILABLE" ||
               bridge?.error === "PI_VERIFICATION_INVALID_RESPONSE"
             ) {
-              const serverDiagnosticCode = bridge?.diagnosticCode || (
+              serverDiagnosticCode = bridge?.diagnosticCode || (
                 bridge?.error === "PI_VERIFICATION_UNAVAILABLE" ? "PI_PLATFORM_UNAVAILABLE" :
                 bridge?.error === "PI_VERIFICATION_INVALID_RESPONSE" ? "PI_PLATFORM_INVALID_RESPONSE" :
                 bridge?.error === "SESSION_STORE_UNAVAILABLE" ? "PI_SESSION_STORE_FAILED" : "PI_IDENTITY_STORE_FAILED"
@@ -598,10 +602,12 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
               }
             } else {
               const responseCode = bridge?.diagnosticCode || "PI_SERVER_VERIFY_RESPONSE_INVALID"
+              serverDiagnosticCode = responseCode
               reportPiAuthDiagnostic(responseCode, { stage: diagnosticStage, status: bridgeRes.status })
               debugWarn("PiAuth", "/api/auth/pi did not verify", { status: bridgeRes.status, code: responseCode, correlationId: bridge?.correlationId || null })
             }
           } catch (bridgeErr) {
+            serverDiagnosticCode = "PI_SERVER_VERIFY_NETWORK_ERROR"
             reportPiAuthDiagnostic("PI_SERVER_VERIFY_NETWORK_ERROR", { stage: diagnosticStage, errorName: bridgeErr instanceof Error ? bridgeErr.name : "UnknownError" })
             debugWarn("PiAuth", "identity bridge network error", { errorName: bridgeErr instanceof Error ? bridgeErr.name : "UnknownError" })
           }
@@ -789,38 +795,52 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
           );
         } catch { /* */ }
 
-        // Official path success — try SDKLite for optional commerce features, non-blocking
-        try {
-          setAuthMessage("Loading optional commerce SDK...");
-          await loadSDKLite();
-          const sdkLite = await (window as any).SDKLite.init();
-          let sdkInstance: SDKLiteInstance;
-          try {
-            const pi = buildPiSdk();
-            await pi.auth.login();
-            await sdkLite.login();
-            sdkInstance = createSdk(sdkLite, pi);
-          } catch {
-            sdkInstance = sdkLite;
-          }
-          setSdk(sdkInstance);
-          await fetchProducts(sdkInstance);
-          try {
-            const { purchases } = await sdkInstance.state.restore();
-            setRestoredPurchases(purchases);
-          } catch {
-            setRestoredPurchases([]);
-          }
-        } catch (optionalErr) {
-          debugWarn("PiAuth", "SDKLite optional path skipped:", optionalErr);
-          // Minimal sdk stub so consumers expecting sdk don't crash
-          setSdk(createLocalSdkLite(identity.uid));
-          setProducts([]);
-          setRestoredPurchases([]);
-        }
-
+        // The Pi identity and durable GH cookie have already been verified above.
+        // Authentication must not wait for optional commerce SDK initialization,
+        // product discovery, or purchase restoration.
         setIsAuthenticated(true);
         setAuthMessage("Signed in with Pi");
+        setProducts([]);
+        setRestoredPurchases([]);
+
+        // Optional commerce initialization is deliberately detached from the auth
+        // critical path. A slow or unavailable SDK must not leave a verified Pioneer
+        // looking logged out after the durable server session has been confirmed.
+        void (async () => {
+          reportPiAuthDiagnostic("PI_COMMERCE_SDK_INIT_START", { stage: "optional_commerce" });
+          try {
+            await loadSDKLite();
+            const sdkLite = await (window as any).SDKLite.init();
+            let sdkInstance: SDKLiteInstance;
+            try {
+              const pi = buildPiSdk();
+              await pi.auth.login();
+              await sdkLite.login();
+              sdkInstance = createSdk(sdkLite, pi);
+            } catch {
+              sdkInstance = sdkLite;
+            }
+            setSdk(sdkInstance);
+            await fetchProducts(sdkInstance);
+            try {
+              const { purchases } = await sdkInstance.state.restore();
+              setRestoredPurchases(purchases);
+            } catch {
+              setRestoredPurchases([]);
+            }
+            reportPiAuthDiagnostic("PI_COMMERCE_SDK_READY", { stage: "optional_commerce" });
+          } catch (optionalErr) {
+            reportPiAuthDiagnostic("PI_COMMERCE_SDK_FAILED", {
+              stage: "optional_commerce",
+              errorName: optionalErr instanceof Error ? optionalErr.name : "UnknownError",
+            });
+            debugWarn("PiAuth", "SDKLite optional path skipped:", optionalErr);
+            // Keep commerce unavailable rather than blocking or undoing verified auth.
+            setSdk(null);
+            setProducts([]);
+            setRestoredPurchases([]);
+          }
+        })();
         return;
       } catch (piErr) {
         debugWarn("PiAuth", "Official Pi auth failed:", piErr);
