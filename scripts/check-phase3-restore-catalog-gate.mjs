@@ -2,9 +2,10 @@
 /** Static regression contract for the read-only post-restore PostgreSQL catalog gate. */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { readProjectDoc } from './lib/read-project-doc.mjs'
 const root = process.cwd()
 const sql = readFileSync(join(root, 'supabase/VALIDATE-RESTORED-DATABASE.sql'), 'utf8')
-const runbook = readFileSync(join(root, 'docs/PHASE-03-DATABASE-INTEGRITY-RECOVERY.md'), 'utf8')
+const runbook = readProjectDoc('docs/PHASE-03-DATABASE-INTEGRITY-RECOVERY.md')
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
 const checks = [
   ['catalog gate explicitly declares read-only transaction', /BEGIN TRANSACTION READ ONLY/i.test(sql)],

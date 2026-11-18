@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /** Phase 8 Profile & Matching source contracts. */
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { hasProjectDoc } from './lib/read-project-doc.mjs'
 
 const root = process.cwd()
 const read = (p) => readFileSync(join(root, p), 'utf8')
@@ -32,7 +33,10 @@ test('match clarity separates Interest from Connect', /Like shows interest/.test
 test('connection request emits social notification on durable write', /emitSocialNotification/.test(conn) && /connection/.test(conn))
 test('package and app release versions agree', release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`))
 test('phase 8 checker is registered in prebuild', Boolean(pkg.scripts?.['prebuild:checks']?.includes('check-phase8-profile-matching.mjs')))
-test('phase 8 programme doc exists', existsSync(join(root, 'docs/PHASE-8-PROFILE-MATCHING-2026-11-08.md')))
+test(
+  'phase 8 programme doc exists in canonical or preserved historical documentation',
+  hasProjectDoc('docs/PHASE-8-PROFILE-MATCHING-2026-11-08.md')
+)
 
 const failed = checks.filter((x) => !x).length
 console.log(`\nPhase 8 profile & matching: ${checks.length - failed}/${checks.length} passed`)

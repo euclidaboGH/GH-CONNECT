@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /** Phase 5 Messages & Notifications source contracts. */
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
+import { hasProjectDoc } from './lib/read-project-doc.mjs'
 import { join } from 'node:path'
 
 const root = process.cwd()
@@ -42,7 +43,7 @@ test('notification center dual mark-read waits for both social and unified write
 test('mark-all reports partial durable failure honestly', /Some alerts could not be marked read/.test(bell))
 test('package and app release versions agree', release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`))
 test('phase 5 checker is registered in prebuild', Boolean(pkg.scripts?.['prebuild:checks']?.includes('check-phase5-messages-notifications.mjs')))
-test('phase 5 programme doc exists', existsSync(join(root, 'docs/PHASE-5-MESSAGES-NOTIFICATIONS-2026-11-08.md')))
+test('phase 5 programme doc exists in canonical or preserved historical documentation', hasProjectDoc('docs/PHASE-5-MESSAGES-NOTIFICATIONS-2026-11-08.md'))
 
 const failed = checks.filter((x) => !x).length
 console.log(`\nPhase 5 messages & notifications: ${checks.length - failed}/${checks.length} passed`)

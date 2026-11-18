@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /** Network-free regression contract for the v0.157.3 cross-phase hardening changes. */
 import { readFileSync, existsSync } from "node:fs"
-import { readProjectDoc } from './lib/read-project-doc.mjs'
+import { readProjectDoc, hasProjectDoc } from './lib/read-project-doc.mjs'
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { dirname } from "node:path"
@@ -38,7 +38,7 @@ const checks = [
   ["Phase 3 identity regression check is registered", statics.includes("check-phase3-profile-identity.mjs")],
   ["Phase 9 transaction regression check is registered", statics.includes("check-phase9-wallet-transaction-integration.mjs")],
   ["release acceptance boundaries remain documented", /runtime|operational|operator/i.test(readProjectDoc("docs/PHASE-1-12-SYSTEM-WIDE-ACCEPTANCE.md"))],
-  ["new hardening worklog exists", existsSync(join(root, "docs/UPGRADE-WORKLOG-0.157.12.md"))],
+  ["new hardening worklog exists", hasProjectDoc("docs/UPGRADE-WORKLOG-0.157.12.md")],
 ]
 let failed = 0
 for (const [label, ok] of checks) { console.log(`${ok ? "PASS" : "FAIL"} ${label}`); if (!ok) failed++ }

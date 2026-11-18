@@ -7,6 +7,7 @@
 import { readFileSync, existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
+import { hasProjectDoc, readProjectDoc } from './lib/read-project-doc.mjs'
 
 const root = process.cwd()
 const read = (p) => readFileSync(join(root, p), 'utf8')
@@ -41,7 +42,7 @@ const docs = [
   'docs/PHASE_F_PRODUCTION_PROOF_0.176.0.md',
 ]
 for (const d of docs) {
-  test(`Doc present: ${d}`, existsSync(join(root, d)))
+  test(`Doc present in canonical or preserved historical archive: ${d}`, hasProjectDoc(d))
 }
 
 const critical = [
@@ -64,8 +65,8 @@ const migs = readdirSync(join(root, 'supabase/migrations')).filter((f) => f.ends
 test('Cashback quarterly migration on disk', migs.some((m) => m.includes('20261029010013')))
 test('A2U / earnings migrations present', migs.some((m) => m.includes('20261029010004')))
 
-const finalDoc = existsSync(join(root, 'docs/PHASE_F_PRODUCTION_PROOF_0.176.0.md'))
-  ? read('docs/PHASE_F_PRODUCTION_PROOF_0.176.0.md')
+const finalDoc = hasProjectDoc('docs/PHASE_F_PRODUCTION_PROOF_0.176.0.md')
+  ? readProjectDoc('docs/PHASE_F_PRODUCTION_PROOF_0.176.0.md')
   : ''
 test('Phase F states NOT APPROVED for production', /NOT APPROVED/.test(finalDoc))
 test('Phase F requires funded Testnet evidence', /funded/i.test(finalDoc) && /Testnet/i.test(finalDoc))

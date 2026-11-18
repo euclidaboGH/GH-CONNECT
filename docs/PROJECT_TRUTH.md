@@ -1,4 +1,15 @@
-# Current project truth — 0.338.99 RUN337 (2026-11-18)
+# Current project truth — 0.338.99 RUN364 (2026-11-19)
+
+
+## RUN364 full-project audit and gate repair (2026-11-19)
+
+- RUN364 is a local source-only derivative of the RUN363 archive; it is not pushed or deployed. Production remains **NOT APPROVED**.
+- Fixed the Phase 8 documentation-path failure and related historical-document lookup failures across the registered phase/release checks. The shared resolver now supports canonical docs, historical implementation records, archived worklogs and phase notes.
+- Updated stale Run 277 Pi-auth assertions to match the current bounded SDK bridge wait and 25-second official authorization timeout.
+- Changed `.env.example` registration bonus default to disabled (`GHC_REGISTRATION_BONUS_ENABLED=0`); explicit enablement and Testnet sandbox checks remain required.
+- `npm run verify:static` completed successfully (exit 0); consolidated static verifier 63/63. The 396 prebuild checks were enumerated only, not executed, because this workspace is Node 22.16.0 while the project requires Node `^24.15.0`. Typecheck, lint and Next.js build remain unverified.
+- The supplied npm audit artifact confirms 22 unresolved findings (2 critical, 13 high, 6 moderate, 1 low). Next.js 15.5.26 and DOMPurify 3.4.15 are the critical affected packages. The Pi backend/Stellar/Axios/TOML chain has no fix reported by that artifact; Zod's offered fix is a major update. No dependency or lockfile changes were made, no audit gate was bypassed, and no unsafe Pi SDK override was introduced. See `docs/RUN364-FULL-PROJECT-AUDIT-AND-GATE-REPAIR-2026-11-19.md`.
+- No GitHub push, Vercel deployment, Supabase mutation, migration application, Mainnet action, payment operation or financial-state change occurred.
 
 **Current source version:** `0.338.99`  
 **Package identity:** `gh-connect@0.338.99`  

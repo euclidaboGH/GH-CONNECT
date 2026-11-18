@@ -8,6 +8,9 @@ export function hasProjectDoc(relativePath) {
     relativePath,
     join('docs', 'archive', 'historical-implementation-records', basename(relativePath)),
     join('docs', 'archive', 'historical-implementation-records', `docs__${basename(relativePath)}`),
+    join('docs', 'archive', 'historical-implementation-records', `docs__${relativePath.slice('docs/'.length).replaceAll('/', '__')}`),
+    join('docs', 'archive', 'upgrade-worklogs', basename(relativePath)),
+    join('docs', 'archive', 'phase-notes', basename(relativePath)),
   ].some((candidate) => existsSync(candidate))
 }
 
@@ -19,6 +22,9 @@ export function readProjectDoc(relativePath) {
     relativePath,
     join('docs', 'archive', 'historical-implementation-records', basename(relativePath)),
     join('docs', 'archive', 'historical-implementation-records', `docs__${basename(relativePath)}`),
+    join('docs', 'archive', 'historical-implementation-records', `docs__${relativePath.slice('docs/'.length).replaceAll('/', '__')}`),
+    join('docs', 'archive', 'upgrade-worklogs', basename(relativePath)),
+    join('docs', 'archive', 'phase-notes', basename(relativePath)),
   ]
   const resolved = candidates.find((candidate) => existsSync(candidate))
   if (!resolved) {

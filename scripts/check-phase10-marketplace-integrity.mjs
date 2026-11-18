@@ -2,6 +2,7 @@
 /** Phase 10 marketplace/order lifecycle source contracts; no DB writes or payment calls. */
 import fs from 'node:fs'
 import path from 'node:path'
+import { hasProjectDoc } from './lib/read-project-doc.mjs'
 const read = p => fs.readFileSync(path.join(process.cwd(), p), 'utf8')
 const store = read('lib/server/marketplace/order-store.ts')
 const create = read('app/api/marketplace/orders/route.ts')
@@ -23,7 +24,7 @@ const checks = [
  ['transition, payment and commerce bodies have streaming byte limits', /readBoundedJson\(request, 8 \* 1024\)/.test(transition) && /readBoundedJson\(request, 8 \* 1024\)/.test(pay) && /readBoundedJson\(request, 8 \* 1024\)/.test(commerce)],
  ['commerce actions and notes are parsed by a bounded strict contract', /parseMarketplaceFulfilmentInput\(parsed\.value\)/.test(commerce) && /boundedText\(row\.note, 500\)/.test(read('lib/marketplace/fulfilment.ts'))],
  ['mutation responses use no-store caching policy', /Cache-Control/.test(create) && /Cache-Control/.test(transition) && /Cache-Control/.test(pay) && /Cache-Control/.test(commerce)],
- ['phase 10 documentation exists', fs.existsSync(path.join(process.cwd(), 'docs/PHASE-10-MARKETPLACE-ORDER-FULFILMENT-INTEGRITY.md'))],
+ ['phase 10 documentation exists', hasProjectDoc('docs/PHASE-10-MARKETPLACE-ORDER-FULFILMENT-INTEGRITY.md')],
  ['durable order reads are authoritative when DB is configured', /export async function loadOrder\(id: string\)/.test(store) && /if \(!dbConfigured\(\)\) return map\(\)\.get\(id\)/.test(store) && /gh_marketplace_order_get/.test(store)],
  ['timestamp mapper accepts ISO and epoch values', /function timestampMs\(/.test(store) && /Date\.parse\(value\)/.test(store) && /value > 0 && value < 100_000_000_000/.test(store)],
  ['missing durable timestamps are not fabricated as current time', /createdAt: timestampMs\(data\.createdAt, 0\)/.test(store) && /updatedAt: timestampMs\(data\.updatedAt, 0\)/.test(store)],

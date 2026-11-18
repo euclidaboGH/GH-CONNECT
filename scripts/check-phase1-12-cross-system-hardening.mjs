@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readProjectDoc } from './lib/read-project-doc.mjs'
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const read = (file) => readFileSync(join(root, file), 'utf8')
 const pkg = JSON.parse(read('package.json'))
@@ -24,7 +25,7 @@ const checks = [
   ['shared JSON reader bounds bytes before JSON.parse', helper.indexOf('totalBytes > maxBytes') >= 0 && helper.indexOf('totalBytes > maxBytes') < helper.indexOf('JSON.parse(raw)')],
   ...routes.map(([file, limit, label]) => [ `${label} uses streaming bounded JSON (${limit} bytes) and rejects invalid/oversized bodies`, read(file).includes('readBoundedJson') && read(file).includes(`readBoundedJson(request, ${limit})`) && /REQUEST_TOO_LARGE/.test(read(file)) && /INVALID_JSON|INVALID_BODY/.test(helper) ]),
   ['cross-system hardening check is registered in static verification', read('scripts/verify-phase14-static.mjs').includes('check-phase1-12-cross-system-hardening.mjs')],
-  ['cross-system hardening report records runtime and live-system limits', /source-level|source only/i.test(read('docs/UPGRADE-WORKLOG-0.157.13.md')) && /Node\.js 24\.15\.0/.test(read('docs/UPGRADE-WORKLOG-0.157.13.md'))],
+  ['cross-system hardening report records runtime and live-system limits', /source-level|source only/i.test(readProjectDoc('docs/UPGRADE-WORKLOG-0.157.13.md')) && /Node\.js 24\.15\.0/.test(readProjectDoc('docs/UPGRADE-WORKLOG-0.157.13.md'))],
 ]
 let failed = 0
 for (const [label, ok] of checks) { console.log(`${ok ? 'PASS' : 'FAIL'} ${label}`); if (!ok) failed++ }

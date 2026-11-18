@@ -6,6 +6,7 @@
 import { readFileSync, existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
+import { hasProjectDoc, readProjectDoc } from './lib/read-project-doc.mjs'
 
 const root = process.cwd()
 const read = (p) => readFileSync(join(root, p), 'utf8')
@@ -60,7 +61,7 @@ const phaseDocs = [
   'docs/PHASE12_EARNINGS_FINAL_RELEASE_0.169.0.md',
 ]
 for (const d of phaseDocs) {
-  test(`Doc present: ${d}`, existsSync(join(root, d)))
+  test(`Doc present in canonical or preserved historical archive: ${d}`, hasProjectDoc(d))
 }
 
 const criticalPaths = [
@@ -81,8 +82,8 @@ const claim = read('app/api/economy/rewards/pi-cashback/claim/route.ts')
 test('Claim uses receipt verification before paid response', /verifyA2uReceipt/.test(claim) && /publicReceiptView/.test(claim))
 test('Mainnet not enabled in claim path (Testnet network checks remain)', /Pi Testnet/.test(claim))
 
-const finalDoc = existsSync(join(root, 'docs/PHASE12_EARNINGS_FINAL_RELEASE_0.169.0.md'))
-  ? read('docs/PHASE12_EARNINGS_FINAL_RELEASE_0.169.0.md')
+const finalDoc = hasProjectDoc('docs/PHASE12_EARNINGS_FINAL_RELEASE_0.169.0.md')
+  ? readProjectDoc('docs/PHASE12_EARNINGS_FINAL_RELEASE_0.169.0.md')
   : ''
 test('Final doc states NOT APPROVED for production', /NOT APPROVED/.test(finalDoc))
 test('Final doc requires funded Testnet receipt', /funded/i.test(finalDoc) && /Testnet/i.test(finalDoc))

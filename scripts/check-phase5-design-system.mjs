@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import { hasProjectDoc } from './lib/read-project-doc.mjs'
 const root = process.cwd()
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8')
 const pkg = JSON.parse(read('package.json'))
@@ -23,7 +24,7 @@ const checks = [
   ['focus-visible interaction affordance is defined', css.includes('.gh-btn:focus-visible') && css.includes('outline-offset: 3px')],
   ['touch control height remains at least 44px', /--gh-control-height:\s*2\.75rem/.test(css)],
   ['canonical content width is not redeclared in the refinement layer', (css.match(/:root\s*\{[^}]*--gh-content-max:/s)?.[0].match(/--gh-content-max:/g) || []).length === 1],
-  ['Phase 5 design system documentation exists', fs.existsSync(path.join(root, 'docs/PHASE-05-BRANDING-DESIGN-SYSTEM.md'))],
+  ['Phase 5 design system documentation exists', hasProjectDoc('docs/PHASE-05-BRANDING-DESIGN-SYSTEM.md')],
 
   ['owner-approved GreenHaven logo asset is installed', sha256('public/greenhaven-logo.png') === '385178e2d8d091b74bb2e63ba0afec637bc1147378664b6fcc6411644dfd1433'],
   ['official GHC coin logo asset is unchanged', sha256('public/ghc-coin-logo.png') === 'fb9f896523aa41d2c9fc39c01bbbab514b76a2533f4c8c6802fbe37e69bd7d78'],

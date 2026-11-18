@@ -449,6 +449,8 @@ const required = new Set([
   'docs/VERCEL-GITHUB-REMEDIATION-2026-11-17.md',
   'docs/VERCEL-PREBUILD-FAILURE-REPAIR-2026-11-17.md',
   'docs/VERCEL-RUN312-TYPECHECK-REPAIR-2026-11-17.md',
+  'docs/RUN364-FULL-PROJECT-AUDIT-AND-GATE-REPAIR-2026-11-19.md',
+  'docs/security/RUN364-NPM-AUDIT-2026-11-18.json',
 ])
 const failures=[]
 const walk=(dir)=>{

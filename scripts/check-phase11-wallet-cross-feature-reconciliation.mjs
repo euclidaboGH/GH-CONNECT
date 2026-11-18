@@ -2,6 +2,7 @@
 /** Phase 11 wallet cross-feature reconciliation contracts; network/DB independent. */
 import fs from 'node:fs'
 import path from 'node:path'
+import { hasProjectDoc, readProjectDoc } from './lib/read-project-doc.mjs'
 const read = (p) => fs.readFileSync(path.join(process.cwd(), p), 'utf8')
 const route = read('app/api/payments/reconciliation/route.ts')
 const intentStore = read('lib/server/payments/intent-store.ts')
@@ -11,7 +12,7 @@ const lock = JSON.parse(read('package-lock.json'))
 const release = read('lib/app-release.ts')
 const checks = [
   ['release/package/lock versions agree', /^\d+\.\d+\.\d+$/.test(pkg.version) && lock.version === pkg.version && lock.packages?.['']?.version === pkg.version && release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`)],
-  ['phase report exists', fs.existsSync(path.join(process.cwd(), 'docs/archive/phase-notes/PHASE-11-WALLET-CROSS-FEATURE-RECONCILIATION.md'))],
+  ['phase report exists', hasProjectDoc('docs/PHASE-11-WALLET-CROSS-FEATURE-RECONCILIATION.md')],
   ['reconciliation endpoint authenticates request', /resolveAuthenticatedUser\(request\.headers\)/.test(route)],
   ['payment intents are scoped to authenticated user', /listIntentsForUserAsync\(auth\.userId\)/.test(route)],
   ['endpoint is GET-only and read-only', /export async function GET/.test(route) && /readOnly: true/.test(route) && !/export async function (POST|PUT|PATCH|DELETE)/.test(route)],
@@ -40,7 +41,7 @@ const checks = [
   ['failed and cancelled payments have distinct state-consistency checks', /MARKETPLACE_FAILED_PAYMENT_CONFLICT/.test(route) && /MARKETPLACE_CANCELLED_PAYMENT_CONFLICT/.test(route)],
   ['membership mapping avoids reusable referenceId false matches', /linkedByIntent/.test(route) && /linkedByPurchase/.test(route) && !/entitlement\.purchaseRef === intent\.referenceId/.test(route)],
   ['coverage discloses returned and reconciled record counts', /returnedIntentCount: allUserIntents\.length/.test(route) && /reconciledPiIntentCount: intents\.length/.test(route)],
-  ['current phase 11 report documents v0.157.11 controls', /v0\.157\.11/.test(read('docs/PHASE-11-WALLET-CROSS-FEATURE-RECONCILIATION.md')) && /conflict|contradictory/.test(read('docs/PHASE-11-WALLET-CROSS-FEATURE-RECONCILIATION.md'))],
+  ['current phase 11 report documents v0.157.11 controls', /v0\.157\.11/.test(readProjectDoc('docs/PHASE-11-WALLET-CROSS-FEATURE-RECONCILIATION.md')) && /conflict|contradictory/.test(readProjectDoc('docs/PHASE-11-WALLET-CROSS-FEATURE-RECONCILIATION.md'))],
   ['phase 11 check is registered in npm scripts', pkg.scripts?.['check:phase11-wallet-reconciliation'] === 'node scripts/check-phase11-wallet-cross-feature-reconciliation.mjs'],
 ]
 let failed = 0

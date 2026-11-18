@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /** Phase 6 Communities & Discovery source contracts. */
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
+import { hasProjectDoc } from './lib/read-project-doc.mjs'
 import { join } from 'node:path'
 
 const root = process.cwd()
@@ -37,7 +38,7 @@ test('discovery candidate filter excludes self block and mute', /filterDiscovery
 test('communities UI uses resolveJoinCta for honest labels', /resolveJoinCta/.test(screen))
 test('package and app release versions agree', release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`))
 test('phase 6 checker is registered in prebuild', Boolean(pkg.scripts?.['prebuild:checks']?.includes('check-phase6-communities-discovery.mjs')))
-test('phase 6 programme doc exists', existsSync(join(root, 'docs/PHASE-6-COMMUNITIES-DISCOVERY-2026-11-08.md')))
+test('phase 6 programme doc exists in canonical or preserved historical documentation', hasProjectDoc('docs/PHASE-6-COMMUNITIES-DISCOVERY-2026-11-08.md'))
 
 const failed = checks.filter((x) => !x).length
 console.log(`\nPhase 6 communities & discovery: ${checks.length - failed}/${checks.length} passed`)

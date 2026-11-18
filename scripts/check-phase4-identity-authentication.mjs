@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /** Phase 4 Identity & Authentication source contracts. */
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
+import { hasProjectDoc } from './lib/read-project-doc.mjs'
 import { join } from 'node:path'
 
 const root = process.cwd()
@@ -37,7 +38,7 @@ test('logout clears cookie and attempts step-up revocation', /buildClearSessionC
 test('dev user: tokens are rejected in production', /REJECTED_DEV_TOKEN_IN_PRODUCTION/.test(auth))
 test('package and app release versions agree', release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`))
 test('phase 4 checker is registered in prebuild', pkg.scripts?.['prebuild:checks']?.includes('check-phase4-identity-authentication.mjs'))
-test('phase 4 programme doc exists', existsSync(join(root, 'docs/PHASE-4-IDENTITY-AUTHENTICATION-2026-11-08.md')))
+test('phase 4 programme doc exists in canonical or preserved historical documentation', hasProjectDoc('docs/PHASE-4-IDENTITY-AUTHENTICATION-2026-11-08.md'))
 
 const failed = checks.filter((x) => !x).length
 console.log(`\nPhase 4 identity & authentication: ${checks.length - failed}/${checks.length} passed`)

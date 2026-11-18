@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /** Run #303: compact, stable filter and search workspaces across active modules. */
 import { readFileSync } from 'node:fs'
+import { readProjectDoc } from './lib/read-project-doc.mjs'
 const read = (path) => readFileSync(path, 'utf8')
 const panel = read('components/ghc/filtering/filter-panel.tsx')
 const community = read('components/ghc/communities-screen.tsx')
@@ -40,7 +41,7 @@ test('search suggestions are height-bounded and independently scrollable', searc
 test('search suggestion blur does not rely on a delayed timer race', !search.includes('window.setTimeout(() => setIsFocused(false)'))
 test('global search modal is viewport-bounded and scroll-contained', globalSearch.includes('max-h-[82dvh]') && globalSearch.includes('overscroll-contain'))
 test('wallet consent safely rejects a null Pi /v2/me response before dereference', /if \(!piUser \|\| typeof piUser !== "object"\) return \{ ok: false, error: "PI_TOKEN_INVALID" \}/.test(consent))
-test('filter/search redesign adds no SQL migration or financial execution path', !/supabase\/migrations/.test(read('docs/UPGRADE-WORKLOG-0.338.66.md')) && !/createPayment\(|executeSpend\(|settlePayment\(/.test(panel + search))
+test('filter/search redesign adds no SQL migration or financial execution path', !/supabase\/migrations/.test(readProjectDoc('docs/UPGRADE-WORKLOG-0.338.66.md')) && !/createPayment\(|executeSpend\(|settlePayment\(/.test(panel + search))
 
 const failed = checks.filter((value) => !value).length
 console.log(`\nRun #303 filter/search density: ${checks.length - failed}/${checks.length} passed; ${failed} failed.`)

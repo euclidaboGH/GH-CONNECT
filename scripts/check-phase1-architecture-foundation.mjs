@@ -2,6 +2,7 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { hasProjectDoc } from './lib/read-project-doc.mjs'
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const read = (f) => readFileSync(join(root, f), 'utf8')
 const http = read('lib/server/economy/http.ts')
@@ -22,7 +23,7 @@ const checks = [
   ['domain ownership map exists', ownership.length > 0],
   ['financial domains listed', /walletGhc/.test(ownership) && /walletPiEarnings/.test(ownership)],
   ['memory ledger blocked on Vercel', /VERCEL/.test(memory) && /allowMemoryServer/.test(memory)],
-  ['phase1 audit doc', existsSync(join(root, 'docs/architecture/PHASE1_MASSIVE_UPGRADE_AUDIT.md'))],
+  ['phase1 audit doc', hasProjectDoc('docs/architecture/PHASE1_MASSIVE_UPGRADE_AUDIT.md')],
   ['migration readiness doc', existsSync(join(root, 'docs/architecture/MIGRATION_READINESS_STATES.md'))],
   ['wallet read provider is non-mutating', /canMutateFinances:\s*false/.test(read('contexts/domains/wallet-read-provider.tsx'))],
 ]

@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { hasProjectDoc } from './lib/read-project-doc.mjs'
 const root = process.cwd()
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8')
 const pkg = JSON.parse(read('package.json'))
@@ -30,7 +31,7 @@ const checks = [
   ['existing onboarding gate remains in place', app.includes('resolveUiOnboardingGate') && onboarding.includes('resolveUiOnboardingGate')],
   ['session lock continues preserving mounted app state', sessionLock.includes('Never unmount children') && sessionLock.includes('{children}')],
   ['primary navigation is Home Discover Messages Communities Cart Profile', destinations.includes('export const BOTTOM_NAV_IDS = ["home", "discover", "messages", "communities", "cart", "profile"]')],
-  ['Phase 6 documentation exists', fs.existsSync(path.join(root, 'docs/PHASE-06-APP-SHELL-NAVIGATION-ONBOARDING.md'))],
+  ['Phase 6 documentation exists', hasProjectDoc('docs/PHASE-06-APP-SHELL-NAVIGATION-ONBOARDING.md')],
 ]
 let failed = 0
 for (const [label, ok] of checks) { console.log(`${ok ? 'PASS' : 'FAIL'} ${label}`); if (!ok) failed++ }

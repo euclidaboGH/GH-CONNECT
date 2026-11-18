@@ -2,13 +2,14 @@
 /** Source regression checks for Phase 3 database recovery safeguards. */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { readProjectDoc } from './lib/read-project-doc.mjs'
 const root = process.cwd()
 const verifier = readFileSync(join(root, 'scripts/verify-database-backup-artifact.mjs'), 'utf8')
 const evidenceValidator = readFileSync(join(root, 'scripts/validate-database-restore-evidence.mjs'), 'utf8')
 const evidenceTemplate = readFileSync(join(root, 'docs/PHASE-03-RESTORE-EVIDENCE-TEMPLATE.json'), 'utf8')
 const catalogGate = readFileSync(join(root, 'supabase/VALIDATE-RESTORED-DATABASE.sql'), 'utf8')
 const catalogCheck = readFileSync(join(root, 'scripts/check-phase3-restore-catalog-gate.mjs'), 'utf8')
-const runbook = readFileSync(join(root, 'docs/PHASE-03-DATABASE-INTEGRITY-RECOVERY.md'), 'utf8')
+const runbook = readProjectDoc('docs/PHASE-03-DATABASE-INTEGRITY-RECOVERY.md')
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
 const checks = [
   ['backup verification is read-only and makes no database connection', /without connecting to or modifying any database/.test(verifier) && !/createConnection|DATABASE_URL|supabase db push/.test(verifier)],

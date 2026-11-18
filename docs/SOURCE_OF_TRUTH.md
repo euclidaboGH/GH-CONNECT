@@ -1,12 +1,20 @@
-# GreenHaven source authority — 0.338.99 RUN336 GitHub/Vercel build cleanup (2026-11-18)
+# GreenHaven source authority — 0.338.99 RUN364 full-project audit and gate repair (2026-11-19)
 
 **Current source version:** `0.338.99`
 **Current user-provided archive:** `GREENHAVEN-0.338.99-RUN331-PHASE1-6-GAP-REGISTER-PHASE7-COMMUNITIES.zip`  
 **SHA-256 of RUN331 archive:** `851ac3a540b76572b1325c6e06a35de069649f37db5cb11d24aca124d239fafa`  
-**Current local working derivative:** RUN336 GitHub/Vercel build cleanup, based on RUN335/RUN333; source-only, not pushed or deployed.  
+**Current local working derivative:** RUN364 full-project audit and gate repair, based on the RUN363 source archive; source-only, not pushed or deployed.  
 **Package identity:** `gh-connect@0.338.99` (user-facing brand: GREENHAVEN).
 
 RUN331 is the latest user-provided starting archive for RUN332. The earlier RUN324 archive and RUN325–RUN330 derivatives remain historical lineage only. Preserve all existing CI, identity, wallet, payment and migration boundaries. Do not treat the RUN332 candidate as the live GitHub branch or Vercel deployment.
+
+## RUN364 full-project audit and gate repair
+
+RUN364 continues from the RUN363 archive. It fixes historical-document path resolution in the shared documentation helper and affected phase/release checkers, updates stale Run 277 Pi-auth assertions to test the current bounded bridge and authorization timeouts, and disables the registration bonus by default in `.env.example`. `npm run verify:static` passes (exit 0); the consolidated static verifier is 63/63. The 396 prebuild checks are enumerated only and have not been executed because the available runtime is Node 22.16.0 rather than the required Node 24.15.0.
+
+The supplied npm audit artifact is preserved at `docs/security/RUN364-NPM-AUDIT-2026-11-18.json`. It reports 22 vulnerable package entries (2 critical, 13 high, 6 moderate, 1 low). Next.js 15.5.26 and DOMPurify 3.4.15 are critical. The Pi backend/Stellar/Axios/TOML chain has no fix reported in that artifact, and the offered Zod fix is a major-version change. No package or lockfile changes were made because a fresh registry audit and dependency-backed compatibility tests are unavailable in this workspace. The dependency gate remains fail-closed. Full details are in `docs/RUN364-FULL-PROJECT-AUDIT-AND-GATE-REPAIR-2026-11-19.md`.
+
+No GitHub push, Vercel deployment, Supabase mutation, migration application, Mainnet action, payment operation or financial-state change occurred. Production remains **NOT APPROVED**.
 
 ## RUN336 GitHub / Vercel build cleanup
 

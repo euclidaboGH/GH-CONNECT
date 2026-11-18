@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { hasProjectDoc } from './lib/read-project-doc.mjs'
 const root = process.cwd()
 const sql = readFileSync(join(root,'docs/proposals/PHASE-I-TRANSACTIONAL-OUTBOX-DESIGN.sql'),'utf8')
 const worker = readFileSync(join(root,'lib/server/outbox/transactional-outbox.ts'),'utf8')
@@ -18,7 +19,7 @@ const checks = [
   ['worker uses privileged server RPC and never performs post-mutation enqueue', /.supabaseServiceRoleKey/.test(worker) && !/rpc(?:<[^>]+>)?\(\s*[\"']gh_outbox_enqueue/.test(worker)],
   ['worker acknowledges with fencing and documents at-least-once semantics', /acknowledgeOutboxEvent/.test(worker) && /heartbeatOutboxLease/.test(worker) && /at-least-once delivery/i.test(worker)],
   ['rehearsal covers rollback, duplicate, lease fencing, dead-letter and replay', ['rollback','idempotent','stale lease','DEAD','replay'].every(x=>rehearsal.toLowerCase().includes(x.toLowerCase()))],
-  ['live acceptance runbook exists', existsSync(join(root,'docs/operations/PHASE-I-LIVE-ACCEPTANCE-RUNBOOK.md'))],
+  ['live acceptance runbook exists', hasProjectDoc('docs/operations/PHASE-I-LIVE-ACCEPTANCE-RUNBOOK.md')],
 ]
 let failed=0
 for (const [name,ok] of checks) { console.log(`${ok?'PASS':'FAIL'} ${name}`); if(!ok) failed++ }

@@ -1,15 +1,16 @@
 #!/usr/bin/env node
 /** Phase 9 source release gate. Never contacts or mutates external systems. */
 import { readFileSync } from 'node:fs'
+import { readProjectDoc } from './lib/read-project-doc.mjs'
 const read = (file) => readFileSync(file, 'utf8')
 const pkg = JSON.parse(read('package.json'))
 const lock = JSON.parse(read('package-lock.json'))
 const manifest = read('MIGRATION-SOURCE-MANIFEST.csv')
 const truth = read('docs/PROJECT_TRUTH.md')
 const roadmap = read('docs/PRODUCT-ROADMAP.md')
-const worklog = read('docs/UPGRADE-WORKLOG-0.327.0.md')
-const phase = read('docs/PHASE-9-MEMBERSHIP-LIFECYCLE-AND-ACCESS-CONTROL-0.326.0.md')
-const strictPiPhase = read('docs/PHASE-9-MEMBERSHIP-PI-INTENT-SECURITY-0.327.0.md')
+const worklog = readProjectDoc('docs/UPGRADE-WORKLOG-0.327.0.md')
+const phase = readProjectDoc('docs/PHASE-9-MEMBERSHIP-LIFECYCLE-AND-ACCESS-CONTROL-0.326.0.md')
+const strictPiPhase = readProjectDoc('docs/PHASE-9-MEMBERSHIP-PI-INTENT-SECURITY-0.327.0.md')
 const renewalMigration = '20261106123001_phase9_membership_lifecycle_and_renewal_guard.sql'
 const strictPiMigration = '20261106143001_phase9_membership_pi_renewal_strict_provider_guard.sql'
 const checks = [

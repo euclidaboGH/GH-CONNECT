@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readProjectDoc } from './lib/read-project-doc.mjs'
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const read = (file) => readFileSync(join(root, file), 'utf8')
 const pkg = JSON.parse(read('package.json'))
@@ -28,7 +29,7 @@ const checks = [
   ['bank beneficiary creation requires explicit string fields', /typeof body\.accountNumber !== "string"/.test(read('app/api/marketplace/payouts/bank-beneficiaries/route.ts'))],
   ['bank beneficiary disable parses a bounded string ID', /readBoundedJson\(request, 4 \* 1024\)/.test(read('app/api/marketplace/payouts/bank-beneficiaries/route.ts')) && /typeof body\.beneficiaryId === "string"/.test(read('app/api/marketplace/payouts/bank-beneficiaries/route.ts'))],
   ['new follow-up contract is registered in the consolidated static runner', read('scripts/verify-phase14-static.mjs').includes('check-phase1-12-request-boundary-followup.mjs')],
-  ['worklog documents source-only verification and runtime limitation', /source-level|source[- ]only|isolated helper test/i.test(read(`docs/UPGRADE-WORKLOG-${pkg.version}.md`)) && /Node(?:\.js)? 24\.15\.0/.test(read(`docs/UPGRADE-WORKLOG-${pkg.version}.md`))],
+  ['worklog documents source-only verification and runtime limitation', /source-level|source[- ]only|isolated helper test/i.test(readProjectDoc(`docs/UPGRADE-WORKLOG-${pkg.version}.md`)) && /Node(?:\.js)? 24\.15\.0/.test(readProjectDoc(`docs/UPGRADE-WORKLOG-${pkg.version}.md`))],
 ]
 let failed = 0
 for (const [label, ok] of checks) { console.log(`${ok ? 'PASS' : 'FAIL'} ${label}`); if (!ok) failed++ }

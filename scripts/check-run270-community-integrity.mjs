@@ -2,6 +2,7 @@
 /** Run #270: community UX, chat-access boundary and platform API regression gate. */
 import assert from 'node:assert/strict'
 import { readFileSync, existsSync } from 'node:fs'
+import { hasProjectDoc } from './lib/read-project-doc.mjs'
 const read = (path) => readFileSync(path, 'utf8')
 const card = read('components/ghc/group-card.tsx')
 const hub = read('components/ghc/premium-community-hub.tsx')
@@ -68,7 +69,7 @@ const checks = [
   ['community directory route calls the server-side search RPC with category and pagination', /gh_community_search_public/.test(communityListRoute) && /p_category: category/.test(communityListRoute) && /p_offset: offset/.test(communityListRoute)],
   ['community search indexes match public category and text-search paths', /idx_gh_communities_public_category_created/.test(searchMigration) && /idx_gh_communities_public_search/.test(searchMigration)],
   ['community integrity gate is registered in prebuild and static verification', (pkg.scripts['prebuild:checks'].match(/check-run270-community-integrity\.mjs/g) || []).length === 1 && (pkg.scripts['verify:static'].match(/check-run270-community-integrity\.mjs/g) || []).length === 1],
-  ['Run #270 audit report exists', existsSync('docs/RUN270-COMMUNITY-30-POINT-AUDIT.md')],
+  ['Run #270 audit report exists', hasProjectDoc('docs/RUN270-COMMUNITY-30-POINT-AUDIT.md')],
 ]
 let failed = 0
 for (const [label, pass] of checks) { console.log(`${pass ? 'PASS' : 'FAIL'} ${label}`); if (!pass) failed++ }
