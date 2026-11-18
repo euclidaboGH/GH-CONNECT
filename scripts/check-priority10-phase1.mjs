@@ -4,7 +4,14 @@ import assert from "node:assert/strict"
 const screen = fs.readFileSync("components/ghc/message-screen.tsx", "utf8")
 const components = fs.readFileSync("components/ghc/message-components.tsx", "utf8")
 const plan = fs.readFileSync("docs/PRIORITY_10_FOUR_PHASE_EXECUTION_PLAN.md", "utf8")
-const worklog = fs.readFileSync("docs/UPGRADE-WORKLOG-0.338.12.md", "utf8")
+const readProjectText = (path) => {
+  const archived = path.startsWith('docs/')
+    ? `docs/archive/historical-implementation-records/docs__${path.slice('docs/'.length)}`
+    : null
+  const resolved = fs.existsSync(path) ? path : archived && fs.existsSync(archived) ? archived : path
+  return fs.readFileSync(resolved, 'utf8')
+}
+const worklog = readProjectText("docs/UPGRADE-WORKLOG-0.338.12.md")
 
 const checks = [
   ["conversation details control is wired from the active thread", /onDetails=\{\(\) => setConversationDetailsOpen\(true\)\}/.test(screen)],

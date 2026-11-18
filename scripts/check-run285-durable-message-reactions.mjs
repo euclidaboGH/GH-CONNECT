@@ -4,6 +4,13 @@ const route = fs.readFileSync('app/api/messaging/conversations/[conversationId]/
 const store = fs.readFileSync('lib/server/messaging/message-store.ts', 'utf8')
 const domain = fs.readFileSync('lib/domains/messaging-domain.ts', 'utf8')
 const migration = fs.readFileSync('supabase/migrations/20261111131500_run285_durable_message_reactions.sql', 'utf8')
+const readProjectText = (path) => {
+  const archived = path.startsWith('docs/')
+    ? `docs/archive/historical-implementation-records/docs__${path.slice('docs/'.length)}`
+    : null
+  const resolved = fs.existsSync(path) ? path : archived && fs.existsSync(archived) ? archived : path
+  return fs.readFileSync(resolved, 'utf8')
+}
 const checks = [
   ['reaction mutation is exported from the server store', /export async function toggleMessageReaction/.test(store)],
   ['server validates a strict reaction allowlist', /const allowed = new Set\(\["❤️", "👍", "😂", "😮", "😢", "🙏", "🔥", "🎉"\]\)/.test(store)],
@@ -17,7 +24,7 @@ const checks = [
   ['RPC requires active conversation membership', /gh_conversation_members[\s\S]*left_at IS NULL/.test(migration)],
   ['RPC returns aggregate counts and viewer-only selections', /reaction_counts/.test(migration) && /viewer_reactions/.test(migration) && !/jsonb_agg\(actor_id/.test(migration)],
   ['RPC execute is restricted to service role', /REVOKE ALL ON FUNCTION public\.gh_message_toggle_reaction\(text,text,text,text\) FROM PUBLIC, anon, authenticated/.test(migration) && /GRANT EXECUTE ON FUNCTION public\.gh_message_toggle_reaction\(text,text,text,text\) TO service_role/.test(migration)],
-  ['migration is documented as unapplied until historical sources reconcile', /has NOT been applied to Testnet/.test(fs.readFileSync('docs/RUN285-SOCIAL-MESSAGING-CLOSEOUT.md','utf8'))],
+  ['migration is documented as unapplied until historical sources reconcile', /has NOT been applied to Testnet/.test(readProjectText('docs/RUN285-SOCIAL-MESSAGING-CLOSEOUT.md'))],
 ]
 for (const [label, ok] of checks) { console.log(`${ok ? 'PASS' : 'FAIL'} ${label}`); assert.ok(ok, label) }
 console.log(`Run #285 durable message reaction checks: ${checks.length}/${checks.length} PASS`)

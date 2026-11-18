@@ -1,6 +1,13 @@
 #!/usr/bin/env node
 import fs from 'node:fs'
-const doc = fs.readFileSync('docs/RUN330-PHASE5-RELEASE-GATES-AND-PHASE6-PROFILE-PERFORMANCE-KICKOFF-2026-11-18.md', 'utf8')
+const readProjectText = (path) => {
+  const archived = path.startsWith('docs/')
+    ? `docs/archive/historical-implementation-records/docs__${path.slice('docs/'.length)}`
+    : null
+  const resolved = fs.existsSync(path) ? path : archived && fs.existsSync(archived) ? archived : path
+  return fs.readFileSync(resolved, 'utf8')
+}
+const doc = readProjectText('docs/RUN330-PHASE5-RELEASE-GATES-AND-PHASE6-PROFILE-PERFORMANCE-KICKOFF-2026-11-18.md')
 const index = fs.readFileSync('lib/domains/profile-relationship-index.ts', 'utf8')
 const checks = [
   ['all five Phase 5 runs have explicit dispositions', ['RUN327','RUN328','RUN329','RUN330','RUN331'].every((run) => doc.includes(run))],
