@@ -18,6 +18,7 @@ import { createLocalSdkLite, isLikelyAppStudioPreview } from "@/lib/local-pi-sdk
 import {
   ensurePiInitialized,
   piAuthenticateOfficial,
+  reportPiAuthDiagnostic,
 } from "@/lib/pi-runtime";
 import {
   INITIAL_AUTH_LIFECYCLE,
@@ -352,6 +353,7 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
 
   const initialize = useCallback(async () => {
     if (authAttemptRef.current) return;
+    let diagnosticStage = "PI_BOOTSTRAP_START";
     authAttemptRef.current = true;
     setHasError(false);
     setRestoredPurchases(null);
@@ -422,10 +424,12 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
       }
 
       // 2) Official Pi SDK + SDKLite
+      diagnosticStage = "PI_SDK_INIT";
       setAuthMessage("Loading Pi SDK...");
       try {
         // Use the shared single-flight SDK loader; do not race the root SDK script.
         await ensurePiInitialized();
+        diagnosticStage = "PI_AUTHENTICATE";
         setAuthMessage("Authenticating with Pi...");
         setAuthLifecycle((s) => transitionAuth(s, "PI_AUTHENTICATING"));
         const identity = await officialPiAuthenticate();
@@ -447,6 +451,8 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
 
         if (identity.accessToken) {
           try {
+            diagnosticStage = "PI_SERVER_VERIFY";
+            reportPiAuthDiagnostic("PI_SERVER_VERIFY_REQUEST", { stage: diagnosticStage, hasAccessToken: true });
             setAuthMessage("Verifying Pi identity with server...");
             setAuthLifecycle((s) => transitionAuth(s, "SERVER_VERIFYING"));
             const bridgeRes = await fetch("/api/auth/pi", {
@@ -456,6 +462,7 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
               body: JSON.stringify({ accessToken: identity.accessToken }),
             })
             const bridgeText = await bridgeRes.text().catch(() => "")
+            reportPiAuthDiagnostic(bridgeRes.ok ? "PI_SERVER_VERIFY_HTTP_OK" : "PI_SERVER_VERIFY_HTTP_FAILED", { stage: diagnosticStage, status: bridgeRes.status, hasAccessToken: true })
             type PiAuthBridgeIdentity = {
               piAppUid?: string
               ghUserId?: string
@@ -471,6 +478,8 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
               identityExisted?: boolean
               durable?: boolean
               sessionDurable?: boolean
+              diagnosticCode?: string
+              correlationId?: string
               durabilityWarning?: string
               identity?: PiAuthBridgeIdentity
             }
@@ -492,11 +501,8 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
                 bridgeText
               )
             ) {
-              console.error(
-                "[PiAuth] server functions unavailable:",
-                bridgeRes.status,
-                bridgeText.slice(0, 200)
-              )
+              reportPiAuthDiagnostic("PI_SERVER_ROUTE_UNAVAILABLE", { stage: diagnosticStage, status: bridgeRes.status })
+              console.error("[PiAuth] server route unavailable", { status: bridgeRes.status })
               setAuthLifecycle((s) =>
                 transitionAuth(s, "ERROR", {
                   error:
@@ -506,7 +512,7 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
                   serverVerified: false,
                 })
               )
-              setAuthMessage("Server unavailable — try again after redeploy")
+              setAuthMessage(`Server unavailable (${bridge?.diagnosticCode || "PI_SERVER_ROUTE_UNAVAILABLE"}) — try again shortly`)
               setHasError(true)
               setIsAuthenticated(false)
               return
@@ -534,7 +540,13 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
               bridge?.error === "PI_VERIFICATION_UNAVAILABLE" ||
               bridge?.error === "PI_VERIFICATION_INVALID_RESPONSE"
             ) {
-              console.error("[PiAuth] identity store unavailable:", bridge?.error || bridgeRes.status)
+              const serverDiagnosticCode = bridge?.diagnosticCode || (
+                bridge?.error === "PI_VERIFICATION_UNAVAILABLE" ? "PI_PLATFORM_UNAVAILABLE" :
+                bridge?.error === "PI_VERIFICATION_INVALID_RESPONSE" ? "PI_PLATFORM_INVALID_RESPONSE" :
+                bridge?.error === "SESSION_STORE_UNAVAILABLE" ? "PI_SESSION_STORE_FAILED" : "PI_IDENTITY_STORE_FAILED"
+              )
+              reportPiAuthDiagnostic(serverDiagnosticCode, { stage: diagnosticStage, status: bridgeRes.status })
+              console.error("[PiAuth] server verification/storage rejected", { status: bridgeRes.status, code: serverDiagnosticCode, correlationId: bridge?.correlationId || null })
               setAuthLifecycle((s) =>
                 transitionAuth(s, "ERROR", {
                   error:
@@ -544,7 +556,7 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
                   serverVerified: false,
                 })
               )
-              setAuthMessage("Identity service unavailable")
+              setAuthMessage(`Identity service unavailable (${serverDiagnosticCode})`)
               setHasError(true)
               setIsAuthenticated(false)
               return
@@ -558,6 +570,7 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
               bridgeIdentity.piAppUid.length > 0
             ) {
               serverVerified = true
+              reportPiAuthDiagnostic("PI_SERVER_VERIFY_OK", { stage: diagnosticStage, status: bridgeRes.status })
               ghUserId = String(
                 bridgeIdentity.ghUserId || bridgeIdentity.piAppUid
               )
@@ -584,10 +597,53 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
                 )
               }
             } else {
-              debugWarn("PiAuth", "/api/auth/pi did not verify:", bridge)
+              const responseCode = bridge?.diagnosticCode || "PI_SERVER_VERIFY_RESPONSE_INVALID"
+              reportPiAuthDiagnostic(responseCode, { stage: diagnosticStage, status: bridgeRes.status })
+              debugWarn("PiAuth", "/api/auth/pi did not verify", { status: bridgeRes.status, code: responseCode, correlationId: bridge?.correlationId || null })
             }
           } catch (bridgeErr) {
-            debugWarn("PiAuth", "identity bridge network error:", bridgeErr)
+            reportPiAuthDiagnostic("PI_SERVER_VERIFY_NETWORK_ERROR", { stage: diagnosticStage, errorName: bridgeErr instanceof Error ? bridgeErr.name : "UnknownError" })
+            debugWarn("PiAuth", "identity bridge network error", { errorName: bridgeErr instanceof Error ? bridgeErr.name : "UnknownError" })
+          }
+        } else {
+          diagnosticStage = "PI_AUTH_RESULT";
+          reportPiAuthDiagnostic("PI_AUTH_RESULT_NO_TOKEN", { stage: diagnosticStage, hasAccessToken: false });
+        }
+
+        // Verify the browser actually stored and returned the HttpOnly GH session cookie.
+        // A successful Pi /me response alone is not enough to mark the app session ready.
+        if (serverVerified) {
+          diagnosticStage = "PI_SESSION_COOKIE_VERIFY";
+          try {
+            const sessionRes = await fetch("/api/auth/session", {
+              method: "GET",
+              credentials: "include",
+              cache: "no-store",
+            });
+            const sessionBody = await sessionRes.json().catch(() => ({})) as {
+              authenticated?: boolean;
+              durable?: boolean;
+              session?: { ghUserId?: string };
+              identity?: { serverVerified?: boolean };
+              diagnosticCode?: string;
+              correlationId?: string;
+            };
+            const cookieSessionReady = sessionRes.ok && sessionBody.authenticated === true &&
+              sessionBody.durable === true && sessionBody.identity?.serverVerified === true &&
+              sessionBody.session?.ghUserId === ghUserId;
+            reportPiAuthDiagnostic(cookieSessionReady ? "PI_SESSION_COOKIE_VERIFY_OK" : (sessionBody.diagnosticCode || "PI_SESSION_COOKIE_VERIFY_FAILED"), {
+              stage: diagnosticStage, status: sessionRes.status, hasAccessToken: true,
+            });
+            if (!cookieSessionReady) {
+              serverVerified = false;
+              setAuthMessage(`Pi was verified, but the secure GreenHaven session cookie was not confirmed (${sessionBody.diagnosticCode || "PI_SESSION_COOKIE_VERIFY_FAILED"}). Retry sign-in.`);
+            }
+          } catch (sessionErr) {
+            serverVerified = false;
+            reportPiAuthDiagnostic("PI_SESSION_COOKIE_VERIFY_NETWORK_ERROR", {
+              stage: diagnosticStage, errorName: sessionErr instanceof Error ? sessionErr.name : "UnknownError",
+            });
+            setAuthMessage("Pi was verified, but the GreenHaven session could not be confirmed (PI_SESSION_COOKIE_VERIFY_NETWORK_ERROR). Retry sign-in.");
           }
         }
 
@@ -694,7 +750,7 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
                 piUid: identity.uid,
               })
             )
-            setAuthMessage("Verification unavailable")
+            setAuthMessage(`Identity service unavailable (${serverDiagnosticCode})`)
             setHasError(true)
             setIsAuthenticated(false)
             return
@@ -854,7 +910,9 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
           : new Error("Failed to load SDKLite script");
       }
     } catch (err) {
-      console.error("SDKLite initialization failed:", err);
+      const diagnosticCode = diagnosticStage === "PI_SDK_INIT" ? "PI_SDK_INIT_FAILED" : diagnosticStage === "PI_AUTHENTICATE" ? "PI_AUTHENTICATE_FAILED" : diagnosticStage === "PI_SERVER_VERIFY" ? "PI_SERVER_VERIFY_FAILED" : "PI_BOOTSTRAP_FAILED";
+      reportPiAuthDiagnostic(diagnosticCode, { stage: diagnosticStage, errorName: err instanceof Error ? err.name : "UnknownError" });
+      console.error("[PiAuth] initialization failed", { code: diagnosticCode, stage: diagnosticStage, errorName: err instanceof Error ? err.name : "UnknownError" });
       const env = detectPiEnvironment();
       if ((env.uaLooksLikePi || env.hasWindowPi) && softRetryRef.current < 1) {
         softRetryRef.current += 1;
@@ -864,10 +922,10 @@ export function PiAuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       setHasError(true);
-      setAuthMessage(humanizePiAuthError(err));
+      setAuthMessage(`${humanizePiAuthError(err)} (${diagnosticCode})`);
       setAuthLifecycle((s) =>
         transitionAuth(s, "ERROR", {
-          error: humanizePiAuthError(err),
+          error: `${humanizePiAuthError(err)} (${diagnosticCode})`,
           onboardingStatus: "unknown",
           serverVerified: false,
         })

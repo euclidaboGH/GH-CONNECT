@@ -29,6 +29,28 @@ export type PiRuntimeSnapshot = {
   hostname: string | null
 }
 
+
+/** Emit stable, token-free Pi auth diagnostics for field troubleshooting. */
+export function reportPiAuthDiagnostic(
+  code: string,
+  details: { stage?: string; status?: number; sandbox?: boolean; hasPi?: boolean; hasAccessToken?: boolean; errorName?: string } = {},
+): void {
+  const safeCode = /^[A-Z0-9_]{3,64}$/.test(code) ? code : "PI_AUTH_DIAGNOSTIC_INVALID"
+  const safeDetails = {
+    stage: details.stage,
+    status: Number.isInteger(details.status) ? details.status : undefined,
+    sandbox: typeof details.sandbox === "boolean" ? details.sandbox : undefined,
+    hasPi: typeof details.hasPi === "boolean" ? details.hasPi : undefined,
+    hasAccessToken: typeof details.hasAccessToken === "boolean" ? details.hasAccessToken : undefined,
+    errorName: details.errorName && /^[A-Za-z0-9_]{1,48}$/.test(details.errorName) ? details.errorName : undefined,
+  }
+  // Never include tokens, usernames, Pi UIDs, cookies, request bodies, or raw errors.
+  console.info("[GH_PI_AUTH_DIAGNOSTIC]", { code: safeCode, ...safeDetails })
+  if (typeof window !== "undefined") {
+    try { window.dispatchEvent(new CustomEvent("gh:pi-auth-diagnostic", { detail: { code: safeCode, ...safeDetails } })) } catch { /* diagnostics must never break authentication */ }
+  }
+}
+
 let initPromise: Promise<void> | null = null
 let initialized = false
 
@@ -127,11 +149,13 @@ export async function ensurePiInitialized(): Promise<PiRuntimeSnapshot> {
   }
 
   if (initialized && getWindowPi()) {
+    reportPiAuthDiagnostic("PI_SDK_ALREADY_INITIALIZED", { stage: "sdk_init", sandbox: getPiSandbox(), hasPi: true })
     return getPiRuntimeSnapshot()
   }
 
   if (!initPromise) {
     initPromise = (async () => {
+      reportPiAuthDiagnostic("PI_SDK_INIT_START", { stage: "sdk_init", sandbox: getPiSandbox(), hasPi: Boolean(getWindowPi()) })
       if (!getWindowPi()) {
         await loadScriptOnce(
           PI_NETWORK_CONFIG.SDK_URL,
@@ -153,9 +177,11 @@ export async function ensurePiInitialized(): Promise<PiRuntimeSnapshot> {
         sandbox: getPiSandbox(),
       })
       initialized = true
+      reportPiAuthDiagnostic("PI_SDK_INIT_OK", { stage: "sdk_init", sandbox: getPiSandbox(), hasPi: true })
     })().catch((err) => {
       initPromise = null
       initialized = false
+      reportPiAuthDiagnostic("PI_SDK_INIT_FAILED", { stage: "sdk_init", sandbox: getPiSandbox(), hasPi: Boolean(getWindowPi()), errorName: err instanceof Error ? err.name : "UnknownError" })
       throw err
     })
   }
@@ -195,7 +221,10 @@ export async function piAuthenticateOfficial(
   }>
 
   const authenticate = Pi.authenticate as PiAuthFn
-  const authResult = await authenticate(scopes, (payment: unknown) => {
+  reportPiAuthDiagnostic("PI_AUTH_PROMPT_START", { stage: "pi_authenticate", sandbox: getPiSandbox(), hasPi: true })
+  let authResult: Awaited<ReturnType<PiAuthFn>>
+  try {
+    authResult = await authenticate(scopes, (payment: unknown) => {
     void onIncompletePaymentFound(
       payment as {
         identifier?: string
@@ -203,12 +232,22 @@ export async function piAuthenticateOfficial(
         transaction?: { txid?: string } | null
       }
     )
-  })
+    })
+  } catch (err) {
+    reportPiAuthDiagnostic("PI_AUTH_PROMPT_REJECTED", { stage: "pi_authenticate", sandbox: getPiSandbox(), errorName: err instanceof Error ? err.name : "UnknownError" })
+    throw err
+  }
 
   const uid = authResult?.user?.uid != null ? String(authResult.user.uid) : ""
   if (!uid) {
+    reportPiAuthDiagnostic("PI_AUTH_RESULT_MISSING_UID", { stage: "pi_authenticate", sandbox: getPiSandbox(), hasPi: true, hasAccessToken: Boolean(authResult?.accessToken) })
     throw new Error("Pi authentication did not return a user id")
   }
+  if (typeof authResult?.accessToken !== "string" || authResult.accessToken.length < 16) {
+    reportPiAuthDiagnostic("PI_AUTH_RESULT_MISSING_TOKEN", { stage: "pi_authenticate", sandbox: getPiSandbox(), hasPi: true, hasAccessToken: false })
+    throw new Error("Pi authentication did not return a usable access token")
+  }
+  reportPiAuthDiagnostic("PI_AUTH_PROMPT_OK", { stage: "pi_authenticate", sandbox: getPiSandbox(), hasPi: true, hasAccessToken: true })
 
   return {
     uid,

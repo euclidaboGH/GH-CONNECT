@@ -75,3 +75,10 @@ Dependency warning triage is recorded in `docs/RUN336-GITHUB-VERCEL-BUILD-CLEANU
 ## Safety rule
 
 Never run a bulk migration push while any migration source/history discrepancy or held migration remains. Testnet and Mainnet must be reconciled independently. Production remains NOT APPROVED until the supported-runtime build, exact database history/catalog reconciliation, provider acceptance, Pi Browser/device tests, and release-owner approval all pass.
+
+
+## RUN338 Pi authentication diagnostics and Supabase review
+
+RUN338 adds token-free Pi SDK/authentication stage codes, backend `/api/auth/pi` stage telemetry, and a post-login HttpOnly cookie round-trip check through `/api/auth/session`. The client now refuses to mark the server session ready until the durable cookie-backed session and Pi identity mapping are confirmed. The read-only Testnet SQL diagnostic script is `docs/RUN338-PI-AUTH-SUPABASE-DIAGNOSTICS.sql`; the read-only database findings and exact limits are documented in `docs/RUN338-PI-AUTH-DIAGNOSTICS-AND-SUPABASE-REVIEW.md`.
+
+RUN338 does **not** claim dependency remediation complete. npm registry access timed out, so package versions and the lockfile were left unchanged rather than fabricating lock metadata. The 29-finding audit remains a blocker; in particular, `pi-backend` → `stellar-sdk` is used by A2U and withdrawal flows and requires compatible Testnet verification before any override. No Supabase write, migration, grant change, GitHub push, Vercel deployment, or Mainnet operation occurred.

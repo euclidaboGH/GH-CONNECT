@@ -1,0 +1,15 @@
+import { readFileSync } from "node:fs";
+import assert from "node:assert/strict";
+const runtime = readFileSync("lib/pi-runtime.ts", "utf8");
+const context = readFileSync("contexts/pi-auth-context.tsx", "utf8");
+const route = readFileSync("app/api/auth/pi/route.ts", "utf8");
+const sessionRoute = readFileSync("app/api/auth/session/route.ts", "utf8");
+const required = ["PI_SDK_INIT_START", "PI_SDK_INIT_OK", "PI_SDK_INIT_FAILED", "PI_AUTH_PROMPT_START", "PI_AUTH_PROMPT_OK", "PI_AUTH_PROMPT_REJECTED", "PI_AUTH_RESULT_MISSING_TOKEN"];
+for (const code of required) assert(runtime.includes(code), `missing runtime diagnostic ${code}`);
+for (const code of ["PI_SERVER_VERIFY_REQUEST", "PI_SERVER_VERIFY_HTTP_OK", "PI_SERVER_VERIFY_HTTP_FAILED", "PI_SERVER_VERIFY_OK", "PI_SERVER_VERIFY_NETWORK_ERROR", "PI_SESSION_COOKIE_VERIFY_OK", "PI_SESSION_COOKIE_VERIFY_FAILED"]) assert(context.includes(code), `missing client diagnostic ${code}`);
+for (const code of ["PI_AUTH_ROUTE_REACHED", "PI_PLATFORM_VERIFY_START", "PI_PLATFORM_VERIFY_OK", "PI_IDENTITY_RESOLVE_START", "PI_IDENTITY_RESOLVE_OK", "PI_SESSION_CREATE_START", "PI_SESSION_CREATE_OK", "PI_AUTH_COMPLETE"]) assert(route.includes(code), `missing server diagnostic ${code}`);
+for (const code of ["PI_SESSION_COOKIE_MISSING", "PI_SESSION_COOKIE_INVALID", "PI_SESSION_COOKIE_VALID"]) assert(sessionRoute.includes(code), `missing session diagnostic ${code}`);
+assert(context.includes('credentials: "include"') && context.includes('sessionBody.durable === true'), "cookie round-trip must require durable server session");
+assert(runtime.includes("Never include tokens, usernames, Pi UIDs, cookies, request bodies, or raw errors."), "token-free diagnostic contract missing");
+assert(!/console\.(?:log|info|warn|error)\([^\n]*(?:accessToken|rawToken|Authorization)/i.test(runtime), "potential credential logging in runtime");
+console.log("RUN338 Pi auth diagnostics source checks: 25/25 passed");
