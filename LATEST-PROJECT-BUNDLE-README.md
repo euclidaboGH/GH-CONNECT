@@ -1,14 +1,14 @@
 # GreenHaven — Current Project Bundle
 
 **Package:** `gh-connect@0.338.99`  
-**Working increment:** RUN336 — GitHub / Vercel build cleanup (RUN335 superseded; RUN333 Testnet baseline retained)  
+**Working increment:** RUN337 — GitHub audit / environment-template repair (RUN336 retained; RUN333 Testnet baseline retained)  
 **Baseline:** user-provided RUN331 archive; RUN332 audit remediation is the immediate parent.  
 **Date:** 2026-11-18  
 **Release status:** **NOT APPROVED** for production.
 
 ## Delivery identity
 
-The current RUN336 archive is a local source derivative based on the user-provided RUN331 archive, through RUN332 and RUN333. Its SHA-256 is supplied with the packaged artifact in the delivery message. It has not been pushed to GitHub or deployed to Vercel.
+The current RUN337 archive is a local source derivative based on the user-provided RUN331 archive, through RUN332, RUN333, RUN335 and RUN336. Its SHA-256 is supplied with the packaged artifact in the delivery message. It has not been pushed to GitHub or deployed to Vercel.
 
 ## RUN333 baseline changes (retained)
 
@@ -20,6 +20,16 @@ The current RUN336 archive is a local source derivative based on the user-provid
 6. Added per-evidence advisory transaction locking to the held evidence hash-chain trigger to prevent concurrent sequence forks.
 7. Corrected final-release audit network classification to use `PI_NETWORK` rather than `PI_ENV`, and made the reported release version derive from `APP_RELEASE_VERSION`.
 8. Preserved server-side financial authority, Testnet-only payout fences, no mock backends, and Mainnet separation.
+
+## RUN337 GitHub Actions audit / packaging repair
+
+1. Restored the exact safe `.env.example` template from the parent of the failing GitHub commit. It contains blank privileged secrets, Testnet-only Pi defaults and disabled payout/A2U execution. Local populated env files remain excluded.
+2. Corrected `.github/workflows/dependency-security.yml` so npm audit exit code 1 for valid vulnerability findings is reported as a security finding rather than a generic audit-command failure. The workflow still fails closed on any known vulnerability and preserves the JSON artifact.
+3. Added `scripts/check-run337-github-audit-recovery.mjs` (7/7) to verify environment-template inclusion, secret hygiene, Testnet defaults and fail-closed audit behavior. Registered in static, prebuild, pretypecheck and prelint gates.
+4. Updated the RUN332 audit source assertion and registered RUN336/RUN337 reports with documentation hygiene.
+5. Inspected GitHub audit artifact 14397778034: 29 findings (2 critical, 21 high, 5 moderate, 1 low). Dependency manifest and lockfile were intentionally not modified because this container cannot access the npm registry and the official `pi-backend@0.1.3` → `stellar-sdk@10.4.1` chain has no safe automatic fix in the report. No lockfile hashes were fabricated, no `npm audit fix --force` was used, and the security gate was not bypassed.
+
+RUN337 repairs the prebuild `.env.example` failure and makes the audit failure diagnostic accurate. The complete audit JSON is preserved in `docs/security/RUN337-NPM-AUDIT-44237574920.json`. It does **not** make the dependency audit pass: 29 findings (2 critical, 21 high, 5 moderate, 1 low) remain. Dependency remediation and a fresh Node 24.15.x clean install/audit remain release blockers. See `docs/RUN337-GITHUB-AUDIT-AND-ENV-TEMPLATE-REPAIR-2026-11-18.md`.
 
 ## RUN336 GitHub / Vercel build cleanup
 
@@ -33,7 +43,7 @@ The current RUN336 archive is a local source derivative based on the user-provid
 8. Updated the dependent Phase 4 assertion to verify the computed membership state rather than the nonexistent property.
 9. Added the 12-check RUN336 source gate to `verify:static`, `prebuild:checks`, `pretypecheck` and `prelint`.
 
-Dependency warning triage is recorded in `docs/RUN336-GITHUB-VERCEL-BUILD-CLEANUP-2026-11-18.md`. No lockfile integrity data was hand-edited, no Pi SDK transitive package was overridden, and no incompatible ESLint major was forced into Next 15.
+Dependency warning triage is recorded in `docs/RUN336-GITHUB-VERCEL-BUILD-CLEANUP-2026-11-18.md`. No lockfile integrity data was hand-edited, no Pi SDK transitive package was overridden, and no incompatible ESLint major was forced into Next 15. The RUN337 report documents the exact 29-finding audit artifact and why the dependency lock remains unchanged.
 
 ## Verification
 

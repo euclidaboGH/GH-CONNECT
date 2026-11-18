@@ -1,11 +1,20 @@
-# Current project truth — 0.338.99 RUN336 (2026-11-18)
+# Current project truth — 0.338.99 RUN337 (2026-11-18)
 
 **Current source version:** `0.338.99`  
 **Package identity:** `gh-connect@0.338.99`  
 **Latest user-provided source archive:** `GREENHAVEN-0.338.99-RUN331-PHASE1-6-GAP-REGISTER-PHASE7-COMMUNITIES.zip`  
 **RUN331 archive SHA-256:** `851ac3a540b76572b1325c6e06a35de069649f37db5cb11d24aca124d239fafa`  
-**Current local working derivative:** RUN336 GitHub/Vercel build cleanup on top of RUN335; not pushed or deployed.  
+**Current local working derivative:** RUN337 GitHub audit/environment-template repair on top of RUN336; not pushed or deployed.  
 **Current status:** **NOT APPROVED** for production.
+
+## RUN337 GitHub Actions audit / packaging repair
+
+- Restored the exact safe `.env.example` from the parent of failing GitHub commit `9ceeaeafcf0f4b08c2b390fadfed0111a70ce285`; the failing branch and RUN336 archive both lacked the file even though repository ignore rules explicitly allow it.
+- Corrected the dependency audit workflow diagnostic. npm audit's normal exit 1 for vulnerability findings is now reported distinctly from registry/report errors; the gate still fails closed on any findings.
+- Added RUN337 regression gate (7/7) and updated RUN332 audit source check (16/16).
+- The actual uploaded GitHub audit artifact reports 29 findings: 2 critical, 21 high, 5 moderate, 1 low. Dependency remediation is NOT complete. The exact Pi SDK dependency chain and the registry-unavailable constraint are documented in `docs/RUN337-GITHUB-AUDIT-AND-ENV-TEMPLATE-REPAIR-2026-11-18.md`.
+- The package manifest and lockfile were not hand-edited. No npm audit gate was bypassed, no unsafe Pi SDK override was introduced, and no clean audit/build claim is made.
+- No GitHub push or Vercel deployment occurred. Production remains NOT APPROVED.
 
 ## Source authority
 

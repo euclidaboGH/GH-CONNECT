@@ -23,7 +23,7 @@ const checks = [
   ['Dependabot updates GitHub Actions weekly', /package-ecosystem: github-actions/.test(dependabot)],
   ['all GitHub Actions are pinned to immutable 40-character commit SHAs', actionRefs.length > 0 && actionRefs.every((ref) => /^[^@]+@[0-9a-f]{40}$/.test(ref))],
   ['checkout does not persist the GitHub token', checkoutCount > 0 && checkoutCredentialOptOutCount === checkoutCount],
-  ['npm audit exit code is enforced, not merely reported', /AUDIT_EXIT/.test(workflow) && /audit_exit/.test(workflow) && /npm audit command failed/.test(workflow)],
+  ['npm audit distinguishes vulnerability exit 1 from registry/report errors and still fails closed', /AUDIT_EXIT/.test(workflow) && /audit_exit/.test(workflow) && /report\.error/.test(workflow) && /counts\.total/.test(workflow) && /if \(total > 0\)/.test(workflow) && /process\.exit\(1\)/.test(workflow)],
 ]
 let failed = 0
 for (const [label, pass] of checks) {

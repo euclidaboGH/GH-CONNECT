@@ -52,7 +52,7 @@ check('CI and dependency-audit actions are pinned to full immutable commit SHAs'
 const checkoutUses = workflowSources.reduce((n, source) => n + [...source.matchAll(/^\s*-\s*uses:\s*actions\/checkout@[0-9a-f]{40}.*$/gm)].length, 0)
 const checkoutNoPersist = workflowSources.reduce((n, source) => n + [...source.matchAll(/uses:\s*actions\/checkout@[0-9a-f]{40}[\s\S]{0,100}?persist-credentials:\s*false/g)].length, 0)
 check('checkout disables persisted GitHub token credentials', checkoutUses > 0 && checkoutNoPersist === checkoutUses)
-check('dependency audit fails on npm audit nonzero exit', /AUDIT_EXIT/.test(security) && /npm audit command failed/.test(security))
+check('dependency audit distinguishes registry errors from vulnerability findings and fails closed on findings', /report\.error/.test(security) && /counts\.total/.test(security) && /Security gate blocked:/.test(security) && /process\.exit\(1\)/.test(security))
 check('new audit gate is wired into static verification and prebuild', ['verify:static','prebuild:checks'].every((key) => pkg.scripts[key].includes('check-run332-audit-remediation.mjs') && pkg.scripts[key].includes('test-run332-pi-environment-classification.mjs')))
 check('45-row historical migration reconciliation is present with explicit match states', migrationMap.trim().split(/\r?\n/).length === 46 && migrationMap.includes('exact_version_match') && migrationMap.includes('same_slug_different_version_unverified') && migrationMap.includes('no_matching_filename'))
 check('full audit report is present and preserves production no-go', existsSync(reportPath) && /Production remains NOT APPROVED/.test(read(reportPath)))

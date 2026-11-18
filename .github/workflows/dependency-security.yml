@@ -71,19 +71,21 @@ jobs:
         env:
           AUDIT_EXIT: ${{ steps.audit.outputs.audit_exit }}
         run: |
-          if [ "$AUDIT_EXIT" != "0" ]; then
-            echo "npm audit command failed with exit code $AUDIT_EXIT." >&2
-            exit 1
-          fi
           node --input-type=module <<'NODE'
           import { readFileSync } from 'node:fs'
           const report = JSON.parse(readFileSync('npm-audit.json', 'utf8'))
           if (report.error) throw new Error(`npm audit could not complete: ${report.error.summary ?? 'registry error'}`)
-          const counts = report.metadata?.vulnerabilities ?? {}
-          const total = counts.total ?? 0
+          const counts = report.metadata?.vulnerabilities
+          if (!counts || !Number.isSafeInteger(counts.total)) {
+            throw new Error('npm audit did not return a valid vulnerability summary.')
+          }
+          const total = counts.total
           if (total > 0) {
-            console.error(`Security gate blocked: ${total} known dependency finding(s).`)
+            console.error(`Security gate blocked: ${total} known dependency finding(s) — ${counts.critical ?? 0} critical, ${counts.high ?? 0} high, ${counts.moderate ?? 0} moderate, ${counts.low ?? 0} low.`)
             process.exit(1)
+          }
+          if (process.env.AUDIT_EXIT !== '0') {
+            throw new Error(`npm audit exited with code ${process.env.AUDIT_EXIT} but reported zero vulnerabilities; investigate the registry or audit response.`)
           }
           console.log('PASS: npm audit reports zero known vulnerabilities.')
           NODE
