@@ -272,7 +272,11 @@ async function officialPiAuthenticate(): Promise<{
     await waitForWindowPi(14000, 200)
     await ensurePiInitialized()
   }
-  return piAuthenticateOfficial(["username", "payments"])
+  // Sign-in needs identity only. Payment and wallet permissions are requested
+  // later, inside the specific payment/authorization flow that needs them.
+  // Keeping the payments scope out of bootstrap avoids making ordinary login
+  // depend on optional commerce permissions or payment capability.
+  return piAuthenticateOfficial(["username"])
 }
 
 
