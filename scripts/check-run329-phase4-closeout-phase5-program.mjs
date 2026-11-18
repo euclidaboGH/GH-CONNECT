@@ -1,12 +1,16 @@
 #!/usr/bin/env node
 /** RUN329: source closeout and 50-item Phase 5 programme integrity. */
 import { readFileSync, existsSync } from 'node:fs'
-const docPath = 'docs/RUN329-PHASE4-CLOSEOUT-PHASE5-50-UPGRADE-PROGRAM-2026-11-18.md'
-const doc = readFileSync(docPath, 'utf8')
+const docCandidates = [
+  'docs/RUN329-PHASE4-CLOSEOUT-PHASE5-50-UPGRADE-PROGRAM-2026-11-18.md',
+  'docs/archive/historical-implementation-records/docs__RUN329-PHASE4-CLOSEOUT-PHASE5-50-UPGRADE-PROGRAM-2026-11-18.md',
+]
+const docPath = docCandidates.find((candidate) => existsSync(candidate))
+const doc = docPath ? readFileSync(docPath, 'utf8') : ''
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'))
 const truth = readFileSync('docs/SOURCE_OF_TRUTH.md', 'utf8')
 const checks = [
-  ['Phase 4 closeout document exists', existsSync(docPath)],
+  ['Phase 4 closeout document exists in canonical or historical location', Boolean(docPath)],
   ['all five roadmap runs are explicitly present', ['RUN327','RUN328','RUN329','RUN330','RUN331'].every((run) => doc.includes(`### ${run}`))],
   ['exactly ten numbered upgrades are specified for each run', ['RUN327','RUN328','RUN329','RUN330','RUN331'].every((run) => { const start = doc.indexOf(`### ${run}`); const end = doc.indexOf('\n### RUN', start + 5); const section = doc.slice(start, end < 0 ? undefined : end); return [...section.matchAll(/^\d+\. \*\*/gm)].length === 10 })],
   ['all selected Phase 4 tracks and their external blockers are recorded', /Identity & Authentication/.test(doc) && /Community discussion/.test(doc) && /Messenger community/.test(doc) && /External Phase 4 release blockers/.test(doc)],
