@@ -2,6 +2,7 @@
 /** Phase 12 source-only release gate. Never contacts or mutates external systems. */
 import fs from 'node:fs'
 import path from 'node:path'
+import { readProjectDoc, hasProjectDoc } from './lib/read-project-doc.mjs'
 const read = (p) => fs.readFileSync(path.join(process.cwd(), p), 'utf8')
 const pkg = JSON.parse(read('package.json'))
 const lock = JSON.parse(read('package-lock.json'))
@@ -10,8 +11,8 @@ const manifest = read('VERIFIED_MANIFEST.txt')
 const runner = read('scripts/verify-phase14-static.mjs')
 const truth = read('docs/PROJECT_TRUTH.md')
 const readme = read('README.md')
-const acceptance = read('docs/PHASE-1-12-SYSTEM-WIDE-ACCEPTANCE.md')
-const phase12 = read('docs/PHASE-12-FINAL-INTEGRATION-RELEASE-READINESS.md')
+const acceptance = readProjectDoc('docs/PHASE-1-12-SYSTEM-WIDE-ACCEPTANCE.md')
+const phase12 = readProjectDoc('docs/PHASE-12-FINAL-INTEGRATION-RELEASE-READINESS.md')
 const migrationDir = path.join(process.cwd(), 'supabase/migrations')
 const migrations = fs.readdirSync(migrationDir).filter((name) => name.endsWith('.sql')).sort()
 const migrationVersions = new Map()
@@ -30,17 +31,17 @@ const checks = [
   ['README and project truth identify current release', readme.includes(`Current source version:** \`${pkg.version}\``) && truth.includes(`**Current source version:** \`${pkg.version}\``)],
   ['Phase 1–12 acceptance report identifies current baseline', acceptance.includes(`Current source baseline for this consolidated report: \`${pkg.version}\``) && acceptance.includes(`Current audit status (v${pkg.version})`)],
   ['Phase 12 report identifies current release and blocks unapproved production release', phase12.includes(`Release: \`${pkg.version}\``) && /NOT APPROVED for production/.test(phase12)],
-  ['Phase 3 recovery documentation exists', fs.existsSync('docs/PHASE-03-DATABASE-INTEGRITY-RECOVERY.md')],
-  ['Phase 4 recovery release gate documentation exists', fs.existsSync('docs/PHASE-04-RECOVERY-RELEASE-GATE.md')],
-  ['Phase 5 design system documentation exists', fs.existsSync('docs/PHASE-05-BRANDING-DESIGN-SYSTEM.md')],
-  ['Phase 6 app shell documentation exists', fs.existsSync('docs/PHASE-06-APP-SHELL-NAVIGATION-ONBOARDING.md')],
-  ['Phase 7 social reliability documentation exists', fs.existsSync('docs/PHASE-07-SOCIAL-EXPERIENCE-RELIABILITY.md')],
-  ['Phase 8 wallet reliability documentation exists', fs.existsSync('docs/PHASE-08-WALLET-FINANCIAL-RELIABILITY.md')],
-  ['Phase 9 transaction integration documentation exists', fs.existsSync('docs/PHASE-09-WALLET-TRANSACTION-INTEGRATION.md')],
-  ['Phase 10 marketplace integrity documentation exists', fs.existsSync('docs/PHASE-10-MARKETPLACE-ORDER-FULFILMENT-INTEGRITY.md')],
-  ['Phase 11 cross-feature reconciliation documentation exists', fs.existsSync('docs/PHASE-11-WALLET-CROSS-FEATURE-RECONCILIATION.md')],
+  ['Phase 3 recovery documentation exists', hasProjectDoc('docs/PHASE-03-DATABASE-INTEGRITY-RECOVERY.md')],
+  ['Phase 4 recovery release gate documentation exists', hasProjectDoc('docs/PHASE-04-RECOVERY-RELEASE-GATE.md')],
+  ['Phase 5 design system documentation exists', hasProjectDoc('docs/PHASE-05-BRANDING-DESIGN-SYSTEM.md')],
+  ['Phase 6 app shell documentation exists', hasProjectDoc('docs/PHASE-06-APP-SHELL-NAVIGATION-ONBOARDING.md')],
+  ['Phase 7 social reliability documentation exists', hasProjectDoc('docs/PHASE-07-SOCIAL-EXPERIENCE-RELIABILITY.md')],
+  ['Phase 8 wallet reliability documentation exists', hasProjectDoc('docs/PHASE-08-WALLET-FINANCIAL-RELIABILITY.md')],
+  ['Phase 9 transaction integration documentation exists', hasProjectDoc('docs/PHASE-09-WALLET-TRANSACTION-INTEGRATION.md')],
+  ['Phase 10 marketplace integrity documentation exists', hasProjectDoc('docs/PHASE-10-MARKETPLACE-ORDER-FULFILMENT-INTEGRITY.md')],
+  ['Phase 11 cross-feature reconciliation documentation exists', hasProjectDoc('docs/PHASE-11-WALLET-CROSS-FEATURE-RECONCILIATION.md')],
   ['Phase 12 Pi receipt source check is present', fs.existsSync('scripts/check-phase12-pi-transaction-details.mjs')],
-  ['Phase 12 final integration report exists', fs.existsSync('docs/PHASE-12-FINAL-INTEGRATION-RELEASE-READINESS.md')],
+  ['Phase 12 final integration report exists', hasProjectDoc('docs/PHASE-12-FINAL-INTEGRATION-RELEASE-READINESS.md')],
   ['Phase 12 release check is registered as an npm script', pkg.scripts?.['check:phase12-final-release-readiness'] === 'node scripts/check-phase12-final-release-readiness.mjs'],
   ['Phase 12 release check is part of static verification', runner.includes('check-phase12-final-release-readiness.mjs')],
   ['audit-UX regression check is independently registered in static suite', runner.includes('["check-phase1-12-audit-ux.mjs", "Phase 1–12 audit UX regression audit"]')],

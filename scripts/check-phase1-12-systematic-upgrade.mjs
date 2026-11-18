@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /** Network/DB-independent regression contract for v0.157.3 systemic fixes. */
 import { readFileSync } from "node:fs"
+import { readProjectDoc } from './lib/read-project-doc.mjs'
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
@@ -18,7 +19,7 @@ const checks = [
   ["request fulfilment validates supplied or persisted amount before sending", /rawAmount = input\.amount \?\? reqTx\?\.amount/.test(domain) && /Invalid transfer request amount/.test(domain)],
   ["API notification preserves the validated amount instead of applying absolute-value coercion", !/amount: Math\.abs\(amount\)/.test(transfer)],
   ["systematic upgrade regression gate is registered", staticSuite.includes('"check-phase1-12-systematic-upgrade.mjs"')],
-  ["source-level checks explicitly do not claim live database acceptance", /network\/DB independent/i.test(staticSuite) && /operator acceptance|operational acceptance/i.test(read("docs/PHASE-1-12-SYSTEM-WIDE-ACCEPTANCE.md"))],
+  ["source-level checks explicitly do not claim live database acceptance", /network\/DB independent/i.test(staticSuite) && /operator acceptance|operational acceptance/i.test(readProjectDoc("docs/PHASE-1-12-SYSTEM-WIDE-ACCEPTANCE.md"))],
 ]
 let failures = 0
 for (const [name, ok] of checks) { console.log(`${ok ? "PASS" : "FAIL"} ${name}`); if (!ok) failures++ }

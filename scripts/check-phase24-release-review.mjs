@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
+import { readProjectDoc } from './lib/read-project-doc.mjs'
 
 const failures = []
 const read = (path) => readFileSync(path, 'utf8')
@@ -9,9 +10,10 @@ const lock = JSON.parse(read('package-lock.json'))
 const release = read('lib/app-release.ts')
 const readme = read('README.md')
 const truth = read('docs/PROJECT_TRUTH.md')
-const readiness = read('docs/PHASE-12-FINAL-INTEGRATION-RELEASE-READINESS.md')
-const acceptance = read('docs/PHASE-1-12-SYSTEM-WIDE-ACCEPTANCE.md')
-const worklog = read(`docs/UPGRADE-WORKLOG-${pkg.version}.md`)
+const readiness = readProjectDoc('docs/PHASE-12-FINAL-INTEGRATION-RELEASE-READINESS.md')
+const acceptance = readProjectDoc('docs/PHASE-1-12-SYSTEM-WIDE-ACCEPTANCE.md')
+const worklogPath = `docs/UPGRADE-WORKLOG-${pkg.version}.md`
+const worklog = readProjectDoc(worklogPath)
 const prebuild = pkg.scripts['prebuild:checks'] ?? ''
 const verify = pkg.scripts['verify:static'] ?? ''
 const version = pkg.version

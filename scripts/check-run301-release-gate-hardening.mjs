@@ -1,17 +1,18 @@
 #!/usr/bin/env node
 /** Run #301: independent, network-free release metadata and safety regression gate. */
 import { readFileSync, existsSync } from 'node:fs'
+import { readProjectDoc } from './lib/read-project-doc.mjs'
 const read = (path) => readFileSync(path, 'utf8')
 const pkg = JSON.parse(read('package.json'))
 const lock = JSON.parse(read('package-lock.json'))
 const version = pkg.version
 const truth = read('docs/PROJECT_TRUTH.md')
 const readme = read('README.md')
-const acceptance = read('docs/PHASE-1-12-SYSTEM-WIDE-ACCEPTANCE.md')
-const phase12 = read('docs/PHASE-12-FINAL-INTEGRATION-RELEASE-READINESS.md')
+const acceptance = readProjectDoc('docs/PHASE-1-12-SYSTEM-WIDE-ACCEPTANCE.md')
+const phase12 = readProjectDoc('docs/PHASE-12-FINAL-INTEGRATION-RELEASE-READINESS.md')
 const phase24 = read('scripts/check-phase24-release-review.mjs')
 const worklogPath = `docs/UPGRADE-WORKLOG-${version}.md`
-const worklog = existsSync(worklogPath) ? read(worklogPath) : ''
+const worklog = readProjectDoc(worklogPath)
 const manifest = read('VERIFIED_MANIFEST.txt')
 const workflows = read('.github/workflows/ci.yml')
 const checks = [

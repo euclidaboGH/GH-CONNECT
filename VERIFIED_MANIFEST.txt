@@ -4,8 +4,8 @@ inventory_status=OK
 duplicate_version_prefixes=
 project_version=0.338.99
 manifest_format_version=1
-canonical_migrations=230
-classification_required=121
+canonical_migrations=231
+classification_required=122
 classification_requires_approval=1
 classification_proposal=2
 classification_review_required=106
@@ -252,3 +252,4 @@ ALL_MIGRATIONS_ORDERED_FOR_REVIEW:
 [REVIEW_REQUIRED] size=2576 path=supabase/migrations/20261116190000_gh_media_evidence_engine.sql
 [REVIEW_REQUIRED] size=10637 path=supabase/migrations/20261117010001_gh_evidence_scoped_upload_chain_of_custody.sql
 [REQUIRED] size=574 path=supabase/migrations/20261118033839_revoke_client_select_on_server_only_tables.sql
+[REQUIRED] size=1788 path=supabase/migrations/20261118194252_testnet_a2u_network_fence.sql

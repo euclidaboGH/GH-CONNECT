@@ -2,6 +2,7 @@
 /** Phase 2 database integrity closeout — source-only; never claims remote apply. */
 import fs from 'node:fs'
 import path from 'node:path'
+import { readProjectDoc, hasProjectDoc } from './lib/read-project-doc.mjs'
 const root = process.cwd()
 const read = (p) => fs.readFileSync(path.join(root, p), 'utf8')
 const exists = (p) => fs.existsSync(path.join(root, p))
@@ -34,9 +35,8 @@ check('CI does not run supabase db push', !/supabase\s+db\s+push/.test(ci))
 const pack = read('scripts/check-phase1-10-upgrade-pack.mjs')
 check('Phase 1–10 pack still enforces proposal isolation', /proposals/.test(pack) && /outside canonical migrations/.test(pack))
 
-const phase2Doc = exists('docs/PHASE-2-DATABASE-INTEGRITY-CLOSEOUT-2026-11-09.md')
-  ? read('docs/PHASE-2-DATABASE-INTEGRITY-CLOSEOUT-2026-11-09.md')
-  : ''
+const phase2Path = 'docs/PHASE-2-DATABASE-INTEGRITY-CLOSEOUT-2026-11-09.md'
+const phase2Doc = hasProjectDoc(phase2Path) ? readProjectDoc(phase2Path) : ''
 check(
   'Phase 2 closeout report present',
   phase2Doc.includes('Production remains **NOT APPROVED**') &&
