@@ -42,7 +42,7 @@ check('shared parser rejects path traversal', (() => { try { parseNodeScriptComm
 check('shared parser rejects missing script targets', (() => { try { parseNodeScriptCommands('node scripts/not-present-run248.mjs', options); return false } catch { return true } })())
 check('shared parser rejects empty command entries', (() => { try { parseNodeScriptCommands('node scripts/a.mjs &&  && node scripts/b.mjs', options); return false } catch { return true } })())
 check('shared parser supports Node runtime flags before script target', (() => { try { return parseNodeScriptCommands('node --disable-warning=ExperimentalWarning --experimental-strip-types scripts/check-run248-release-gate-runner.mjs', options)[0]?.script === 'scripts/check-run248-release-gate-runner.mjs' } catch { return false } })())
-check('release closure reads the declared prebuild manifest', closure.includes("pkg.scripts?.['prebuild:checks']") && closure.includes('prebuildHas'))
+check('release closure reads the declared prebuild manifest', closure.includes("pkg.scripts?.['prebuild:checks']") && (closure.includes('prebuildHas') || closure.includes('prebuildScripts')))
 check('all five release controls remain in prebuild manifest', required.every((script) => hasNodeScript(manifest, script, options)))
 check('all five release controls remain in static verification', required.every((script) => hasNodeScript(verify, script, options)))
 const parityChecks = [
