@@ -1,9 +1,26 @@
-# GreenHaven source authority — 0.338.101 RUN372 Field Research hard disconnection (2026-11-19)
+# GreenHaven source authority — 0.338.103 RUN376–RUN377 (2026-11-19)
 
-**Current source version:** `0.338.101`
-**Current user-provided archive:** `GREENHAVEN-0_338_100-RUN371-PI-CDN-SANDBOX-AUTH-FIX-2026-11-19.zip`  
-**Current local working derivative:** RUN372 Field Research hard disconnection; source-only, not pushed or deployed.  
-**Package identity:** `gh-connect@0.338.101` (user-facing brand: GREENHAVEN).
+**Current source version:** `0.338.103`
+**Package identity:** `gh-connect@0.338.103`  
+**Baseline:** local 0.338.102 RUN373–RUN375 derivative of the user-designated 0.338.101 archive.  
+**Current working derivative:** RUN376 economy, curation, withdrawal and pipeline hardening; not pushed or deployed.
+
+RUN376 hardens GHPV reviewer independence and final normalized anti-whale influence, makes calibration and population failures fail closed; the existing DB schema does not persist the daily JCS cap, so automated settlement remains gated pending a per-reviewer-serialized SQL fix, moves daily-claim and activity emission toward a single serialized global-demand allocator, strengthens Testnet-only GHC-to-Pi withdrawal authorization, and makes balance-funded curation redistribution idempotent. Both SQL proposals remain review-only and unapplied. The emission feature is disabled by default and database-backed issuance returns unavailable until the proposal is reconciled, rehearsed and explicitly enabled. The curation v2 wrapper is separately disabled until applied and verified. Withdrawals are disabled by default and remain manual operator settlements. Votes and curation do not mint GHC.
+
+RUN376 focused source/runtime checks pass 42/42 and 4/4; the network/DB-independent consolidated verifier passes 63/63. The full npm aggregate exceeds the available command time budget after completing the consolidated verifier; remaining registered checks were run individually and passed. RUN377 records the failed 53-second dependency audit (22 vulnerable package entries, including one critical) and the remote pretypecheck-order failure; the latter is fixed locally but awaits a new CI run. Node 24.15.x dependency-backed typecheck/lint/build, dependency patching, live PostgreSQL rehearsal, migration reconciliation, Pi Portal/Sandbox authorization and multi-account Testnet/device acceptance remain outstanding. The separate Pi earnings A2U lane and its linked-wallet consent/settlement gates are documented in `docs/PHASE4_PI_WITHDRAW_KYC.md`; this is not the RUN376 GHC-to-Pi manual request lane. No live Supabase mutation, migration, ledger mutation, payout, payment, GitHub push, Vercel deployment or Mainnet action occurred. Production remains NOT APPROVED.
+
+---
+
+## Previous source authority — 0.338.102 RUN373–RUN375
+
+# GreenHaven source authority — 0.338.102 RUN373–RUN374 authentication and API hardening (2026-11-19)
+
+**Current source version:** `0.338.102`
+**Current user-provided archive:** `GREENHAVEN-0_338_101-RUN372-FIELD-RESEARCH-DISCONNECTED-2026-11-19.zip`  
+**Current local working derivative:** RUN373–RUN374 Pi authentication UX and API hardening plus RUN375 review-only identity/session ACL proposal on top of RUN372; source-only, not pushed or deployed.  
+**Package identity:** `gh-connect@0.338.102` (user-facing brand: GREENHAVEN).
+
+RUN375 adds a review-only SQL proposal to revoke redundant client SELECT grants on `gh_pi_identities` and `gh_sessions`, with postflight assertions for retained service-role access; it remains outside canonical migrations pending history reconciliation and operator approval. RUN373 improves the observed generic Pi Sandbox SDK rejection message without changing authentication scopes or server verification. RUN374 adds durable per-user throttling and bounded Supabase deadlines to social post editing, hardens announcement publishing with the shared 32-byte constant-time operator-key verifier and scoped durable rate limits, and applies the same shared key verifier to GHPV settlement. Targeted gates pass; Pi Portal/Sandbox authorization, Testnet ACL revocation, migration reconciliation and supported-runtime acceptance remain operator gates. No Supabase mutation, migration, GitHub push, Vercel deployment or Mainnet operation occurred.
 
 RUN372 suspends Field Research without deleting its source or changing database state. The canonical service is `UNAVAILABLE` with no destination; `/field/**` and `/r/**` are blocked with a non-disclosing 404 at middleware, while `/api/research/**` and `/api/field/**` return a no-store 503 before route handlers execute. Research routes are removed from the public-route allowlist and crawler indexing. Migration classifications and history are unchanged. Targeted checks pass: isolation 8/8, RUN342 auth-scope 6/6, public-route boundary 12/12, ecosystem registry and 30-track coverage 15/15. The source remains in the repository and may still be parsed by general build tooling; full Node 24 typecheck/lint/build and live browser acceptance remain outstanding. No Supabase mutation, migration, GitHub push, Vercel deployment or Mainnet operation occurred. Production remains NOT APPROVED.
 

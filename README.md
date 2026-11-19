@@ -1,14 +1,18 @@
 # GreenHaven
 
-**Current source version:** `0.338.101` (RUN372 Field Research hard disconnection derivative of user-supplied RUN371)
+**Current source version:** `0.338.103` (RUN376–RUN377 economy, curation, withdrawal, pipeline and dependency-audit hardening derivative of 0.338.102)
 
 Production status: **NOT APPROVED** — supported Node 24.15.0 dependency-backed typecheck/lint/build, browser/device, live database/provider and operator acceptance remain outstanding.
 
 This repository is the canonical GreenHaven source tree. See `docs/SOURCE_OF_TRUTH.md` and `docs/CURRENT_BUILD_CONTEXT.md` before implementation or release work.
 
-## Latest maintenance — 0.338.101 / RUN372 Field Research hard disconnection
+## Latest maintenance — 0.338.103 / RUN376–RUN377 economy, curation, withdrawal, pipeline and dependency-audit hardening
 
-Field Research / Research Studio is temporarily disconnected. The ecosystem registry marks the service unavailable with no destination; `/field/**` and `/r/**` are blocked at middleware, and `/api/research/**` plus `/api/field/**` return 503 before route handlers execute. Source code, SQL migrations and migration history are retained unchanged for a controlled future re-enable. See `docs/RUN372-FIELD-RESEARCH-HARD-DISCONNECTION-2026-11-19.md`.
+RUN376 corrects final GHPV reviewer influence caps and duplicate-reviewer quorum handling, fails closed on unavailable calibration/population state, introduces a shared atomic global-emission proposal for daily claims and activity emissions behind a disabled-by-default operator gate, hardens GHC-to-Pi withdrawal requests with request-bound PIN proof and platform-verified wallet matching, and makes balance-funded curation redistribution replay-safe behind a separate disabled-by-default proposal. Neither proposal has been applied to Supabase. GHPV automated settlement is also disabled until its daily JCS calibration cap is durably serialized in the database. Withdrawal execution remains manual and disabled by default. Generic reward evaluation remains daily-claim-only; votes and curation never mint GHC. See `docs/RUN376-ECONOMY-CURATION-WITHDRAWAL-HARDENING-2026-11-19.md` and `docs/RUN377-DEPENDENCY-AUDIT-AND-CI-REMEDIATION-2026-11-19.md`.
+
+## Previous maintenance — 0.338.102 / RUN373 Phase 1–3 security and authentication remediation
+
+RUN373 improves Pi Sandbox sign-in rejection guidance, applies durable per-user throttling and bounded upstream deadlines to social post edits, uses the shared constant-time operator-key verifier for announcement publishing and GHPV settlement, and adds a review-only identity/session ACL proposal that remains unapplied. Field Research / Research Studio remains temporarily disconnected. The ecosystem registry marks the service unavailable with no destination; `/field/**` and `/r/**` are blocked at middleware, and `/api/research/**` plus `/api/field/**` return 503 before route handlers execute. Source code, SQL migrations and migration history are retained unchanged for a controlled future re-enable. See `docs/RUN373-PHASE1-2-REMEDIATION-2026-11-19.md` and `docs/RUN374-PHASE3-API-HARDENING-2026-11-19.md`.
 
 ## Previous maintenance — 0.338.99 / Run 318 Pi authentication reliability repair
 

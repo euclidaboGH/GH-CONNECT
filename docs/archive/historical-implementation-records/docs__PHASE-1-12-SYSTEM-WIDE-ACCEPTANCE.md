@@ -1,3 +1,5 @@
+> **HISTORICAL SNAPSHOT — FROZEN AT 0.338.101.** This archived acceptance fixture records the RUN372 audit state and is intentionally not rewritten when the canonical source advances. Current source identity and release gates are maintained in `docs/SOURCE_OF_TRUTH.md`, `docs/PROJECT_TRUTH.md`, and the current versioned upgrade worklog.
+
 Current source baseline for this consolidated report: `0.338.101`
 - Current audit status (v0.338.101): RUN372 Field Research hard disconnection; edge blocks `/field/**`, `/r/**`, `/api/research/**` and `/api/field/**`; targeted isolation checks pass 8/8; full Node 24.15.0 build and browser/device acceptance remain outstanding. Production NOT APPROVED.
 

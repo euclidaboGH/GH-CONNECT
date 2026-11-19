@@ -1,3 +1,5 @@
+> **LEGACY VERIFICATION FIXTURE — NOT CURRENT PRODUCT AUTHORITY.** This worklog records the completed 0.338.101 RUN372 release and is retained unchanged as historical evidence. The current source version and follow-on work are recorded in `docs/UPGRADE-WORKLOG-0.338.102.md`.
+
 # Upgrade worklog — 0.338.101 RUN372
 
 **Date:** 2026-11-19  

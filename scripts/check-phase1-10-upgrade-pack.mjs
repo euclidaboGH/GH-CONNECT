@@ -2,14 +2,14 @@
 /** Cross-phase 20-point regression contract: two controls for each completion phase. */
 import fs from 'node:fs'
 import path from 'node:path'
-import { readProjectDoc } from './lib/read-project-doc.mjs'
 const read = (p) => fs.readFileSync(p, 'utf8')
 const exists = (p) => fs.existsSync(p)
 const checks = []
 const add = (phase, id, label, ok) => checks.push({ phase, id, label, ok: Boolean(ok) })
 const pkg = JSON.parse(read('package.json'))
 const release = read('lib/app-release.ts')
-const sourceTruth = readProjectDoc('docs/PHASE-1-CONSOLIDATED-AUDIT-AND-IMPLEMENTATION-REGISTER-2026-11-09.md')
+const sourceTruth = read('docs/SOURCE_OF_TRUTH.md')
+const currentWorklog = read(`docs/UPGRADE-WORKLOG-${pkg.version}.md`)
 const migrationFiles = fs.readdirSync('supabase/migrations').filter((f) => f.endsWith('.sql'))
 const migrationVersions = migrationFiles.map((f) => f.slice(0, 14))
 const workflow = read('.github/workflows/ci.yml')
@@ -29,8 +29,8 @@ const releaseClosure = read('scripts/check-phase10-release-closure.mjs')
 const ci = read('.github/workflows/ci.yml')
 
 // Phase 1 — source-of-truth and issue traceability.
-add(1, 'P1-A', 'Package, app release and consolidated audit agree on current package version', release.includes(`APP_RELEASE_VERSION = \"${pkg.version}\"`) && sourceTruth.includes(`gh-connect@${pkg.version}`))
-add(1, 'P1-B', 'Consolidated register preserves external blockers and production no-go', /Production remains NOT APPROVED/.test(sourceTruth) && /Testnet and Mainnet migration histories/.test(sourceTruth))
+add(1, 'P1-A', 'Package, app release and consolidated audit agree on current package version', release.includes(`APP_RELEASE_VERSION = \"${pkg.version}\"`) && currentWorklog.includes(`gh-connect@${pkg.version}`) && sourceTruth.includes(`gh-connect@${pkg.version}`))
+add(1, 'P1-B', 'Consolidated register preserves external blockers and production no-go', /Production remains NOT APPROVED/.test(sourceTruth) && /Testnet/.test(currentWorklog) && /Mainnet remains empty/.test(currentWorklog))
 // Phase 2 — migration integrity and deployment safety.
 add(2, 'P2-A', 'Canonical migration versions match the on-disk inventory and are unique 14-digit identifiers', migrationFiles.length > 0 && migrationVersions.every((v) => /^\d{14}$/.test(v)) && new Set(migrationVersions).size === migrationFiles.length)
 add(2, 'P2-B', 'Balance-observability SQL remains a proposal, outside canonical migrations', exists('supabase/proposals/20261109_phase6_earnings_balance_integrity_observability_proposal.sql') && !exists('supabase/migrations/20261109_phase6_earnings_balance_integrity_observability_proposal.sql') && !/supabase db push/.test(workflow))

@@ -7,6 +7,9 @@ import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { rpcWalletSnapshot } from "@/lib/server/economy/db"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
+import { checkPinProof, pinProofConfigured } from "@/lib/server/identity/withdrawal-pin-proof"
+import { assertPayoutWalletAuthorization } from "@/lib/server/identity/wallet-authorization"
+import { getByGhUserId } from "@/lib/server/identity/pi-identity-store"
 import {
   createWithdrawalRequest,
   fetchLockedGhc,
@@ -15,6 +18,7 @@ import {
   minGhcForWithdrawal,
   getApprovedGhcPerPi,
   areGhcPiWithdrawalsEnabled,
+  isValidPiWithdrawalAddress,
 } from "@/lib/server/economy/withdrawal"
 
 export const runtime = "nodejs"
@@ -107,6 +111,31 @@ export async function POST(request: Request) {
     )
   }
 
+  if (!pinProofConfigured()) {
+    return NextResponse.json({ ok: false, error: "PIN_PROOF_SECRET_MISSING" }, { status: 503, headers: { "Cache-Control": "no-store" } })
+  }
+  const pinProof = body.pinProof
+  if (!checkPinProof(auth.userId, idempotencyKey, pinProof)) {
+    return NextResponse.json({ ok: false, error: "PIN_PROOF_REQUIRED" }, { status: 403, headers: { "Cache-Control": "no-store" } })
+  }
+
+  let identity
+  try { identity = await getByGhUserId(auth.userId) } catch {
+    return NextResponse.json({ ok: false, error: "PI_IDENTITY_UNAVAILABLE" }, { status: 503, headers: { "Cache-Control": "no-store" } })
+  }
+  if (!identity?.piAppUid) {
+    return NextResponse.json({ ok: false, error: "MAPPED_PI_IDENTITY_REQUIRED" }, { status: 409, headers: { "Cache-Control": "no-store" } })
+  }
+  const walletAuthorization = await assertPayoutWalletAuthorization({ ghUserId: auth.userId, recipientUid: identity.piAppUid })
+  const verifiedWallet = String(walletAuthorization.piWalletAddress || "").trim().toUpperCase()
+  if (!walletAuthorization.ok || walletAuthorization.walletAddressSource !== "platform_api"
+    || !walletAuthorization.walletAddressVerifiedAt || !isValidPiWithdrawalAddress(verifiedWallet)) {
+    return NextResponse.json({ ok: false, error: walletAuthorization.error || "PLATFORM_VERIFIED_WALLET_REQUIRED" }, { status: 409, headers: { "Cache-Control": "no-store" } })
+  }
+  if (!isValidPiWithdrawalAddress(piWalletAddress) || piWalletAddress.trim().toUpperCase() !== verifiedWallet) {
+    return NextResponse.json({ ok: false, error: "WITHDRAWAL_DESTINATION_MISMATCH" }, { status: 400, headers: { "Cache-Control": "no-store" } })
+  }
+
   if (!Number.isFinite(ghcAmount) || ghcAmount <= 0) {
     return NextResponse.json({ ok: false, error: "INVALID_AMOUNT" }, { status: 400 })
   }
@@ -130,12 +159,12 @@ export async function POST(request: Request) {
   const result = await createWithdrawalRequest({
     userId: auth.userId,
     ghcAmount,
-    piWalletAddress,
+    piWalletAddress: verifiedWallet,
     idempotencyKey,
   })
   if (!result.ok || !result.request) {
     const status =
-      result.error === "INSUFFICIENT_WITHDRAWABLE"
+      result.error === "INSUFFICIENT_WITHDRAWABLE" || result.error === "BELOW_MINIMUM"
         ? 400
         : result.error === "INVALID_WALLET"
           ? 400

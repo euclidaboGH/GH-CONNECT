@@ -718,7 +718,7 @@ export async function rpcEconomicPopulationStats(
     ok: false,
     registeredUsers: 0,
     verifiedUsers: 0,
-    eligibleEconomicUsers: 1,
+    eligibleEconomicUsers: 0,
     activeEconomicUsers: 0,
     suspendedUsers: 0,
     suspectedDuplicateUsers: 0,
@@ -736,18 +736,17 @@ export async function rpcEconomicPopulationStats(
 if (!res.ok) return fallback
     const data = (await res.json()) as Record<string, unknown>
     if (!data || data.ok === false) return fallback
-    const eligible = Math.max(1, Math.floor(Number(data.eligibleEconomicUsers) || 1))
+    const fields = [data.registeredUsers, data.verifiedUsers, data.eligibleEconomicUsers, data.activeEconomicUsers, data.suspendedUsers, data.suspectedDuplicateUsers]
+    if (fields.some((value) => typeof value !== "number" || !Number.isSafeInteger(value) || value < 0)
+      || Number(data.eligibleEconomicUsers) < 1) return fallback
     return {
       ok: true,
-      registeredUsers: Math.max(0, Math.floor(Number(data.registeredUsers) || 0)),
-      verifiedUsers: Math.max(0, Math.floor(Number(data.verifiedUsers) || 0)),
-      eligibleEconomicUsers: eligible,
-      activeEconomicUsers: Math.max(0, Math.floor(Number(data.activeEconomicUsers) || 0)),
-      suspendedUsers: Math.max(0, Math.floor(Number(data.suspendedUsers) || 0)),
-      suspectedDuplicateUsers: Math.max(
-        0,
-        Math.floor(Number(data.suspectedDuplicateUsers) || 0)
-      ),
+      registeredUsers: Number(data.registeredUsers),
+      verifiedUsers: Number(data.verifiedUsers),
+      eligibleEconomicUsers: Number(data.eligibleEconomicUsers),
+      activeEconomicUsers: Number(data.activeEconomicUsers),
+      suspendedUsers: Number(data.suspendedUsers),
+      suspectedDuplicateUsers: Number(data.suspectedDuplicateUsers),
       source: "database",
     }
   } catch {
@@ -906,7 +905,108 @@ export type AtomicDailyClaimResult = {
   transactionId?: string
   reserveTransactionId?: string
   referenceId?: string
+  globalDemandAfter?: number
+  globalBudget?: number
   error?: string
+}
+
+/** Atomic Daily Claim v13: the database owns population, demand, governor and split. */
+export async function rpcExecuteDailyClaimV13(
+  input: {
+    userId: string
+    claimDayKey: string
+    cycleDay: number
+    completedCycles: number
+    idempotencyKey: string
+    eligibleEconomicUsers: number
+    economicVersion?: string
+    missedDayReset?: boolean
+  },
+  env: GhcServerEnv = readGhcServerEnv()
+): Promise<AtomicDailyClaimResult> {
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return { ok: false, error: "SERVER_UNAVAILABLE" }
+  if (!Number.isSafeInteger(input.eligibleEconomicUsers) || input.eligibleEconomicUsers < 1) {
+    return { ok: false, error: "ECONOMIC_POPULATION_UNAVAILABLE" }
+  }
+  if (!Number.isSafeInteger(input.cycleDay) || input.cycleDay < 1 || input.cycleDay > 7
+    || !Number.isSafeInteger(input.completedCycles) || input.completedCycles < 0 || input.completedCycles > 1_000_000_000
+    || !/^\d{4}-\d{2}-\d{2}$/.test(input.claimDayKey)
+    || !/^[A-Za-z0-9._:-]{8,160}$/.test(input.idempotencyKey)) {
+    return { ok: false, error: "INVALID_DAILY_CLAIM_V13_INPUT" }
+  }
+  try {
+    const result = await supabaseRpc<Record<string, unknown>>("ghc_execute_daily_claim_v13", {
+      p_user_id: input.userId,
+      p_claim_day_key: input.claimDayKey,
+      p_cycle_day: input.cycleDay,
+      p_completed_cycles: input.completedCycles,
+      p_idempotency_key: input.idempotencyKey,
+      p_eligible_users: input.eligibleEconomicUsers,
+      p_economic_version: input.economicVersion || "1.2",
+      p_missed_day_reset: Boolean(input.missedDayReset),
+    }, { timeoutMs: 12_000 })
+    if (!result.ok) return { ok: false, error: "SERVER_UNAVAILABLE" }
+    const data = result.data
+    if (!data || data.ok !== true) return { ok: false, error: String(data?.error || "CLAIM_FAILED") }
+    const num = (key: string): number | null => {
+      const value = data[key]
+      return typeof value === "number" && Number.isFinite(value) ? value : null
+    }
+    const userAmount = num("userAmount")
+    const reserveAmount = num("reserveAmount")
+    const grossAmount = num("grossAmount")
+    const baseGross = num("baseGross")
+    const m = num("m")
+    const g = num("g")
+    const globalDemandAfter = num("globalDemandAfter")
+    const globalBudget = num("globalBudget")
+    const alreadyClaimed = data.alreadyClaimed === true
+    const expectedBase = [0.39, 0.62, 0.86, 1.09, 1.33, 1.56, 1.96][input.cycleDay - 1]
+    const curveN = Math.max(10, input.eligibleEconomicUsers)
+    const expectedM = Math.max(0.18, Math.min(1, 0.18 + 0.82 / Math.pow(1 + 0.2 * (Math.log(curveN / 10) / Math.log(10)), 1.15)))
+    const expectedBudget = 8 * Math.pow(input.eligibleEconomicUsers, 0.85)
+    const expectedG = globalDemandAfter !== null && globalBudget !== null && globalDemandAfter > 0
+      ? Math.max(0, Math.min(1, globalBudget / globalDemandAfter)) : 1
+    const expectedGross = baseGross !== null && m !== null && g !== null ? Math.round(baseGross * m * g * 1_000_000) / 1_000_000 : -1
+    const expectedUser = grossAmount !== null ? Math.floor(grossAmount * 0.8 * 1_000_000) / 1_000_000 : -1
+    if ([userAmount, reserveAmount, grossAmount, baseGross, m, g, globalDemandAfter, globalBudget].some((v) => v === null)
+      || userAmount! < 0 || reserveAmount! < 0 || grossAmount! <= 0 || baseGross! <= 0
+      || m! < 0 || m! > 1 || g! < 0 || g! > 1 || globalDemandAfter! < 0 || globalBudget! <= 0
+      || Math.abs((userAmount! + reserveAmount!) - grossAmount!) > 0.000002
+      || (!alreadyClaimed && (Math.abs(baseGross! - expectedBase) > 1e-9
+        || Math.abs(m! - expectedM) > 1e-9 || Math.abs(g! - expectedG) > 1e-9
+        || Math.abs(globalBudget! - expectedBudget) > 1e-6
+        || Math.abs(grossAmount! - expectedGross) > 0.000002 || Math.abs(userAmount! - expectedUser) > 0.000002
+        || data.pending !== true || typeof data.redeemableAt !== "string" || !Number.isFinite(Date.parse(data.redeemableAt))))) {
+      return { ok: false, error: "DAILY_CLAIM_RESPONSE_INVALID" }
+    }
+    return {
+      ok: true,
+      alreadyClaimed,
+      idempotent: data.idempotent === true || alreadyClaimed,
+      cycleDay: typeof data.cycleDay === "number" ? data.cycleDay : input.cycleDay,
+      completedCycles: typeof data.completedCycles === "number" ? data.completedCycles : input.completedCycles,
+      lastClaimDayKey: typeof data.lastClaimDayKey === "string" ? data.lastClaimDayKey.slice(0, 10) : input.claimDayKey,
+      totalSuccessfulClaims: typeof data.totalSuccessfulClaims === "number" ? data.totalSuccessfulClaims : undefined,
+      userAmount: userAmount!,
+      pending: data.pending === true,
+      redeemableAt: typeof data.redeemableAt === "string" ? data.redeemableAt : undefined,
+      reserveAmount: reserveAmount!,
+      grossAmount: grossAmount!,
+      baseGross: baseGross!,
+      m: m!,
+      g: g!,
+      globalDemandAfter: globalDemandAfter!,
+      globalBudget: globalBudget!,
+      missedDayReset: data.missedDayReset === true,
+      economicVersion: typeof data.economicVersion === "string" ? data.economicVersion : input.economicVersion || "1.2",
+      transactionId: typeof data.transactionId === "string" ? data.transactionId : undefined,
+      reserveTransactionId: typeof data.reserveTransactionId === "string" ? data.reserveTransactionId : undefined,
+      referenceId: typeof data.referenceId === "string" ? data.referenceId : input.idempotencyKey,
+    }
+  } catch {
+    return { ok: false, error: "SERVER_UNAVAILABLE" }
+  }
 }
 
 export async function rpcExecuteDailyClaimV12(

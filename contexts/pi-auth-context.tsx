@@ -226,6 +226,12 @@ function humanizePiAuthError(err: unknown): string {
     }
     return "Open GreenHaven from inside the Pi app (Develop → your app, or the production link). External browsers cannot complete Pi sign-in."
   }
+  if (/^authentication failed\.?$/i.test(raw) && inPi) {
+    if (isPiSandboxFrame()) {
+      return "Pi Sandbox rejected sign-in before GreenHaven received an access token. Check that the app is registered for Testnet, its exact hosted URL matches the Pi Developer Portal, and this Sandbox app is authorized in Pi Utilities. Then reopen GreenHaven from Pi → Develop and retry. If it still fails, copy the sign-in diagnostics for the operator."
+    }
+    return "Pi rejected sign-in before GreenHaven received an access token. Reopen the registered GreenHaven app inside Pi Browser and retry. If it repeats, ask the operator to verify the app's registered URL and Pi network configuration, then copy the sign-in diagnostics."
+  }
   if (/timed out|timeout/i.test(raw) && inPi) {
     return "Pi took too long to respond. Stay in Pi Browser and tap Retry Pi authentication."
   }

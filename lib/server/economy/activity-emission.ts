@@ -20,11 +20,8 @@ import {
 } from "@/lib/server/economy/network-scarcity"
 import { lagosDayKey } from "@/lib/server/economy/claim-engine"
 import { recordTelemetryEvent } from "@/lib/server/economy/telemetry"
-import {
-  durableGetGlobalDemand,
-  durableRecordGlobalDemand,
-  durableTryActivityGrant,
-} from "@/lib/server/economy/durable-emission"
+import { durableTryActivityEmission } from "@/lib/server/economy/durable-emission"
+import { resolveEconomicPopulation } from "@/lib/server/economy/population"
 import { isDatabaseConfigured } from "@/lib/server/economy/http"
 
 type UserWindow = {
@@ -195,69 +192,54 @@ export async function computeAndCommitActivityEmissionDurable(input: {
     }
   }
 
-  const n =
-    input.eligibleEconomicUsers != null
-      ? Math.max(1, Math.floor(input.eligibleEconomicUsers))
-      : getEligibleEconomicUsers()
-
   if (isDatabaseConfigured()) {
+    if (process.env.GHC_ATOMIC_GLOBAL_EMISSION_V13_ENABLED !== "true") {
+      return { ok: false, error: "ATOMIC_EMISSION_MIGRATION_REQUIRED", dayRemaining: 0, weekRemaining: 0 }
+    }
+    // Ignore any caller-supplied population: DB-backed issuance uses fresh server metrics.
+    const population = await resolveEconomicPopulation()
+    if (!population.ok || population.source !== "database" || !Number.isSafeInteger(population.eligibleEconomicUsers) || population.eligibleEconomicUsers < 1) {
+      return { ok: false, error: "ECONOMIC_POPULATION_UNAVAILABLE", dayRemaining: 0, weekRemaining: 0 }
+    }
     const wk = weekKeyFromDay(dayKey)
-    const grant = await durableTryActivityGrant({
+    const grant = await durableTryActivityEmission({
       userId: input.userId,
       dayKey,
       weekKey: wk,
       requested: base,
       dailyCap: ACTIVITY_DAILY_CAP_GHC,
       weeklyCap: ACTIVITY_WEEKLY_CAP_GHC,
+      eligibleEconomicUsers: population.eligibleEconomicUsers,
     })
-    if (!grant) {
-      return {
-        ok: false,
-        error: "ACTIVITY_DURABLE_UNAVAILABLE",
-        dayRemaining: 0,
-        weekRemaining: 0,
-      }
+    if (!grant) return { ok: false, error: "ACTIVITY_DURABLE_UNAVAILABLE", dayRemaining: 0, weekRemaining: 0 }
+    if (!grant.ok || grant.grantedGhc <= 0) {
+      return { ok: false, error: grant.error || "ACTIVITY_CAP_REACHED", dayRemaining: grant.dayRemaining, weekRemaining: grant.weekRemaining }
     }
-    if (!grant.ok || grant.granted <= 0) {
-      return {
-        ok: false,
-        error: grant.error || "ACTIVITY_CAP_REACHED",
-        dayRemaining: grant.dayRemaining,
-        weekRemaining: grant.weekRemaining,
-      }
-    }
-    const cappedBase = grant.granted
-    const demandSoFar = (await durableGetGlobalDemand(dayKey)) ?? 0
-    const mOnly = applyNetworkEmission(cappedBase, n, demandSoFar)
-    const demandAfterM = demandSoFar + cappedBase * mOnly.m
-    const emitted = applyNetworkEmission(cappedBase, n, demandAfterM)
-    await durableRecordGlobalDemand(dayKey, cappedBase * emitted.m)
-    const grantedGhc = fromMicro(toMicro(emitted.grossGhc))
     recordTelemetryEvent({
       type: "activity_reward",
       dayKey,
-      eligibleEconomicUsers: n,
-      m: emitted.m,
-      g: emitted.g,
-      demand: demandAfterM,
-      budget: emitted.budget,
-      userIssuance: grantedGhc,
+      eligibleEconomicUsers: population.eligibleEconomicUsers,
+      m: grant.m,
+      g: grant.g,
+      demand: grant.demandAfter,
+      budget: grant.budget,
+      userIssuance: grant.grantedGhc,
       reserveIssuance: 0,
-      grossIssuance: grantedGhc,
+      grossIssuance: grant.grantedGhc,
       sinks: 0,
-      netCirculatingChange: grantedGhc,
-      meta: { userId: input.userId, durable: true, baseGhc: cappedBase },
+      netCirculatingChange: grant.grantedGhc,
+      meta: { userId: input.userId, durable: true, baseGhc: grant.baseGhc, atomicGlobalDemand: true },
     })
     return {
       ok: true,
-      baseGhc: cappedBase,
-      grantedGhc,
-      m: emitted.m,
-      g: emitted.g,
+      baseGhc: grant.baseGhc,
+      grantedGhc: grant.grantedGhc,
+      m: grant.m,
+      g: grant.g,
       dayRemaining: grant.dayRemaining,
       weekRemaining: grant.weekRemaining,
       economicVersion: ECONOMY_VERSION,
-      capped: cappedBase < base,
+      capped: grant.baseGhc < base,
     }
   }
 

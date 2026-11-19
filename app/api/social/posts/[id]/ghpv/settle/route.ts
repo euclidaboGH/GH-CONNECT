@@ -9,20 +9,19 @@
  * Production cron is intentionally not configured in this phase.
  */
 import { NextResponse } from "next/server"
-import { timingSafeEqual } from "crypto"
+import { operatorKeyAuthorized, OPERATOR_KEY_MIN_BYTES } from "@/lib/server/security/operator-key"
 import { settleContentEpoch, settlementEpochFor } from "@/lib/server/ghpv/settle-service"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 function authorized(request: Request): boolean {
-  const expected = process.env.GH_SETTLEMENT_INTERNAL_KEY || ""
-  const provided = request.headers.get("x-gh-settlement-key") || ""
-  if (!expected || expected.length < 16 || !provided) return false
-  const a = Buffer.from(expected)
-  const b = Buffer.from(provided)
-  if (a.length !== b.length) return false
-  return timingSafeEqual(a, b)
+  return operatorKeyAuthorized(request, {
+    headers: ["x-gh-settlement-key"],
+    envNames: ["GH_SETTLEMENT_INTERNAL_KEY"],
+    minBytes: OPERATOR_KEY_MIN_BYTES,
+  })
 }
 
 export async function POST(
@@ -42,6 +41,13 @@ export async function POST(
   const postId = String(id || "").trim()
   if (!postId || postId.length > 128) {
     return NextResponse.json({ ok: false, error: "INVALID_ID" }, { status: 400 })
+  }
+  const rateLimit = await checkDurableRateLimit(`ghpv-settlement:${postId}`, 2, 60_000, { onUnavailable: "deny" })
+  if (!rateLimit.ok) {
+    return NextResponse.json(
+      { ok: false, error: durableRateLimitCode(rateLimit), ghcMutated: false },
+      { status: durableRateLimitStatus(rateLimit), headers: { "Cache-Control": "no-store" } },
+    )
   }
   // Ignore any client body. Epoch is server-derived.
   const result = await settleContentEpoch({

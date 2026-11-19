@@ -12,7 +12,7 @@ const ci = existsSync(ciPath) ? read(ciPath) : ''
 const closure = read('scripts/check-phase10-release-closure.mjs')
 const phasePack = read('scripts/check-phase1-10-upgrade-pack.mjs')
 const truth = read('docs/PROJECT_TRUTH.md')
-const audit = read('docs/UPGRADE-WORKLOG-0.338.101.md')
+const audit = read(`docs/UPGRADE-WORKLOG-${pkg.version}.md`)
 const manifest = read('VERIFIED_MANIFEST.txt')
 const release = read('lib/app-release.ts')
 const ignore = read('.vercelignore').split(/\r?\n/).map((x) => x.trim())

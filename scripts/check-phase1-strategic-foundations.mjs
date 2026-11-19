@@ -24,7 +24,7 @@ const checks = [
   ['Pi and GHC free conversion remains disabled', /conversionEnabled: false/.test(assets) && /PI: \{[\s\S]*?convertibleToGhc: false/.test(assets) && /GHC: \{[\s\S]*?convertibleToPi: false/.test(assets)],
   ['cross-feature reconciliation is explicitly read-only', /read-only/.test(reconcile) && /never invents balances or writes ledgers/i.test(reconcile)],
   ['withdrawal PIN proof is short-lived and HMAC-bound', /createHmac\("sha256"/.test(pin) && /TTL_MS/.test(pin) && /timingSafeEqual/.test(pin)],
-  ['durable activity grants use database RPC rather than process-local state', /ghc_activity_try_grant/.test(durable) && /isDatabaseConfigured/.test(durable)],
+  ['durable activity emissions use atomic database RPC and shared global-demand budget', /ghc_activity_try_emission_v2/.test(durable) && /isDatabaseConfigured/.test(durable) && /expectedBudget/.test(durable)],
   ['all declared domain ownership paths exist in this source tree', mappedPaths.length > 0 && mappedPaths.every((p) => existsSync(join(root, p)))],
   ['migration manifest filenames exactly match current SQL migration tree', migrationFiles.length === manifest.length && migrationFiles.every((x, i) => x === manifest[i])],
   ['existing migration policy register remains present', existsSync(join(root, 'docs/architecture/MIGRATION_READINESS_STATES.md'))],

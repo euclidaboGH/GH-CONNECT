@@ -9,8 +9,8 @@ import {
   jcsDeltaForAlignment,
   MAX_REVIEWER_CONSENSUS_SHARE,
   clamp01to100,
-} from "@/lib/server/ghpv/curation-power"
-import type { CurationChoice, JudgmentMode } from "@/lib/server/ghpv/types"
+} from "./curation-power.ts"
+import type { CurationChoice, JudgmentMode } from "./types.ts"
 
 export type SettlementVote = {
   reviewerId: string
@@ -49,19 +49,64 @@ export type SettlementOutcome = {
   reason: string
 }
 
+/** Exclude every occurrence of a duplicated reviewer identity. */
+export function uniqueReviewerVotes(votes: SettlementVote[]): SettlementVote[] {
+  const counts = new Map<string, number>()
+  for (const vote of votes) {
+    const id = typeof vote.reviewerId === "string" ? vote.reviewerId.trim() : ""
+    if (id) counts.set(id, (counts.get(id) || 0) + 1)
+  }
+  return votes.filter((vote) => {
+    const id = typeof vote.reviewerId === "string" ? vote.reviewerId.trim() : ""
+    return Boolean(id) && counts.get(id) === 1
+      && (vote.choice === "upvote" || vote.choice === "downvote")
+      && Number.isFinite(vote.weight) && vote.weight > 0
+  }).map((vote) => ({ ...vote, reviewerId: vote.reviewerId.trim() }))
+}
+
 /**
- * Normalize weights so no single reviewer exceeds MAX_REVIEWER_CONSENSUS_SHARE of total.
+ * Deterministic water-filling cap. The final normalized share, not merely the
+ * pre-cap raw weight, is bounded. Excess is redistributed proportionally to
+ * uncapped reviewers and the total influence is preserved.
  */
 export function applyAntiWhaleCap(votes: SettlementVote[]): SettlementVote[] {
-  if (votes.length === 0) return []
-  const total = votes.reduce((s, v) => s + Math.max(0, v.weight), 0)
-  if (total <= 0) return votes.map((v) => ({ ...v, weight: 0 }))
-  const cap = total * MAX_REVIEWER_CONSENSUS_SHARE
-  // Cap absolute influence to maxShare of pre-cap pool (anti-whale).
-  return votes.map((v) => ({
-    ...v,
-    weight: Math.min(Math.max(0, v.weight), cap),
-  }))
+  const valid = uniqueReviewerVotes(votes)
+  const count = valid.length
+  if (count === 0) return []
+  const total = valid.reduce((sum, vote) => sum + vote.weight, 0)
+  if (!Number.isFinite(total) || total <= 0) return []
+
+  // A 12% cap is feasible for nine or more independent reviewers. Smaller
+  // panels use 1/N because a fixed 12% cap would make sum preservation impossible.
+  const effectiveCapShare = Math.max(MAX_REVIEWER_CONSENSUS_SHARE, 1 / count)
+  const cap = total * effectiveCapShare
+  const output = new Map<string, number>()
+  let active = [...valid]
+  let remaining = total
+
+  while (active.length > 0) {
+    const activeTotal = active.reduce((sum, vote) => sum + vote.weight, 0)
+    if (activeTotal <= 0 || remaining <= 0) break
+    const over = active.filter((vote) => remaining * (vote.weight / activeTotal) > cap + 1e-12)
+    if (over.length === 0) {
+      for (const vote of active) output.set(vote.reviewerId, remaining * (vote.weight / activeTotal))
+      break
+    }
+    const overIds = new Set(over.map((vote) => vote.reviewerId))
+    for (const vote of over) output.set(vote.reviewerId, cap)
+    remaining = Math.max(0, remaining - cap * over.length)
+    active = active.filter((vote) => !overIds.has(vote.reviewerId))
+  }
+
+  // Correct floating-point residue on the final reviewer without exceeding cap.
+  const result = valid.map((vote) => ({ ...vote, weight: output.get(vote.reviewerId) || 0 }))
+  const sum = result.reduce((value, vote) => value + vote.weight, 0)
+  const residue = total - sum
+  if (Math.abs(residue) > 1e-10 && result.length > 0) {
+    const target = result.find((vote) => vote.weight + residue >= 0 && vote.weight + residue <= cap + 1e-10)
+    if (target) target.weight += residue
+  }
+  return result.filter((vote) => Number.isFinite(vote.weight) && vote.weight > 0)
 }
 
 /**
@@ -70,9 +115,8 @@ export function applyAntiWhaleCap(votes: SettlementVote[]): SettlementVote[] {
 export function computeSettlement(input: SettlementInput): SettlementOutcome {
   const minVoters = input.minVoters ?? 3
   const minConfidence = input.minConfidence ?? 35
-  const capped = applyAntiWhaleCap(
-    input.votes.filter((v) => v.choice === "upvote" || v.choice === "downvote")
-  )
+  const independentVotes = uniqueReviewerVotes(input.votes)
+  const capped = applyAntiWhaleCap(independentVotes)
 
   const independentVoters = new Set(capped.map((v) => v.reviewerId)).size
   let upWeight = 0

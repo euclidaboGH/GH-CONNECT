@@ -1,18 +1,18 @@
 # GreenHaven — Current Project Bundle
 
-**Package:** `gh-connect@0.338.101`  
-**Working increment:** RUN372 — Field Research hard disconnection (RUN371 Pi CDN Sandbox auth fix retained)  
-**Baseline:** user-provided RUN331 archive; RUN332 audit remediation is the immediate parent.  
+**Package:** `gh-connect@0.338.102`  
+**Working increment:** RUN373–RUN375 — Pi auth rejection guidance, API hardening and identity/session ACL proposal (RUN372 Field Research isolation retained)  
+**Baseline:** user-provided `GREENHAVEN-0_338_101-RUN372-FIELD-RESEARCH-DISCONNECTED-2026-11-19.zip`; RUN373–RUN375 are source-only derivatives.  
 **Date:** 2026-11-19  
 **Release status:** **NOT APPROVED** for production.
 
-## RUN372 — Field Research hard disconnection
+## RUN373–RUN374 — Authentication and API hardening
 
-Field Research / Research Studio is temporarily unavailable. The canonical service registry marks it `UNAVAILABLE` with no destination. Edge middleware blocks `/field/**` and `/r/**` with a non-disclosing 404, and blocks `/api/research/**` plus `/api/field/**` with a no-store 503 before route handlers execute. Research is removed from the public-route allowlist and crawler indexing. Its source code, SQL migrations and migration classifications are retained unchanged for a future controlled re-enable. RUN372 targeted checks: 8/8 isolation, 6/6 RUN342 scope, 12/12 public-route boundary, 15/15 ecosystem coverage. The full static suite and Node 24 build/typecheck remain separate gates. No DB write, migration, GitHub push or Vercel deployment occurred.
+Pi Sandbox generic authentication rejections now provide actionable operator checks; post editing and announcement mutations have durable throttles and bounded upstream requests; announcement and GHPV settlement operator secrets use the shared 32-byte constant-time verifier. A separate review-only SQL proposal prepares client SELECT revocation on `gh_pi_identities` and `gh_sessions`, but remains outside canonical migrations pending history reconciliation and approval. Field Research / Research Studio remains temporarily unavailable. The canonical service registry marks it `UNAVAILABLE` with no destination. Edge middleware blocks `/field/**` and `/r/**` with a non-disclosing 404, and blocks `/api/research/**` plus `/api/field/**` with a no-store 503 before route handlers execute. Research is removed from the public-route allowlist and crawler indexing. Its source code, SQL migrations and migration classifications are retained unchanged for a future controlled re-enable. RUN372 targeted checks: 8/8 isolation, 6/6 RUN342 scope, 12/12 public-route boundary, 15/15 ecosystem coverage. The full static suite passes 63/63; Node 24 dependency-backed typecheck/lint/build and live browser/Testnet acceptance remain separate gates. No DB write, migration, GitHub push or Vercel deployment occurred.
 
 ## Delivery identity
 
-The current RUN337 archive is a local source derivative based on the user-provided RUN331 archive, through RUN332, RUN333, RUN335 and RUN336. Its SHA-256 is supplied with the packaged artifact in the delivery message. It has not been pushed to GitHub or deployed to Vercel.
+This package is a local source-only derivative of the user-provided RUN372 archive, through RUN373, RUN374 and RUN375. It has not been pushed to GitHub or deployed to Vercel.
 
 ## RUN333 baseline changes (retained)
 

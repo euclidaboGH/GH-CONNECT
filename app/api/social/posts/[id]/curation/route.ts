@@ -259,7 +259,7 @@ export async function POST(
   ) {
     const authorId = await lookupPostAuthor(postId)
     if (authorId && authorId !== auth.userId) {
-      const amount = Math.min(1, Math.max(0, (Number(rewardPercentage) / 100) * 0.1))
+      const amount = Math.round(Math.min(1, Math.max(0, (Number(rewardPercentage) / 100) * 0.1)) * 10_000) / 10_000
       if (amount > 0) {
         const red = await redistributeCurationReward({
           voterId: auth.userId,

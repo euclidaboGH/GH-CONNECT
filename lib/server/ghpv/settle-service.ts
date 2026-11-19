@@ -40,32 +40,51 @@ export type SettlementSnapshot = {
 }
 
 const MODES = new Set(["factual", "useful", "creative", "opinion", "harm"])
+const SAFE_SETTLEMENT_ID = /^[A-Za-z0-9._:-]{1,128}$/
 
 export function parseSnapshot(data: unknown): SettlementSnapshot | { ok: false; error: string } {
-  const row = data as Record<string, unknown> | null
-  if (!row || row.ok === false) {
-    return { ok: false, error: String(row?.error || "SNAPSHOT_FAILED") }
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    return { ok: false, error: "SNAPSHOT_INVALID" }
   }
-  const modeRaw = String(row.judgmentMode || "useful")
-  const mode = (MODES.has(modeRaw) ? modeRaw : "useful") as JudgmentMode
-  const votesRaw = Array.isArray(row.votes) ? row.votes : []
+  const row = data as Record<string, unknown>
+  if (row.ok === false) return { ok: false, error: String(row.error || "SNAPSHOT_FAILED") }
+
+  const contentId = typeof row.contentId === "string" ? row.contentId.trim() : ""
+  const authorId = typeof row.authorId === "string" ? row.authorId.trim() : ""
+  if (!SAFE_SETTLEMENT_ID.test(contentId) || !SAFE_SETTLEMENT_ID.test(authorId)) {
+    return { ok: false, error: "SNAPSHOT_IDENTITY_INVALID" }
+  }
+  if (typeof row.judgmentMode !== "string" || !MODES.has(row.judgmentMode)) {
+    return { ok: false, error: "SNAPSHOT_JUDGMENT_MODE_INVALID" }
+  }
+  if (row.settlementStatus != null && !["open", "settled", "unresolved"].includes(String(row.settlementStatus))) {
+    return { ok: false, error: "SNAPSHOT_STATUS_INVALID" }
+  }
+  if (!Array.isArray(row.votes)) return { ok: false, error: "SNAPSHOT_VOTES_INVALID" }
+  if (row.votes.length > 500) return { ok: false, error: "SNAPSHOT_VOTE_LIMIT_EXCEEDED" }
+
   const votes: SettlementSnapshotVote[] = []
-  for (const item of votesRaw) {
-    const v = item as Record<string, unknown>
-    const choice = String(v.choice || "")
-    const reviewerId = String(v.reviewerId || "").trim()
-    const weight = Number(v.weight)
-    if (!reviewerId) continue
-    if (choice !== "upvote" && choice !== "downvote") continue
-    if (!Number.isFinite(weight) || weight < 0) continue
+  for (const item of row.votes) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      return { ok: false, error: "INVALID_SNAPSHOT_VOTE" }
+    }
+    const vote = item as Record<string, unknown>
+    const reviewerId = typeof vote.reviewerId === "string" ? vote.reviewerId.trim() : ""
+    const choice = vote.choice
+    const weight = vote.weight
+    if (!SAFE_SETTLEMENT_ID.test(reviewerId)
+      || (choice !== "upvote" && choice !== "downvote")
+      || typeof weight !== "number" || !Number.isFinite(weight) || weight <= 0 || weight > 25) {
+      return { ok: false, error: "INVALID_SNAPSHOT_VOTE" }
+    }
     votes.push({ reviewerId, choice, weight })
   }
   return {
     ok: true,
-    contentId: String(row.contentId || ""),
-    authorId: String(row.authorId || ""),
-    judgmentMode: mode,
-    settlementStatus: String(row.settlementStatus || "open"),
+    contentId,
+    authorId,
+    judgmentMode: row.judgmentMode as JudgmentMode,
+    settlementStatus: typeof row.settlementStatus === "string" ? row.settlementStatus : "open",
     votes,
   }
 }
@@ -80,45 +99,61 @@ export function settlementEpochFor(date = new Date()): string {
   return `${utc.getUTCFullYear()}-W${String(week).padStart(2, "0")}`
 }
 
-async function loadCalibrationMap(reviewerIds: string[]): Promise<Map<string, CuratorCalibrationState>> {
+async function loadCalibrationMap(reviewerIds: string[]): Promise<
+  | { ok: true; map: Map<string, CuratorCalibrationState> }
+  | { ok: false; error: string }
+> {
   const map = new Map<string, CuratorCalibrationState>()
+  const uniqueIds = [...new Set(reviewerIds.map((id) => id.trim()).filter(Boolean))]
+  if (uniqueIds.length === 0) return { ok: true, map }
   const env = readGhcServerEnv()
-  if (!env.supabaseUrl || !env.supabaseServiceRoleKey || reviewerIds.length === 0) return map
-  const list = reviewerIds.map((id) => `"${id.replace(/"/g, "")}"`).join(",")
-  const url =
-    `gh_curator_calibration` +
-    `?user_id=in.(${encodeURIComponent(list)})` +
-    `&select=user_id,jcs,integrity_score,correct_count,incorrect_count,unresolved_count,curation_power`
-  try {
-    const res = await fetch(url, {
-      headers: {
-        apikey: env.supabaseServiceRoleKey,
-        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-        Accept: "application/json",
-      },
-      cache: "no-store",
-    })
-    if (!res.ok) return map
-    const rows = (await res.json()) as Array<Record<string, unknown>>
-    for (const row of rows) {
-      const userId = String(row.user_id || "")
-      if (!userId) continue
-      const base = defaultCalibration(userId)
-      map.set(userId, {
-        ...base,
-        jcs: Number(row.jcs ?? base.jcs),
-        integrityScore: Number(row.integrity_score ?? base.integrityScore),
-        correctCount: Number(row.correct_count ?? 0),
-        incorrectCount: Number(row.incorrect_count ?? 0),
-        unresolvedCount: Number(row.unresolved_count ?? 0),
-        sampleCount: Number(row.correct_count ?? 0) + Number(row.incorrect_count ?? 0),
-        curationPower: Number(row.curation_power ?? base.curationPower),
-      })
-    }
-  } catch {
-    return map
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
+    return { ok: false, error: "CALIBRATION_STATE_UNAVAILABLE" }
   }
-  return map
+  const list = uniqueIds.map((id) => `"${id.replace(/"/g, "")}"`).join(",")
+  const path = `gh_curator_calibration?user_id=in.(${encodeURIComponent(list)})&select=user_id,jcs,integrity_score,correct_count,incorrect_count,unresolved_count,curation_power`
+  const result = await supabaseRest<Array<Record<string, unknown>>>(path, {
+    timeoutMs: 8_000,
+    maxResponseBytes: 512 * 1024,
+  })
+  if (!result.ok || !Array.isArray(result.data)) {
+    return { ok: false, error: "CALIBRATION_STATE_UNAVAILABLE" }
+  }
+  const seenCalibrationIds = new Set<string>()
+  for (const row of result.data) {
+    const userId = typeof row.user_id === "string" ? row.user_id.trim() : ""
+    if (!SAFE_SETTLEMENT_ID.test(userId) || !uniqueIds.includes(userId) || seenCalibrationIds.has(userId)) {
+      return { ok: false, error: "CALIBRATION_STATE_INVALID" }
+    }
+    seenCalibrationIds.add(userId)
+    const numeric = [row.jcs, row.integrity_score, row.correct_count, row.incorrect_count, row.unresolved_count, row.curation_power]
+    if (numeric.some((value) => typeof value !== "number" || !Number.isFinite(value))) {
+      return { ok: false, error: "CALIBRATION_STATE_INVALID" }
+    }
+    const base = defaultCalibration(userId)
+    const jcs = Number(row.jcs ?? base.jcs)
+    const integrityScore = Number(row.integrity_score ?? base.integrityScore)
+    const correctCount = Number(row.correct_count ?? 0)
+    const incorrectCount = Number(row.incorrect_count ?? 0)
+    const unresolvedCount = Number(row.unresolved_count ?? 0)
+    const curationPower = Number(row.curation_power ?? base.curationPower)
+    if (jcs < 0 || jcs > 100 || integrityScore < 0 || integrityScore > 100
+      || [correctCount, incorrectCount, unresolvedCount].some((n) => !Number.isSafeInteger(n) || n < 0)
+      || curationPower < 0 || curationPower > 25) {
+      return { ok: false, error: "CALIBRATION_STATE_INVALID" }
+    }
+    map.set(userId, {
+      ...base, jcs, integrityScore, correctCount, incorrectCount, unresolvedCount,
+      sampleCount: correctCount + incorrectCount, curationPower,
+    })
+  }
+  // New reviewers may legitimately have no calibration row. Existing rows may
+  // never be replaced by defaults after a failed or malformed read. The current
+  // deployed table does not persist dayKey/dayDeltaAbs; defaultCalibration's
+  // daily JCS counter is therefore NOT a durable cross-settlement cap. RUN376
+  // records this as a separate migration/operator gate; do not claim otherwise.
+  for (const id of uniqueIds) if (!map.has(id)) map.set(id, defaultCalibration(id))
+  return { ok: true, map }
 }
 
 export async function settleContentEpoch(input: {
@@ -137,6 +172,9 @@ export async function settleContentEpoch(input: {
 }> {
   const contentId = String(input.contentId || "").trim()
   if (!contentId) return { ok: false, error: "CONTENT_REQUIRED", ghcMutated: false }
+  if (process.env.GH_GHPV_CALIBRATION_DAILY_CAP_V2_ENABLED !== "true") {
+    return { ok: false, error: "CALIBRATION_DAILY_CAP_MIGRATION_REQUIRED", ghcMutated: false }
+  }
 
   const snapRes = await socialRpc("gh_ghpv_settlement_snapshot", { p_content_id: contentId })
   const snapshot = parseSnapshot(snapRes.data)
@@ -144,7 +182,13 @@ export async function settleContentEpoch(input: {
     return { ok: false, error: snapshot.error, ghcMutated: false }
   }
 
+  if (snapshot.contentId !== contentId) {
+    return { ok: false, error: "SNAPSHOT_CONTENT_MISMATCH", ghcMutated: false }
+  }
   const epoch = input.settlementEpoch || settlementEpochFor()
+  if (!/^\d{4}-W\d{2}$/.test(epoch)) {
+    return { ok: false, error: "INVALID_SETTLEMENT_EPOCH", ghcMutated: false }
+  }
   const outcome = computeSettlement({
     contentId,
     settlementEpoch: epoch,
@@ -155,8 +199,11 @@ export async function settleContentEpoch(input: {
   const selfOrAlt = new Set<string>()
   if (snapshot.authorId) selfOrAlt.add(snapshot.authorId)
 
-  const prior = await loadCalibrationMap(snapshot.votes.map((v) => v.reviewerId))
-  const next = applySettlementToCalibrations(outcome, prior, { selfOrAltIds: selfOrAlt })
+  const calibration = await loadCalibrationMap(snapshot.votes.map((v) => v.reviewerId))
+  if (!calibration.ok) {
+    return { ok: false, error: calibration.error, ghcMutated: false }
+  }
+  const next = applySettlementToCalibrations(outcome, calibration.map, { selfOrAltIds: selfOrAlt })
 
   const effects = outcome.reviewerEffects.map((eff) => {
     const state = next.get(eff.reviewerId) || defaultCalibration(eff.reviewerId)

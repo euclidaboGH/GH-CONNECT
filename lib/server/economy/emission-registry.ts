@@ -24,7 +24,7 @@ export type EmissionChannelId =
 export type EmissionChannelSpec = {
   id: EmissionChannelId
   /** Current Phase 6 policy: enabled issuance, disabled issuance, or redistribution. */
-  policyStatus: "enabled_issuance" | "disabled_issuance" | "redistribution"
+  policyStatus: "enabled_issuance" | "operator_gated_issuance" | "disabled_issuance" | "redistribution"
   description: string
   /** Server path that authorizes the credit */
   serverPath: string
@@ -42,9 +42,9 @@ export type EmissionChannelSpec = {
 export const EMISSION_CHANNELS: readonly EmissionChannelSpec[] = [
   {
     id: "daily_claim",
-    policyStatus: "enabled_issuance",
-    description: "7-day progressive daily claim",
-    serverPath: "POST /api/economy/rewards/daily → ghc_execute_daily_claim_v12",
+    policyStatus: "operator_gated_issuance",
+    description: "7-day progressive daily claim; requires GHC_ATOMIC_GLOBAL_EMISSION_V13_ENABLED=true and the shared atomic global-demand allocator",
+    serverPath: "POST /api/economy/rewards/daily → ghc_execute_daily_claim_v13 (operator gated)",
     usesNetworkScarcity: true,
     usesActivityCaps: false,
     usesClaimReserveSplit: true,

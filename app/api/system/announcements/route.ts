@@ -4,6 +4,8 @@ import { readGhcServerEnv } from "@/lib/server/economy/env"
 
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { isSafeInternalNotificationPath } from "@/lib/notification-targets"
+import { operatorKeyAuthorized, OPERATOR_KEY_MIN_BYTES } from "@/lib/server/security/operator-key"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -41,6 +43,7 @@ async function dbRequest(path: string, init: RequestInit = {}) {
       ...(init.headers || {}),
     },
     cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
   })
   const raw = await response.text()
   const data = raw ? JSON.parse(raw) : null
@@ -89,9 +92,14 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   // Publishing requires a separate high-entropy server secret. Ordinary app sessions
   // can only mark their own announcement as read; they cannot broadcast notices.
-  const suppliedAdminKey = request.headers.get("x-greenhaven-announcement-key")
-  const configuredAdminKey = process.env.GREENHAVEN_ANNOUNCEMENT_ADMIN_KEY
-  if (configuredAdminKey && suppliedAdminKey && suppliedAdminKey === configuredAdminKey) {
+  const canPublish = operatorKeyAuthorized(request, {
+    headers: ["x-greenhaven-announcement-key"],
+    envNames: ["GREENHAVEN_ANNOUNCEMENT_ADMIN_KEY"],
+    minBytes: OPERATOR_KEY_MIN_BYTES,
+  })
+  if (canPublish) {
+    const publishRate = await checkDurableRateLimit("announcement-publish:operator", 10, 60_000, { onUnavailable: "deny" })
+    if (!publishRate.ok) return NextResponse.json({ ok: false, error: durableRateLimitCode(publishRate), retryAfterSec: publishRate.retryAfterSec }, { status: durableRateLimitStatus(publishRate), headers: { "Cache-Control": "no-store", "Retry-After": String(publishRate.retryAfterSec) } })
     const parsedBody = await readBoundedJson(request, 12 * 1024)
     if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400 })
     const body = parsedBody.value as Partial<Announcement> & { created_by?: string }
@@ -127,6 +135,8 @@ export async function POST(request: Request) {
 
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+  const readRate = await checkDurableRateLimit(`announcement-read:${auth.userId}`, 60, 60_000, { onUnavailable: "deny" })
+  if (!readRate.ok) return NextResponse.json({ ok: false, error: durableRateLimitCode(readRate), retryAfterSec: readRate.retryAfterSec }, { status: durableRateLimitStatus(readRate), headers: { "Cache-Control": "no-store", "Retry-After": String(readRate.retryAfterSec) } })
   const parsedBody = await readBoundedJson(request, 64 * 1024)
   if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400 })
   const body = parsedBody.value as { action?: string; ids?: unknown[]; id?: string; markAll?: boolean }

@@ -11,7 +11,7 @@ import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { computeDailyClaim, lagosDayKey, lagosYesterdayKey, loadClaimStreakState } from "@/lib/server/economy/claim-engine"
 import { ECONOMY_VERSION } from "@/lib/server/economy/economic-config"
-import { rpcExecuteDailyClaimV12 } from "@/lib/server/economy/db"
+import { rpcExecuteDailyClaimV13 } from "@/lib/server/economy/db"
 import {
   allowMemoryServer,
   isDatabaseConfigured,
@@ -22,12 +22,6 @@ import {
   executeAuthoritativePending,
   getProcessGhcStore,
 } from "@/lib/server/economy/store"
-import {
-  applyNetworkEmission,
-  getCurrentDayDemand,
-  getEligibleEconomicUsers,
-  recordEmissionDemand,
-} from "@/lib/server/economy/network-scarcity"
 import { recordTelemetryEvent } from "@/lib/server/economy/telemetry"
 import { recordGhcNotification } from "@/lib/server/economy/notifications"
 import {
@@ -89,6 +83,10 @@ export async function POST(request: Request) {
     return jsonErr(durableRateLimitCode(rl), rl.unavailable ? "Reward protection is temporarily unavailable" : `Too many claim attempts; retry in ${rl.retryAfterSec}s`, durableRateLimitStatus(rl))
   }
 
+  if (isDatabaseConfigured() && process.env.GHC_ATOMIC_GLOBAL_EMISSION_V13_ENABLED !== "true") {
+    return jsonErr("ATOMIC_EMISSION_MIGRATION_REQUIRED", "Daily GHC claims are temporarily paused until the shared atomic emission allocator is reconciled and enabled.", 503)
+  }
+
   const parsedBody = await readBoundedJson(request, 4096)
   if (!parsedBody.ok) {
     return jsonErr(
@@ -129,7 +127,7 @@ export async function POST(request: Request) {
         economicVersion: ECONOMY_VERSION,
       })
     }
-    const status = computed.error === "SERVER_UNAVAILABLE" ? 503 : 400
+    const status = computed.error === "SERVER_UNAVAILABLE" || computed.error === "ECONOMIC_POPULATION_UNAVAILABLE" ? 503 : 400
     return jsonErr(computed.error, computed.error, status)
   }
 
@@ -140,18 +138,13 @@ export async function POST(request: Request) {
 
   // ---------- Production / DB: single transactional RPC ----------
   if (isDatabaseConfigured()) {
-    const atomic = await rpcExecuteDailyClaimV12({
+    const atomic = await rpcExecuteDailyClaimV13({
       userId: auth.userId,
       claimDayKey: computed.dayKey,
       cycleDay: computed.cycleDay,
       completedCycles: completedCyclesForCommit,
       idempotencyKey: computed.idempotencyKey,
-      grossAmount: computed.grossGhc,
-      userAmount: computed.userGhc,
-      reserveAmount: computed.reserveGhc,
-      baseGross: computed.baseGross,
-      m: computed.m,
-      g: computed.g,
+      eligibleEconomicUsers: computed.eligibleEconomicUsers || 0,
       economicVersion: ECONOMY_VERSION,
       missedDayReset: computed.missedDayReset,
     })
@@ -160,6 +153,9 @@ export async function POST(request: Request) {
       const status =
         atomic.error === "SERVER_UNAVAILABLE" ? 503 : 400
       return jsonErr(atomic.error || "CLAIM_FAILED", atomic.error || "CLAIM_FAILED", status)
+    }
+    if (atomic.alreadyClaimed) {
+      return jsonOk({ ok: true, amount: 0, alreadyClaimed: true, idempotent: true, pending: true, cycleDay: atomic.cycleDay ?? computed.cycleDay, dayKey: computed.dayKey, economicVersion: ECONOMY_VERSION })
     }
     // Fail closed if the database has not yet been upgraded to the 48-hour
     // pending-claim contract. Never tell users a posted legacy credit is locked.
@@ -171,33 +167,34 @@ export async function POST(request: Request) {
       )
     }
 
-    recordEmissionDemand(computed.dayKey, computed.baseGross * computed.m)
-    recordTelemetryEvent({
-      type: "daily_claim",
-      dayKey: computed.dayKey,
-      eligibleEconomicUsers: getEligibleEconomicUsers(),
-      m: atomic.m ?? computed.m,
-      g: atomic.g ?? computed.g,
-      demand: getCurrentDayDemand(computed.dayKey),
-      budget: applyNetworkEmission(0, getEligibleEconomicUsers(), 0).budget,
-      userIssuance: atomic.userAmount ?? computed.userGhc,
-      reserveIssuance: atomic.reserveAmount ?? computed.reserveGhc,
-      grossIssuance: atomic.grossAmount ?? computed.grossGhc,
-      sinks: 0,
-      netCirculatingChange: 0, // pending entitlements do not enter circulating/spendable balance yet
-      meta: {
-        userId: auth.userId,
-        cycleDay: atomic.cycleDay ?? computed.cycleDay,
-        alreadyClaimed: atomic.alreadyClaimed,
-        pending: true,
-        redeemableAt: atomic.redeemableAt,
-        transactionId: atomic.transactionId,
-        economicVersion: ECONOMY_VERSION,
-        streakBackend: "database_atomic",
-      },
-    })
+    if (!atomic.alreadyClaimed) {
+      recordTelemetryEvent({
+        type: "daily_claim",
+        dayKey: computed.dayKey,
+        eligibleEconomicUsers: computed.eligibleEconomicUsers || 0,
+        m: atomic.m!,
+        g: atomic.g!,
+        demand: atomic.globalDemandAfter!,
+        budget: atomic.globalBudget!,
+        userIssuance: atomic.userAmount!,
+        reserveIssuance: atomic.reserveAmount!,
+        grossIssuance: atomic.grossAmount!,
+        sinks: 0,
+        netCirculatingChange: 0,
+        meta: {
+          userId: auth.userId,
+          cycleDay: atomic.cycleDay ?? computed.cycleDay,
+          alreadyClaimed: false,
+          pending: true,
+          redeemableAt: atomic.redeemableAt,
+          transactionId: atomic.transactionId,
+          economicVersion: ECONOMY_VERSION,
+          streakBackend: "database_atomic_v13",
+        },
+      })
+    }
 
-    const authoritativeClaimAmount = atomic.userAmount ?? computed.userGhc
+    const authoritativeClaimAmount = atomic.userAmount ?? 0
     // Durable notification uses the exact server-authoritative claim amount.
     // Never derive reward details from a client preview or wallet balance.
     if (!atomic.alreadyClaimed && Number.isFinite(authoritativeClaimAmount) && authoritativeClaimAmount > 0) {
@@ -214,7 +211,7 @@ export async function POST(request: Request) {
           pending: true,
           redeemableAt: atomic.redeemableAt,
           cycleDay: atomic.cycleDay ?? computed.cycleDay,
-          claimKind: "DAILY_CLAIM_V12",
+          claimKind: "DAILY_CLAIM_V13",
           rewardId: atomic.referenceId ?? computed.idempotencyKey,
           claimId: atomic.referenceId ?? computed.idempotencyKey,
           referenceId: atomic.referenceId ?? computed.idempotencyKey,
@@ -235,9 +232,9 @@ export async function POST(request: Request) {
       amount: authoritativeClaimAmount,
       pending: true,
       redeemableAt: atomic.redeemableAt,
-      reserve: atomic.reserveAmount ?? computed.reserveGhc,
-      gross: atomic.grossAmount ?? computed.grossGhc,
-      baseGross: atomic.baseGross ?? computed.baseGross,
+      reserve: atomic.reserveAmount,
+      gross: atomic.grossAmount,
+      baseGross: atomic.baseGross,
       cycleDay: atomic.cycleDay ?? computed.cycleDay,
       completedCycles: atomic.completedCycles ?? completedCyclesForCommit,
       m: atomic.m ?? computed.m,
@@ -250,7 +247,7 @@ export async function POST(request: Request) {
       referenceId: atomic.referenceId ?? computed.idempotencyKey,
       alreadyClaimed: Boolean(atomic.alreadyClaimed),
       idempotent: Boolean(atomic.idempotent || atomic.alreadyClaimed),
-      streakBackend: "database_atomic",
+      streakBackend: "database_atomic_v13",
     })
   }
 

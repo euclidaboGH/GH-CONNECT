@@ -1,20 +1,40 @@
-# Current project truth — 0.338.101 RUN372 (2026-11-19)
+# Current project truth — 0.338.103 RUN376–RUN377 (2026-11-19)
 
-- Latest local source derivative: `GREENHAVEN-0_338_101-RUN372-FIELD-RESEARCH-DISCONNECTED-2026-11-19.zip`, based on the user-designated RUN371 archive.
-- Field Research / Research Studio is deliberately disconnected: registry status `UNAVAILABLE`, no service destination, `/field/**` and `/r/**` return 404 at middleware, and `/api/research/**` plus `/api/field/**` return 503 before route handlers execute.
-- Research source, SQL migrations, migration classifications and historical records are retained. No database, storage, user-submission or migration state was changed.
-- The public-route policy no longer treats research share links or the field desk as public routes; crawler policy disallows `/field` and `/r`.
-- Targeted verification: RUN372 isolation 8/8; RUN342 auth-scope isolation 6/6; public-route boundary 12/12; ecosystem registry 42 services / 10 categories / 11 Active / 30 Coming Soon / 1 Unavailable; ecosystem coverage 15/15.
-- Full static suite, Node 24 dependency-backed typecheck/lint/build, and live browser/Testnet acceptance remain separate gates. Retained Research/Field source is still present in the repository and may still be parsed by general build tooling.
-- No GitHub push, Vercel deployment, Supabase mutation, migration application or Mainnet action occurred. Production remains NOT APPROVED.
+- Latest local source derivative: `0.338.103` RUN376, based on the verified local 0.338.102 RUN373–RUN375 derivative of the user-designated 0.338.101 archive.
+- GHPV excludes duplicate reviewer identities, applies a true final-share anti-whale cap, validates settlement snapshots and stops when durable calibration state cannot be read. The daily JCS cap is not durable in the current schema; automated settlement remains gated pending a per-reviewer-serialized SQL fix.
+- Daily claims and activity emissions use a shared atomic database allocator proposal behind `GHC_ATOMIC_GLOBAL_EMISSION_V13_ENABLED=false`; no process-memory fallback is permitted in database-backed deployments. The proposal is review-only and unapplied.
+- GHC-to-Pi withdrawals require explicit Testnet-only gates, request-bound PIN proof and an exact platform-API-verified Pi wallet destination. Requests remain manual operator settlements, not automatic Pi transfers, and remain disabled by default.
+- Balance-funded curation redistribution uses deployed four-decimal precision and an idempotency-safe v2 wrapper proposal behind `GHC_CURATION_REDISTRIBUTE_V2_ENABLED=false`; no new GHC issuance is introduced.
+- Votes, GHPV judgments and curation do not mint GHC. Generic reward evaluation remains daily-claim-only.
+- Field Research / Research Studio remains deliberately disconnected as documented by RUN372. Pi Sandbox authentication still has an external Portal/Sandbox authorization rejection.
+- RUN376 focused source/runtime checks pass 43/43 and 5/5; the network/DB-independent consolidated verifier passes 63/63. The full npm aggregate exceeded the available command time budget after completing that verifier; remaining registered checks were run individually. RUN377 records the failed 53-second dependency audit (22 vulnerable package entries, including one critical) and the remote pretypecheck-order failure, now fixed locally but awaiting a new CI run. Node 24.15.x dependency-backed typecheck/lint/build, dependency patching, PostgreSQL rehearsal, migration-history reconciliation, live Testnet concurrency and authenticated browser/device acceptance remain separate gates. The separate Pi earnings A2U and linked-wallet consent boundary is documented in `docs/PHASE4_PI_WITHDRAW_KYC.md`.
+- No live Supabase mutation, migration application, ledger mutation, payout, payment, GitHub push, Vercel deployment or Mainnet action occurred. Production remains NOT APPROVED.
 
-**Current source version:** `0.338.101`  
-**Package identity:** `gh-connect@0.338.101`  
-**Latest user-provided source archive:** `GREENHAVEN-0_338_100-RUN371-PI-CDN-SANDBOX-AUTH-FIX-2026-11-19.zip`  
-**Current local derivative:** RUN372 Field Research hard disconnection; not pushed or deployed.  
+**Current source version:** `0.338.103`  
+**Package identity:** `gh-connect@0.338.103`  
+**Latest user-provided archive:** `GREENHAVEN-0_338_101-RUN372-FIELD-RESEARCH-DISCONNECTED-2026-11-19.zip`  
+**Current local derivative:** RUN373–RUN377; source-only, not pushed or deployed.
 **Current status:** **NOT APPROVED** for production.
 
 ---
+
+## Previous project truth — 0.338.102 RUN373–RUN374
+
+### Historical project truth — 0.338.102 RUN373–RUN374 (2026-11-19)
+
+- Latest local source derivative: `0.338.102` RUN373–RUN374, based on the user-designated `GREENHAVEN-0_338_101-RUN372-FIELD-RESEARCH-DISCONNECTED-2026-11-19.zip`.
+- Field Research / Research Studio is deliberately disconnected: registry status `UNAVAILABLE`, no service destination, `/field/**` and `/r/**` return 404 at middleware, and `/api/research/**` plus `/api/field/**` return 503 before route handlers execute.
+- Research source, SQL migrations, migration classifications and historical records are retained. No database, storage, user-submission or migration state was changed.
+- The public-route policy no longer treats research share links or the field desk as public routes; crawler policy disallows `/field` and `/r`.
+- Targeted verification: RUN373 Pi auth UX 8/8; RUN374 API hardening 14/14; RUN372 isolation 8/8; RUN342 auth-scope isolation 6/6; public-route boundary 12/12; ecosystem registry 42 services / 10 categories / 11 Active / 30 Coming Soon / 1 Unavailable; ecosystem coverage 15/15.
+- Pi SDK authorization still fails before token delivery; Pi Portal/Sandbox authorization checks remain external operator actions. Full static suite, Node 24 dependency-backed typecheck/lint/build, and live browser/Testnet acceptance remain separate gates. Retained Research/Field source is still present in the repository and may still be parsed by general build tooling.
+- No GitHub push, Vercel deployment, Supabase mutation, migration application or Mainnet action occurred. Production remains NOT APPROVED.
+
+**Current source version:** `0.338.102`  
+**Package identity:** `gh-connect@0.338.102`  
+**Latest user-provided source archive:** `GREENHAVEN-0_338_101-RUN372-FIELD-RESEARCH-DISCONNECTED-2026-11-19.zip`  
+**Current local derivative:** RUN373–RUN374 authentication/API hardening with RUN375 review-only ACL proposal; not pushed or deployed.  
+**Current status:** **NOT APPROVED** for production.
 
 ## Historical RUN364 and earlier records
 

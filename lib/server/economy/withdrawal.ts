@@ -19,7 +19,16 @@ export const WITHDRAWAL_MIN_PI = 100 as const
  * Missing environment configuration always fails closed.
  */
 export function areGhcPiWithdrawalsEnabled(): boolean {
+  const rate = Number(process.env.GHC_WITHDRAWAL_GHC_PER_PI || "")
   return process.env.GHC_WITHDRAWALS_ENABLED === "true"
+    && process.env.GHC_WITHDRAWALS_TESTNET_ONLY === "true"
+    && process.env.PI_NETWORK === "testnet"
+    && process.env.VERCEL_ENV !== "production"
+    && Number.isFinite(rate) && rate > 0
+}
+
+export function isValidPiWithdrawalAddress(value: unknown): value is string {
+  return typeof value === "string" && /^G[A-Z2-7]{55}$/.test(value.trim().toUpperCase())
 }
 
 export type WithdrawalStatus =
@@ -147,13 +156,25 @@ export async function createWithdrawalRequest(input: {
   piWalletAddress: string
   idempotencyKey: string
 }): Promise<{ ok: boolean; request?: WithdrawalRequest; error?: string; duplicate?: boolean }> {
+  const userId = String(input.userId || "").trim()
+  const wallet = String(input.piWalletAddress || "").trim().toUpperCase()
+  const idempotencyKey = String(input.idempotencyKey || "").trim()
+  const amount = Number(input.ghcAmount)
+  if (!userId || userId.length > 160 || !isValidPiWithdrawalAddress(wallet)
+    || !/^[A-Za-z0-9._:-]{8,160}$/.test(idempotencyKey)
+    || !Number.isFinite(amount) || amount <= 0
+    || Math.abs(amount * 1e8 - Math.round(amount * 1e8)) > 1e-6
+    || !areGhcPiWithdrawalsEnabled()) {
+    return { ok: false, error: "INVALID_WITHDRAWAL_INPUT" }
+  }
+  if (amount + 1e-9 < minGhcForWithdrawal()) return { ok: false, error: "BELOW_MINIMUM" }
   const ghcPerPi = getApprovedGhcPerPi()
   const result = await rpcJson("ghc_withdrawal_create", {
-    p_user_id: input.userId,
-    p_ghc_amount: input.ghcAmount,
+    p_user_id: userId,
+    p_ghc_amount: amount,
     p_ghc_per_pi: ghcPerPi,
-    p_pi_wallet: input.piWalletAddress,
-    p_idempotency_key: input.idempotencyKey,
+    p_pi_wallet: wallet,
+    p_idempotency_key: idempotencyKey,
     p_min_pi: WITHDRAWAL_MIN_PI,
   })
   if (!result.ok) {
