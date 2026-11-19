@@ -1,6 +1,6 @@
-# Current project truth — 0.338.106 configuration and component review (2026-11-19)
+# Current project truth — 0.338.108 release-gate manifest repair (2026-11-19)
 
-- Current local derivative: `0.338.106`, based on the 0.338.105 RUN378–RUN380 archive; source-only, not pushed or deployed.
+- Current local derivative: `0.338.108`, based on the 0.338.105 RUN378–RUN380 archive; source-only, not pushed or deployed.
 - Phase 3 route inventory: 280 route files, 368 method exports, 186/186 mutating routes assigned one domain owner, 45/45 routes without the ordinary session-auth marker explicitly classified, and 176/186 mutating routes using durable rate limits. Two local-only limits are telemetry ingestion; eight exceptions are documented.
 - RUN378 API route/access audit: 10/10. RUN379 timeout/error/rate-limit hardening: 21/21. RUN380 separate Testnet/Mainnet readiness: 12/12. All 379 registered static commands passed across three bounded batches; a single `npm run verify:static` exceeded the execution window. All 280 API route files and the Phase 4/5 Playwright specs pass syntax parsing; dependency-backed typecheck has not been run.
 - 18 route modules gained 10-second abort deadlines; all 90 direct route fetch call sites across 55 files were checked for AbortSignal deadlines. Report intake now fails closed instead of acknowledging an undurable report; upstream failures return stable retryable 503 errors.
@@ -10,8 +10,8 @@
 - Configuration review: removed the accidental top-level `verify:static` field from package metadata, retained the actual npm script, expanded `.env.example` with documented optional variables and fail-closed E2E/operator defaults, and added release-hygiene checks. Component review found no evidence-supported behavior patch; no component behavior changed.
 - No live Supabase schema/ACL/migration change, ledger mutation, payment, payout, Pi transfer, GitHub push, Vercel deployment or Mainnet action occurred. Production remains NOT APPROVED.
 
-**Current source version:** `0.338.106`  
-**Package identity:** `gh-connect@0.338.106`  
+**Current source version:** `0.338.108`  
+**Package identity:** `gh-connect@0.338.108`  
 **Baseline archive:** `GREENHAVEN-0_338_103-RUN376-RUN377-PHASE3-ECONOMY-CURATION-WITHDRAWAL-2026-11-19.zip`  
 **Current derivative:** RUN378–RUN380 + Phase 5 runtime browser harness, plus configuration/package/component review; source-only, not pushed or deployed.  
 **Current status:** **NOT APPROVED** for Testnet release certification or Production.

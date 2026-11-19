@@ -64,7 +64,7 @@ add('dynamic Supabase RPC names are passed as expressions, not literal interpola
 // 19–21: Vercel must receive source, not local build/dependency/secrets.
 add('Vercel excludes node_modules from upload', excluded('node_modules') && excluded('node_modules/**'))
 add('Vercel excludes Next and Vercel local caches', excluded('.next') && excluded('.next/**') && excluded('.vercel') && excluded('.vercel/**'))
-add('Vercel excludes local environment files and archives', excluded('.env*') && excluded('*.zip') && excluded('*.tar.gz'))
+add('Vercel excludes explicit local secret files and archives without filtering .env.example', ['.env', '.env.local', '.env.development.local', '.env.test.local', '.env.production.local'].every(excluded) && !excluded('.env*') && excluded('*.zip') && excluded('*.tar.gz'))
 
 for (const c of checks) console.log(`${c.ok ? 'PASS' : 'FAIL'} Run #300: ${c.name}`)
 const failed = checks.filter((x) => !x.ok)

@@ -55,7 +55,7 @@ const checks = [
   ["daily claim carries reward and transaction identifiers", daily.includes("rewardId:") && daily.includes("transactionId: atomic.transactionId")],
   ["GHC transfers carry transaction deep links", transfers.includes("deepLink: { open: \"wallet\"") && transfers.includes("transactionId: input.referenceId")],
   ["prebuild wallet copy assertion matches current UX", walletGate.includes("held for incomplete withdrawal requests")],
-  ["Vercel upload excludes heavyweight caches and local secrets", vercelIgnore.includes(".next/**") && vercelIgnore.includes("node_modules/**") && vercelIgnore.includes(".env*")],
+  ["Vercel upload excludes heavyweight caches and local secrets", vercelIgnore.includes(".next/**") && vercelIgnore.includes("node_modules/**") && vercelIgnore.split(/\r?\n/).map((line) => line.trim()).includes(".env.local") && !vercelIgnore.split(/\r?\n/).map((line) => line.trim()).includes(".env*")],
   ["Vercel cache cleanup remains root-contained", vercelHygiene.includes("cache cleanup is contained inside project root") && vercelHygiene.includes("isSymbolicLink()")],
   ["new notification tests are registered in prebuild", pkg.scripts["prebuild:checks"].includes("check-run289-notification-deep-links.mjs") && pkg.scripts["prebuild:checks"].includes("test-run289-notification-deep-links.mjs")],
   ["new notification tests are registered in pretypecheck", pkg.scripts.pretypecheck.includes("check-run289-notification-deep-links.mjs")],

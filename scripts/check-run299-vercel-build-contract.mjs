@@ -32,7 +32,7 @@ const checks = [
   ['Vercel build clears unsupported npm cache-dir config', /unset npm_config_cache_dir NPM_CONFIG_CACHE_DIR/.test(vercel.buildCommand || '')],
   ['Vercel upload excludes dependency trees', ignore.includes('node_modules') && ignore.includes('node_modules/**')],
   ['Vercel upload excludes generated build/cache trees', ['.next', '.next/**', '.cache', '.cache/**', '.turbo', '.turbo/**'].every((item) => ignore.includes(item))],
-  ['Vercel upload excludes archives and local env files', ignore.includes('*.zip') && ignore.includes('.env*') && ignore.includes('!.env.example')],
+  ['Vercel upload excludes archives and explicit local secret files while retaining .env.example', ignore.includes('*.zip') && ['.env', '.env.local', '.env.development.local', '.env.test.local', '.env.production.local'].every((name) => ignore.includes(name)) && !ignore.includes('.env*') && !ignore.includes('!.env.example')],
   ['Build cache cleanup rejects paths outside project root and symlinks', prep.includes('target.startsWith(`${root}${sep}`)') && prep.includes('isSymbolicLink()')],
   ['Release gate remains explicitly not approved', truth.includes('Current status:** **NOT APPROVED**') || truth.includes('Production status:** NOT APPROVED') || truth.includes('Production remains **NOT APPROVED**')],
 ]

@@ -1,15 +1,15 @@
 # GreenHaven
 
-**Current source version:** `0.338.106` (configuration, package metadata and component security review; based on 0.338.105)
+**Current source version:** `0.338.108` (release-gate manifest repair; based on 0.338.106)
 
 Production status: **NOT APPROVED** — supported Node 24.15.0 dependency-backed typecheck/lint/build, browser/device, live database/provider and operator acceptance remain outstanding.
 
 This repository is the canonical GreenHaven source tree. See `docs/SOURCE_OF_TRUTH.md` and `docs/CURRENT_BUILD_CONTEXT.md` before implementation or release work.
 
 
-## Latest maintenance — 0.338.106 / configuration and component review
+## Latest maintenance — 0.338.108 / release-gate manifest repair
 
-Reviews the repository and release configuration, middleware, Next.js/Vercel settings, TypeScript and PostCSS configuration, package metadata/lockfile, environment template, component security patterns and generated migration manifest. Removes an accidental top-level `verify:static` package field while preserving the actual npm script, synchronizes the patch release identity, and documents optional public/server-only runtime variables with fail-closed test and operator defaults. No component behavior, financial authority, database schema, migration state, payment, payout or deployment behavior was changed. Focused source gates and manifest synchronization pass; supported Node 24.15.0 install/typecheck/lint/build and live browser acceptance remain outstanding. Production remains NOT APPROVED.
+Repairs release-gate wiring by explicitly ordering release hygiene, project truth, Phase 10 closure, Phase 10 platform acceptance and Phase 24 migration review at the start of both prebuild and static verification. Hardens the closure checker to parse each suite and report manifest errors separately. Restores the safe `.env.example` file in the distributable source archive. No financial authority, database schema, migration state, payment, payout or deployment behavior was changed. The five required gates pass; the complete 408-check prebuild, supported Node 24.15.0 dependency-backed typecheck/lint/build and live browser acceptance remain outstanding. Production remains NOT APPROVED.
 
 ## Previous maintenance — 0.338.105 / RUN378–RUN380 API reliability, Phase 4–6 and runtime acceptance
 

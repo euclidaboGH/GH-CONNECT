@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 const ignore = readFileSync(".vercelignore", "utf8")
 const config = JSON.parse(readFileSync("vercel.json", "utf8"))
 const prepare = readFileSync("scripts/prepare-vercel-build.mjs", "utf8")
-const required = [".git", "node_modules", ".next", ".cache", ".turbo", ".vercel", "coverage", "playwright-report", "test-results", "*.tsbuildinfo", "*.zip", ".env*"]
+const required = [".git", "node_modules", ".next", ".cache", ".turbo", ".vercel", "coverage", "playwright-report", "test-results", "*.tsbuildinfo", "*.zip", ".env", ".env.local", ".env.development.local", ".env.test.local", ".env.production.local"]
 let failed = 0
 for (const pattern of required) {
   const ok = ignore.split(/\r?\n/).some((line) => line.trim() === pattern)

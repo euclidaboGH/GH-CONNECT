@@ -7,6 +7,7 @@ const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf
 const runtime = read('lib/pi-runtime.ts')
 const context = read('contexts/pi-auth-context.tsx')
 const authButton = read('components/auth/sign-in-with-pi-button.tsx')
+const vercel = read('vercel.json')
 const checks = [
   ['Sandbox recognition remains restricted to Testnet mode', /if \(typeof window === "undefined" \|\| !getPiSandbox\(\)\) return false/.test(runtime)],
   ['Sandbox recognition still requires an iframe', /let framed = false[\s\S]*?return framed && trustedSandboxReferrer/.test(runtime)],
@@ -17,6 +18,8 @@ const checks = [
   ['Sandbox bootstrap preinitializes SDK before the explicit sign-in tap', /isPiSandboxFrame\(\)[\s\S]{0,260}ensurePiInitialized\(\)/.test(context)],
   ['Sign-in button routes recognized Pi iframe to provider retry', /isPiBrowserRuntime\(\) \|\| isPiSandboxFrame\(\)/.test(authButton) && /await reinitialize\(\)/.test(authButton)],
   ['Official auth remains username-only and server verification is preserved', /piAuthenticateOfficial\(\["username"\]\)/.test(context) && /verifyPiAccessTokenDetailed\(accessToken\)/.test(read('app/api/auth/pi/route.ts'))],
+  ['CSP permits the configured Pi SDKLite script CDNs', /script-src[^;]*https:\/\/pi-apps\.github\.io/.test(vercel) && /script-src[^;]*https:\/\/cdn\.jsdelivr\.net/.test(vercel) && /script-src[^;]*https:\/\/sdk\.minepi\.com/.test(vercel)],
+  ['CSP permits the configured Pi plugin backend API origin', /connect-src[^;]*https:\/\/backend\.appstudio-u7cm9zhmha0ruwv8\.piappengine\.com/.test(vercel)],
 ]
 let failed = 0
 for (const [label, ok] of checks) {

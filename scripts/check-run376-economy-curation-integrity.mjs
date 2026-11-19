@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /** RUN376: source contracts for economy, curation, and withdrawal safety improvements. */
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8')
 const settlement = read('lib/server/ghpv/settlement.ts')
 const settleService = read('lib/server/ghpv/settle-service.ts')
@@ -15,6 +15,10 @@ const dailyRoute = read('app/api/economy/rewards/daily/route.ts')
 const emissionProposal = read('supabase/proposals/20261119_atomic_global_emission_allocator_v13_review.sql')
 const emissionRegistry = read('lib/server/economy/emission-registry.ts')
 const finalAudit = read('lib/server/release/final-audit.ts')
+if (!existsSync(new URL('../.env.example', import.meta.url))) {
+  console.error('[RUN376] Required .env.example is missing from the deployment source. Check .vercelignore and ensure the safe template is committed.');
+  process.exit(1);
+}
 const envExample = read('.env.example')
 const envDocs = read('docs/ENVIRONMENT-VARIABLES.md')
 const withdrawal = read('lib/server/economy/withdrawal.ts')

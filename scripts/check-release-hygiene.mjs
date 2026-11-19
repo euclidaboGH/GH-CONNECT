@@ -30,6 +30,10 @@ const vercelConfig = readJson('vercel.json')
 check('Vercel install clears obsolete npm cache-dir environment aliases', /unset npm_config_cache_dir NPM_CONFIG_CACHE_DIR/.test(vercelConfig.installCommand ?? ''))
 check('Vercel build clears oversized stale Webpack cache before compilation', /prepare-vercel-build\.mjs/.test(vercelConfig.buildCommand ?? '') && existsSync(join(root, 'scripts/prepare-vercel-build.mjs')))
 check('native dependency install scripts are approved only at reviewed lockfile versions', pkg.allowScripts?.['sodium-native@3.4.1'] === true && pkg.allowScripts?.['unrs-resolver@1.12.2'] === true && Object.keys(pkg.allowScripts || {}).length === 2)
+check('Vercel keeps .env.example in deployment source while excluding local secret env files', (() => {
+  const lines = readFileSync(join(root, '.vercelignore'), 'utf8').split(/\r?\n/).map((line) => line.trim())
+  return ['.env', '.env.local', '.env.development.local', '.env.test.local', '.env.production.local'].every((name) => lines.includes(name)) && !lines.includes('.env*') && existsSync(join(root, '.env.example'))
+})())
 check('safe .env.example exists', existsSync(join(root, '.env.example')))
 if (existsSync(join(root, '.env.example'))) {
   const envExample = readFileSync(join(root, '.env.example'), 'utf8')
