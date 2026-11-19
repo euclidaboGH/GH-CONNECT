@@ -71,6 +71,7 @@ export async function POST(req: Request) {
           p_to_user_id: safeTarget,
           p_signal: signal,
         }),
+        signal: AbortSignal.timeout(10_000),
       }
     )
 
@@ -100,7 +101,7 @@ export async function POST(req: Request) {
           Accept: "application/json",
         },
         cache: "no-store",
-      })
+      signal: AbortSignal.timeout(10_000)})
       if (peer.ok) {
         const rows = (await peer.json().catch(() => [])) as unknown[]
         mutual = Array.isArray(rows) && rows.length > 0
@@ -143,10 +144,10 @@ export async function POST(req: Request) {
       mutual,
       row,
     })
-  } catch (e) {
+  } catch {
     return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : "signal_failed" },
-      { status: 500 }
+      { ok: false, error: "MATCH_SIGNAL_UNAVAILABLE", retryable: true },
+      { status: 503, headers: { "Cache-Control": "no-store" } }
     )
   }
 }

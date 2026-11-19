@@ -1,13 +1,19 @@
-# GreenHaven source authority — 0.338.103 RUN376–RUN377 (2026-11-19)
+# GreenHaven source authority — 0.338.105 RUN378–RUN380 + Phase 5 runtime harness Phase 3 API hardening and Phase 4–6 readiness (2026-11-19)
 
-**Current source version:** `0.338.103`
-**Package identity:** `gh-connect@0.338.103`  
-**Baseline:** local 0.338.102 RUN373–RUN375 derivative of the user-designated 0.338.101 archive.  
-**Current working derivative:** RUN376 economy, curation, withdrawal and pipeline hardening; not pushed or deployed.
+**Current source version:** `0.338.105`
+**Package identity:** `gh-connect@0.338.105`  
+**Baseline:** reopened 0.338.103 RUN376–RUN377 project archive.  
+**Current working derivative:** RUN378–RUN380 API route/reliability hardening, Phase 4–6 readiness and gated Phase 5 browser runtime harness; local source only, not pushed or deployed.
 
-RUN376 hardens GHPV reviewer independence and final normalized anti-whale influence, makes calibration and population failures fail closed; the existing DB schema does not persist the daily JCS cap, so automated settlement remains gated pending a per-reviewer-serialized SQL fix, moves daily-claim and activity emission toward a single serialized global-demand allocator, strengthens Testnet-only GHC-to-Pi withdrawal authorization, and makes balance-funded curation redistribution idempotent. Both SQL proposals remain review-only and unapplied. The emission feature is disabled by default and database-backed issuance returns unavailable until the proposal is reconciled, rehearsed and explicitly enabled. The curation v2 wrapper is separately disabled until applied and verified. Withdrawals are disabled by default and remain manual operator settlements. Votes and curation do not mint GHC.
+RUN378 inventories 280 API route files, 368 HTTP method exports and 186 mutating routes; all mutating routes have one declared domain owner. All 45 routes without the ordinary session-auth marker have explicit access classifications. 176/186 mutating routes use durable rate limits; two analytics/vitals endpoints remain local per-IP telemetry throttles and eight endpoints are documented worker/disabled/cron/signed-callback/retired/middleware-blocked exceptions. 90 direct fetch calls across 55 route files were checked for AbortSignal deadlines.
 
-RUN376 focused source/runtime checks pass 42/42 and 4/4; the network/DB-independent consolidated verifier passes 63/63. The full npm aggregate exceeds the available command time budget after completing the consolidated verifier; remaining registered checks were run individually and passed. RUN377 records the failed 53-second dependency audit (22 vulnerable package entries, including one critical) and the remote pretypecheck-order failure; the latter is fixed locally but awaits a new CI run. Node 24.15.x dependency-backed typecheck/lint/build, dependency patching, live PostgreSQL rehearsal, migration reconciliation, Pi Portal/Sandbox authorization and multi-account Testnet/device acceptance remain outstanding. The separate Pi earnings A2U lane and its linked-wallet consent/settlement gates are documented in `docs/PHASE4_PI_WITHDRAW_KYC.md`; this is not the RUN376 GHC-to-Pi manual request lane. No live Supabase mutation, migration, ledger mutation, payout, payment, GitHub push, Vercel deployment or Mainnet action occurred. Production remains NOT APPROVED.
+RUN379 adds explicit 10-second deadlines to 18 previously unbounded route modules, stable no-store 503 handling for upstream failures, fail-closed durable report intake, and durable rate limits for high-risk economy, curation, withdrawal, media, social, notification, session, WebAuthn and operator actions. RUN378 passes 10/10; RUN379 passes 21/21; RUN380 separate Testnet/Mainnet readiness gate passes 12/12. All 379 commands registered in `npm run verify:static` passed across three bounded batches; the monolithic command exceeded the 120-second execution window. All 280 API route files and both Phase 4/Phase 5 Playwright specs pass TypeScript syntax parsing only.
+
+Phase 4 adds guarded authenticated Testnet API/browser acceptance across Feed, Discover, Profiles, Messages, Communities, Marketplace, Wallet, Rewards, Membership, Notifications and Media. It has not been run against real Testnet sessions. Phase 5 source-level performance/security checks pass in targeted groups, but no measured browser/device/load/heap/database benchmark is claimed; the new Phase 5 Playwright suite is opt-in and unexecuted. Separate Phase 6 Testnet and Mainnet reports are both NOT CERTIFIED / NOT APPROVED.
+
+The RUN376 atomic global-emission and curation idempotency SQL proposals remain review-only and unapplied; GHPV daily calibration-cap durability is still outstanding; GHC-to-Pi withdrawals remain disabled/manual. Votes and curation do not mint GHC. The prior dependency audit remains unresolved at 22 findings (1 critical, 13 high, 6 moderate, 2 low). Node 24.15.0 dependency-backed typecheck/lint/build and a fresh CI run are still required. Pi Sandbox authorization, real multi-account Testnet acceptance and migration/ACL rehearsal remain operator gates.
+
+No Supabase schema/ACL/migration mutation, ledger mutation, payment, payout, Pi transfer, GitHub push, Vercel deployment or Mainnet action occurred. Production remains NOT APPROVED.
 
 ---
 

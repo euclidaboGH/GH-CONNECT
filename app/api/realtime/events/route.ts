@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -8,6 +9,8 @@ export const dynamic = "force-dynamic"
 export async function GET(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+  const readLimit = await checkDurableRateLimit(`realtime-events-read:${auth.userId}`, 120, 60_000, { onUnavailable: "deny" })
+  if (!readLimit.ok) return NextResponse.json({ ok: false, error: durableRateLimitCode(readLimit), retryAfterSec: readLimit.retryAfterSec }, { status: durableRateLimitStatus(readLimit), headers: { "Cache-Control": "no-store", "Retry-After": String(readLimit.retryAfterSec) } })
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return NextResponse.json({ ok: false, error: "DB_UNAVAILABLE" }, { status: 503 })
   const url = new URL(request.url)
@@ -20,7 +23,7 @@ export async function GET(request: Request) {
     q.searchParams.set("order", "id.asc")
     q.searchParams.set("limit", String(limit + 1))
     q.searchParams.set("select", "id,event_id,actor_user_id,event_type,aggregate_type,aggregate_id,correlation_id,request_id,payload,created_at,expires_at")
-    const res = await fetch(q.toString(), { headers: { apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}` }, cache: "no-store" })
+    const res = await fetch(q.toString(), { headers: { apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}` }, cache: "no-store" , signal: AbortSignal.timeout(10_000)})
     if (!res.ok) return NextResponse.json({ ok: false, error: `HTTP_${res.status}` }, { status: 503 })
     const rows = (await res.json()) as Array<Record<string, unknown>>
     const hasMore = rows.length > limit

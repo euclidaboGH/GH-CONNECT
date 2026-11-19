@@ -15,6 +15,7 @@ import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { attachLedgerCorrelation, buildCorrelationEnvelope } from "@/lib/server/economy/correlation"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { buildCreatorTipIdempotencyKey } from "@/lib/server/creator/tip-idempotency"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -29,6 +30,8 @@ export async function POST(request: Request) {
   if (!rl.ok) {
     return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429 })
   }
+  const durableLimit = await checkDurableRateLimit(`creator-tip:${auth.userId}`, 15, 60_000, { onUnavailable: "deny" })
+  if (!durableLimit.ok) return NextResponse.json({ ok: false, error: durableRateLimitCode(durableLimit), retryAfterSec: durableLimit.retryAfterSec }, { status: durableRateLimitStatus(durableLimit), headers: { "Cache-Control": "no-store", "Retry-After": String(durableLimit.retryAfterSec) } })
 
   const parsedBody = await readBoundedJson(request, 8 * 1024)
   if (!parsedBody.ok) {
@@ -148,7 +151,7 @@ export async function POST(request: Request) {
       const lookup = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/gh_tip_intent_get_for_tipper`, {
         method: "POST", headers: { "Content-Type": "application/json", apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}` },
         body: JSON.stringify({ p_tipper_id: auth.userId, p_tip_intent_id: result.intentId }), cache: "no-store",
-      })
+      signal: AbortSignal.timeout(10_000)})
       const found = await lookup.json().catch(() => null) as { ok?: boolean; amount?: number; currency?: string; recipientId?: string } | null
       if (!lookup.ok || found?.ok !== true) return NextResponse.json({ ok: false, error: "TIP_INTENT_LOOKUP_UNAVAILABLE", retryable: true }, { status: 503 })
       if (Number(found.amount) !== amount || found.currency !== "GHC" || found.recipientId !== recipientId) {
@@ -157,7 +160,7 @@ export async function POST(request: Request) {
       const settledResponse = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/gh_tip_settle_ghc_atomic`, {
         method: "POST", headers: { "Content-Type": "application/json", apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}` },
         body: JSON.stringify({ p_tip_intent_id: result.intentId, p_tipper_id: auth.userId, p_amount: amount }), cache: "no-store",
-      })
+      signal: AbortSignal.timeout(10_000)})
       const settled = await settledResponse.json().catch(() => null) as { ok?: boolean; error?: string; idempotent?: boolean; settlementId?: string; transferReference?: string; amount?: number; currency?: string; creatorPaid?: boolean } | null
       if (!settledResponse.ok || settled?.ok !== true || settled.currency !== "GHC" || Number(settled.amount) !== amount || settled.creatorPaid !== true) {
         const error = String(settled?.error || "GHC_TIP_SETTLEMENT_UNAVAILABLE")
@@ -190,7 +193,7 @@ export async function POST(request: Request) {
     const lookup = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/gh_tip_intent_get_for_tipper`, {
       method: "POST", headers: { "Content-Type": "application/json", apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}` },
       body: JSON.stringify({ p_tipper_id: auth.userId, p_tip_intent_id: result.intentId }), cache: "no-store",
-    })
+    signal: AbortSignal.timeout(10_000)})
     const found = await lookup.json().catch(() => null) as { ok?: boolean; amount?: number; currency?: string; recipientId?: string; paymentIntentId?: string | null; status?: string } | null
     if (!lookup.ok || found?.ok !== true) return NextResponse.json({ ok: false, error: "TIP_INTENT_LOOKUP_UNAVAILABLE", retryable: true }, { status: 503 })
     if (Number(found.amount) !== amount || found.currency !== "PI" || found.recipientId !== recipientId) return NextResponse.json({ ok: false, error: "TIP_INTENT_PAYLOAD_CONFLICT" }, { status: 409 })
@@ -227,7 +230,7 @@ export async function POST(request: Request) {
     const bind = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/gh_tip_intent_bind_payment_intent`, {
       method: "POST", headers: { "Content-Type": "application/json", apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}` },
       body: JSON.stringify({ p_tipper_id: auth.userId, p_tip_intent_id: result.intentId, p_payment_intent_id: paymentIntent.id }), cache: "no-store",
-    })
+    signal: AbortSignal.timeout(10_000)})
     const bindResult = await bind.json().catch(() => null) as { ok?: boolean; error?: string } | null
     if (!bind.ok || bindResult?.ok !== true) return NextResponse.json({ ok: false, error: bindResult?.error || "TIP_PAYMENT_BIND_FAILED", retryable: true }, { status: 503 })
   } catch {

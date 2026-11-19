@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { assertOperatorKey, callOperationalRpc } from "@/lib/server/marketplace/operational-rpc"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -11,6 +12,9 @@ export async function POST(request: Request) {
   if (!assertOperatorKey(request.headers.get("x-ghc-operator-key"))) {
     return NextResponse.json({ ok: false, error: "OPERATOR_UNAUTHORIZED" }, { status: 401, headers: noStore })
   }
+  const limit = await checkDurableRateLimit("operator-membership-expire", 5, 60_000, { onUnavailable: "deny" })
+  if (!limit.ok) return NextResponse.json({ ok: false, error: durableRateLimitCode(limit), retryAfterSec: limit.retryAfterSec }, { status: durableRateLimitStatus(limit), headers: noStore })
+
   const parsed = await readBoundedJson(request, 4 * 1024)
   if (!parsed.ok) {
     return NextResponse.json({ ok: false, error: parsed.error }, {

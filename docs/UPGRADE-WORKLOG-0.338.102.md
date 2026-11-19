@@ -1,4 +1,4 @@
-> **LEGACY VERIFICATION FIXTURE — NOT CURRENT PRODUCT AUTHORITY.** This worklog records the completed 0.338.102 RUN373–RUN375 release and is retained unchanged as historical evidence. The current source version and follow-on work are recorded in `docs/UPGRADE-WORKLOG-0.338.103.md`.
+> **LEGACY VERIFICATION FIXTURE — NOT CURRENT PRODUCT AUTHORITY.** This worklog records the completed 0.338.102 RUN373–RUN375 release and is retained unchanged as historical evidence. The current source version and follow-on work are recorded in `docs/UPGRADE-WORKLOG-0.338.104.md`.
 
 # Upgrade worklog — 0.338.102 RUN373–RUN374
 

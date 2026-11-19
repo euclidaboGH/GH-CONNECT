@@ -287,7 +287,7 @@ export async function POST(request: Request) {
                   p_product_id: pack.productId,
                   p_intent_id: finalIntent.id,
                 }),
-              }
+              signal: AbortSignal.timeout(10_000)}
             )
             const data = (await res.json().catch(() => null)) as Record<string, unknown> | null
             if (res.ok && data && data.ok !== false) {

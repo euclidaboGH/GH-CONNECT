@@ -9,6 +9,7 @@ import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { createMediaAssetRecord } from "@/lib/server/media/asset-store"
 import { isSafeMediaBucket, mediaCategoryMatches, mediaExtensionMatchesMime, maxMediaBytesForMime, parseOwnedMediaPath, validateMediaMetadata } from "@/lib/server/media/path-policy.mjs"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -28,6 +29,8 @@ export async function POST(request: Request) {
   if (!rl.ok) {
     return jsonNoStore({ ok: false, error: "RATE_LIMITED" }, { status: 429 })
   }
+  const durableLimit = await checkDurableRateLimit(`media-upload-complete:${auth.userId}`, 40, 60_000, { onUnavailable: "deny" })
+  if (!durableLimit.ok) return jsonNoStore({ ok: false, error: durableRateLimitCode(durableLimit), retryAfterSec: durableLimit.retryAfterSec }, { status: durableRateLimitStatus(durableLimit), headers: { "Retry-After": String(durableLimit.retryAfterSec) } })
 
   const env = readGhcServerEnv()
   const storageBucket = String(process.env.GH_MEDIA_BUCKET || "gh-media").trim() || "gh-media"

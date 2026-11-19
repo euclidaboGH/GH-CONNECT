@@ -46,7 +46,7 @@ export async function POST(request: Request, context: { params: Promise<{ reques
     const payoutParams = new URLSearchParams({ id: `eq.${requestId}`, select: "id,seller_id,currency,amount,status,payout_reference", limit: "1" })
     const payoutResponse = await fetch(`${base}/rest/v1/gh_seller_payout_requests?${payoutParams}`, {
       headers: { apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}` }, cache: "no-store",
-    })
+    signal: AbortSignal.timeout(10_000)})
     if (!payoutResponse.ok) return reply({ ok: false, error: "PAYOUT_LOOKUP_UNAVAILABLE" }, 503)
     const payoutRows = await payoutResponse.json() as Array<{ id: string; seller_id: string; currency: string; amount: number; status: string }>
     const payout = Array.isArray(payoutRows) ? payoutRows[0] : undefined
@@ -58,7 +58,7 @@ export async function POST(request: Request, context: { params: Promise<{ reques
     const identityParams = new URLSearchParams({ gh_user_id: `eq.${payout.seller_id}`, select: "pi_app_uid", limit: "1" })
     const identityResponse = await fetch(`${base}/rest/v1/gh_pi_identities?${identityParams}`, {
       headers: { apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}` }, cache: "no-store",
-    })
+    signal: AbortSignal.timeout(10_000)})
     if (!identityResponse.ok) return reply({ ok: false, error: "RECIPIENT_IDENTITY_UNAVAILABLE" }, 503)
     const identities = await identityResponse.json() as Array<{ pi_app_uid: string }>
     const identity = Array.isArray(identities) ? identities[0] : undefined
@@ -84,14 +84,14 @@ export async function POST(request: Request, context: { params: Promise<{ reques
     const recordResponse = await fetch(`${base}/rest/v1/rpc/gh_seller_payout_record_pi_confirmation`, {
       method: "POST", headers: { "Content-Type": "application/json", apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}` },
       body: JSON.stringify({ p_request_id: requestId, p_provider_payment_id: paymentId, p_txid: txid, p_currency: "PI", p_amount: Number(payment.amount), p_provider_status: "developer_completed", p_transaction_verified: true, p_evidence_hash: evidenceHash }), cache: "no-store",
-    })
+    signal: AbortSignal.timeout(10_000)})
     const recorded = await recordResponse.json().catch(() => null) as { ok?: boolean; error?: string; reconciliationId?: string } | null
     if (!recordResponse.ok || recorded?.ok !== true) return reply({ ok: false, error: recorded?.error || "PAYOUT_RECONCILIATION_FAILED" }, 503)
 
     const transitionResponse = await fetch(`${base}/rest/v1/rpc/gh_seller_payout_transition`, {
       method: "POST", headers: { "Content-Type": "application/json", apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}` },
       body: JSON.stringify({ p_request_id: requestId, p_next_status: "paid", p_operator_note: "Pi provider status and recipient/amount/transaction verified by reconciliation adapter", p_payout_reference: paymentId }), cache: "no-store",
-    })
+    signal: AbortSignal.timeout(10_000)})
     const transition = await transitionResponse.json().catch(() => null) as { ok?: boolean; error?: string; status?: string; paid?: boolean } | null
     if (!transitionResponse.ok || transition?.ok !== true || transition.paid !== true) {
       return reply({ ok: false, error: transition?.error || "PAYOUT_STATUS_UPDATE_FAILED", reconciliationRecorded: true, retryable: true }, 503)

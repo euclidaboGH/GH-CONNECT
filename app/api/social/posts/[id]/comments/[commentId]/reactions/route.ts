@@ -9,6 +9,7 @@ import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { socialDbConfigured, socialRpc, socialRest } from "@/lib/server/social/rpc"
 import { nonDurableWriteResponse } from "@/lib/server/production-guard"
 import { canViewSocialPost, commentBelongsToPost } from "@/lib/server/social/post-visibility"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -25,6 +26,8 @@ export async function POST(
   if (!rl.ok) {
     return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429 })
   }
+  const durableLimit = await checkDurableRateLimit(`cmt-react:${auth.userId}`, 60, 60_000, { onUnavailable: "deny" })
+  if (!durableLimit.ok) return NextResponse.json({ ok: false, error: durableRateLimitCode(durableLimit), retryAfterSec: durableLimit.retryAfterSec }, { status: durableRateLimitStatus(durableLimit), headers: { "Cache-Control": "no-store", "Retry-After": String(durableLimit.retryAfterSec) } })
   const { id, commentId } = await ctx.params
   const postId = String(id || "").trim()
   const cId = String(commentId || "").trim()

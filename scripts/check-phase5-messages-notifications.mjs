@@ -35,7 +35,7 @@ test('appendMessage supports clientMessageId idempotency', /clientMessageId/.tes
 test('message route rejects idempotency keys longer than the store’s 80-character contract', /clientMessageId.length > 80/.test(messagesRoute) && /slice\(0, 80\)/.test(store))
 test('unified notification list binds recipient to authenticated server user id parameter', /p_recipient_user_id/.test(unified))
 test('unified mark-read is server-side only for recipient', /gh_notification_inbox_mark_read/.test(unified))
-test('notifications API requires auth and rate-limits mark-read', /AUTH_REQUIRED/.test(notifRoute) && /checkRateLimit/.test(notifRoute))
+test('notifications API requires auth and durable cross-instance rate limits for read and mark-read', /AUTH_REQUIRED/.test(notifRoute) && /checkDurableRateLimit/.test(notifRoute) && /unified-notifications-read/.test(notifRoute) && /unified-notifications-write/.test(notifRoute))
 test('social notifications reject client create', /Clients cannot create social notifications/.test(socialRoute))
 test('message routes use bounded JSON bodies', /readBoundedJson/.test(messagesRoute))
 test('offline message flush removes permanent failures and bounds retries', /RETRY_LIMIT_REACHED|MESSAGE_REJECTED/.test(offline))

@@ -12,6 +12,7 @@ import {
 } from "@/lib/server/payments/a2u-orchestration"
 
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -26,6 +27,8 @@ function authorized(request: Request): boolean {
 
 export async function GET(request: Request) {
   if (!authorized(request)) return reply({ ok: false, error: "FORBIDDEN" }, 403)
+  const limit = await checkDurableRateLimit("a2u-orchestration-read:operator", 30, 60_000, { onUnavailable: "deny" })
+  if (!limit.ok) return reply({ ok: false, error: durableRateLimitCode(limit), retryAfterSec: limit.retryAfterSec }, durableRateLimitStatus(limit))
   const url = new URL(request.url)
   const older = Math.min(24 * 60, Math.max(5, Number(url.searchParams.get("olderThanMinutes") || 30) || 30))
   const [reviews, stuck] = await Promise.all([
@@ -47,6 +50,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   if (!authorized(request)) return reply({ ok: false, error: "FORBIDDEN" }, 403)
+  const limit = await checkDurableRateLimit("a2u-orchestration-write:operator", 10, 60_000, { onUnavailable: "deny" })
+  if (!limit.ok) return reply({ ok: false, error: durableRateLimitCode(limit), retryAfterSec: limit.retryAfterSec }, durableRateLimitStatus(limit))
   const parsedBody = await readBoundedJson(request, 16 * 1024)
   if (!parsedBody.ok) return reply({ ok: false, error: parsedBody.error }, parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400)
   const body = parsedBody.value as { reviewId?: string; status?: string; note?: string }

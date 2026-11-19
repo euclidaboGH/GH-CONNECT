@@ -1,0 +1,281 @@
+route,methods,mutating,session_or_operator_marker,access_class,access_rationale,rate_limit_type,deadline_marker,direct_fetch_calls,idempotency_marker,domain_owner
+/api/account/export,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,1,not-detected,read-only
+/api/account/lifecycle,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,1,present,identity
+/api/admin/a2u-qualification,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,1,not-detected,payments
+/api/admin/creator-rewards/fund,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,1,present,rewards
+/api/admin/creator-rewards/settle,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,1,present,rewards
+/api/admin/marketplace/listing-reports,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,2,present,trustSafety
+/api/admin/revenue-summary,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/admin/treasury/cases,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,walletGhc
+/api/admin/treasury/report,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/admin/treasury/summary,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/ads/verify,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable+local-prefilter,no-direct-fetch,0,present,payments
+/api/analytics/events,POST,true,classified-nonstandard,public-telemetry-ingest,"Anonymous telemetry intake; bounded payload, explicit event allowlist and per-IP process-local abuse throttle. No account or financial authority.",local-only,no-direct-fetch,0,not-detected,notifications
+/api/analytics/vitals,POST,true,classified-nonstandard,public-performance-telemetry,"Anonymous, sampled Web Vitals intake; bounded, privacy-minimized payload and per-IP process-local throttle; collector disabled by default.",local-only,no-direct-fetch,0,not-detected,notifications
+/api/auth/logout,POST,true,classified-nonstandard,cookie-session-revocation,"Idempotent logout reads only the HttpOnly session cookie, validates/revokes that token, and clears the cookie; durable IP throttle.",durable,no-direct-fetch,0,not-detected,identity
+/api/auth/onboarding-complete,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,present,identity
+/api/auth/pi,POST,true,classified-nonstandard,pi-auth-bootstrap,"Pre-session bootstrap requires a bounded Pi access token, verifies it with Pi Platform /v2/me, then resolves/creates the durable mapped identity; durable per-IP rate limit.",durable,no-direct-fetch,0,not-detected,identity
+/api/auth/session,GET,false,classified-nonstandard,cookie-session-introspection,Reads only the HttpOnly session cookie and returns non-secret authentication status; never returns raw session or Pi tokens.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/auth/sessions/[sessionId]/revoke,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable+local-prefilter,no-direct-fetch,0,not-detected,identity
+/api/auth/sessions/revoke-others,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable+local-prefilter,no-direct-fetch,0,not-detected,identity
+/api/auth/sessions,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,local-only,no-direct-fetch,0,not-detected,read-only
+/api/auth/step-up,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable+local-prefilter,no-direct-fetch,0,not-detected,identity
+/api/auth/webauthn/authenticate/options,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable+local-prefilter,no-direct-fetch,0,not-detected,identity
+/api/auth/webauthn/authenticate/verify,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable+local-prefilter,no-direct-fetch,0,not-detected,identity
+/api/auth/webauthn/credentials,"DELETE,GET",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable+local-prefilter,no-direct-fetch,0,not-detected,identity
+/api/auth/webauthn/register/options,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable+local-prefilter,no-direct-fetch,0,not-detected,identity
+/api/auth/webauthn/register/verify,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable+local-prefilter,no-direct-fetch,0,not-detected,identity
+/api/business/monetization,GET,false,classified-nonstandard,public-policy-read,Read-only business offer policy with public cache headers; no private account data or mutation.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/communities/[id]/chat,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,communities
+/api/communities/[id]/join,"DELETE,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,communities
+/api/communities/[id]/members,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,read-only
+/api/communities/[id]/platform,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,communities
+/api/communities/[id]/posts,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/communities/[id]/requests,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,communities
+/api/communities/[id]/roles,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,communities
+/api/communities/create-fee,GET,false,classified-nonstandard,public-fee-quote,Read-only server-authoritative fee quote; does not create a community or debit funds.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/communities,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,communities
+/api/connections/accept,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,1,not-detected,feed
+/api/connections/decline,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,1,not-detected,feed
+/api/connections/request,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,3,not-detected,feed
+/api/economy/account,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,walletGhc
+/api/economy/catalog,GET,false,classified-nonstandard,public-economy-catalog,Read-only public catalog; spend execution remains authenticated and server-authoritative on separate endpoints.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/economy/earnings/adapters,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,walletPiEarnings
+/api/economy/earnings/charity,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,walletPiEarnings
+/api/economy/earnings/platform,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/economy/earnings/quote,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,walletPiEarnings
+/api/economy/earnings/registration-bonus,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,present,walletPiEarnings
+/api/economy/earnings,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,read-only
+/api/economy/earnings/withdrawable,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,read-only
+/api/economy/earnings/withdrawals/cancel,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,walletPiEarnings
+/api/economy/earnings/withdrawals/execute,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,1,not-detected,walletPiEarnings
+/api/economy/earnings/withdrawals/process,POST,true,classified-nonstandard,delegated-session-worker,"Disabled by default; server injects executor key and delegates to execute worker, which independently enforces session, request ownership, consent, Testnet, lease and idempotency.",none-or-exempt,no-direct-fetch,0,present,walletPiEarnings
+/api/economy/earnings/withdrawals,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,present,walletPiEarnings
+/api/economy/health,GET,false,classified-nonstandard,public-health-read,"Infrastructure-only health status; does not expose user balances, credentials or payout secrets.",none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/economy/ledger/credit,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,no-direct-fetch,0,not-detected,walletGhc
+/api/economy/ledger/spend,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,1,present,walletGhc
+/api/economy/maintenance/release-stale-holds,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,present,1,not-detected,walletGhc
+/api/economy/missions/progress,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,rewards
+/api/economy/notifications/[id]/read,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,notifications
+/api/economy/notifications/read-all,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,notifications
+/api/economy/notifications,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/economy/notifications/unread-count,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/economy/packs/intent,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable+local-prefilter,no-direct-fetch,0,present,walletGhc
+/api/economy/pi-acquisition-policy,GET,false,classified-nonstandard,public-policy-read,Read-only public Pi acquisition policy; no purchase or wallet mutation.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/economy/policy,GET,false,classified-nonstandard,public-policy-read,Read-only public economy policy; no private user state or mutation.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/economy/public-id/me,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,identity
+/api/economy/public-id/resolve,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/economy/purchase-ghc,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,1,present,walletGhc
+/api/economy/rewards/claim,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,rewards
+/api/economy/rewards/claim-matured,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,present,rewards
+/api/economy/rewards/daily,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,present,rewards
+/api/economy/rewards/evaluate,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,rewards
+/api/economy/rewards/pi-cashback/claim,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,2,present,rewards
+/api/economy/rewards/pi-cashback/reconcile,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/economy/rewards/pi-cashback,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,present,2,not-detected,read-only
+/api/economy/scale,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/economy/supply,GET,false,classified-nonstandard,public-aggregate-economy-read,Returns aggregate population and explicitly labelled process-local telemetry; it does not claim telemetry is a global ledger total.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/economy/transfer-requests/[requestId]/accept,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,walletGhc
+/api/economy/transfer-requests/[requestId]/cancel,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,walletGhc
+/api/economy/transfer-requests/[requestId]/decline,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,walletGhc
+/api/economy/transfer-requests,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,present,walletGhc
+/api/economy/transfers/[referenceId],GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/economy/transfers,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,present,walletGhc
+/api/economy/utility,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable+local-prefilter,no-direct-fetch,0,present,walletGhc
+/api/economy/wallet/[userId],GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,read-only
+/api/economy/wallet/cross-reconcile,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,read-only
+/api/economy/wallet/summary,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,read-only
+/api/economy/withdrawals/operator,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,walletGhc
+/api/economy/withdrawals,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,present,walletGhc
+/api/ecosystem/charity/summary,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,read-only
+/api/ecosystem/events,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,read-only
+/api/engagement/pioneer-activity,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable+local-prefilter,no-direct-fetch,0,not-detected,rewards
+/api/field/admin/evidence,"GET,PATCH",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,fieldOperations
+/api/field/admin/reports/[id]/evidence/[evidenceId]/content,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,1,not-detected,read-only
+/api/field/admin/reports/[id]/evidence,"GET,PATCH,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,no-direct-fetch,0,not-detected,fieldOperations
+/api/field/admin/reports,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/field/report,POST,true,classified-nonstandard,middleware-blocked,RUN372 middleware intercepts /api/field/** before handler execution and returns no-store 503; service source is retained but unavailable.,durable,no-direct-fetch,0,not-detected,fieldOperations
+/api/field/reports/[id]/evidence/complete,POST,true,classified-nonstandard,middleware-blocked,RUN372 middleware intercepts /api/field/** before handler execution and returns no-store 503; service source is retained but unavailable.,durable,no-direct-fetch,0,not-detected,fieldOperations
+/api/field/reports/[id]/evidence/intent,POST,true,classified-nonstandard,middleware-blocked,RUN372 middleware intercepts /api/field/** before handler execution and returns no-store 503; service source is retained but unavailable.,durable,no-direct-fetch,0,not-detected,fieldOperations
+/api/field/session,"DELETE,GET",true,classified-nonstandard,middleware-blocked,RUN372 middleware intercepts /api/field/** before handler execution and returns no-store 503; service source is retained but unavailable.,none-or-exempt,no-direct-fetch,0,not-detected,identity
+/api/field/surveys,GET,false,classified-nonstandard,middleware-blocked,RUN372 middleware intercepts /api/field/** before handler execution and returns no-store 503; service source is retained but unavailable.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/field/unlock,POST,true,classified-nonstandard,middleware-blocked,RUN372 middleware intercepts /api/field/** before handler execution and returns no-store 503; service source is retained but unavailable.,durable,no-direct-fetch,0,not-detected,fieldOperations
+/api/governance/moderation-log,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,trustSafety
+/api/governance/reports,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,trustSafety
+/api/health/live,GET,false,classified-nonstandard,public-liveness-probe,Minimal liveness response with no private diagnostics or mutation.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/health/media,GET,false,classified-nonstandard,delegated-health-handler,Re-exports the media health handler; the target handler applies its own authentication and response policy.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/health,GET,false,classified-nonstandard,public-redacted-health,Health diagnostics redact detailed operational fields unless the shared operator diagnostics verifier authorizes them.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/health/withdrawals,GET,false,classified-nonstandard,public-redacted-health,Read-only infrastructure status; detailed payout gate diagnostics are restricted by the shared operator diagnostics verifier.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/identity/me,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/identity/pin-recovery,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,identity
+/api/identity/wallet-authorization,"DELETE,GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,identity
+/api/identity/withdrawal-pin,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,present,identity
+/api/internal/evidence/scan-queue,GET,false,classified-nonstandard,scanner-bearer-secret,"Requires a configured 32-byte scanner secret and constant-time bearer comparison before returning signed, short-lived evidence links.",none-or-exempt,present,1,not-detected,read-only
+/api/internal/evidence/scan-result,POST,true,classified-nonstandard,scanner-hmac-callback,Internal scanner callback authenticates the signed callback payload and binds the result to the stored evidence digest; not a browser endpoint.,none-or-exempt,no-direct-fetch,0,not-detected,media
+/api/marketplace/addresses,"DELETE,GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,1,not-detected,marketplace
+/api/marketplace/listing-fee,GET,false,classified-nonstandard,public-fee-quote,Read-only server-authoritative listing fee quote; does not create a listing or charge a seller.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/marketplace/listings/[listingId]/report,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,1,not-detected,marketplace
+/api/marketplace/listings,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,marketplace
+/api/marketplace/orders/[orderId]/commerce,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,marketplace
+/api/marketplace/orders/[orderId]/conversation,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,marketplace
+/api/marketplace/orders/[orderId]/pay,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,1,present,marketplace
+/api/marketplace/orders/[orderId],GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/marketplace/orders/[orderId]/timeline,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/marketplace/orders/[orderId]/transition,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,marketplace
+/api/marketplace/orders,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,present,marketplace
+/api/marketplace/payouts/[requestId]/execute-bank,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,1,not-detected,marketplace
+/api/marketplace/payouts/[requestId]/reconcile,POST,true,classified-nonstandard,operator-key-protected,"Requires the shared operator-key verifier, minimum key length and durable rate limit; verifies Pi provider recipient, amount, direction, network and transaction before recording reconciliation.",durable,present,4,present,marketplace
+/api/marketplace/payouts/[requestId]/reconcile-bank,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,2,not-detected,marketplace
+/api/marketplace/payouts/[requestId]/reconcile-ghc,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,1,not-detected,marketplace
+/api/marketplace/payouts/[requestId]/resolve-bank-exception,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,1,not-detected,marketplace
+/api/marketplace/payouts/[requestId]/transition,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,1,not-detected,marketplace
+/api/marketplace/payouts/[requestId]/transition-bank,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,1,not-detected,marketplace
+/api/marketplace/payouts/bank-account/resolve,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,marketplace
+/api/marketplace/payouts/bank-beneficiaries,"DELETE,GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,3,not-detected,marketplace
+/api/marketplace/payouts/bank-requests,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,2,present,marketplace
+/api/marketplace/payouts/banks,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,read-only
+/api/marketplace/payouts,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,2,present,marketplace
+/api/marketplace/saves,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,1,not-detected,marketplace
+/api/matching/inbox,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,read-only
+/api/matching/signal,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,2,not-detected,feed
+/api/media/[id]/content,GET,false,classified-nonstandard,viewer-authorized-media-proxy,"Media ID alone is insufficient; proxy forwards only the caller's auth context to the configured trusted app origin, and the signed-url handler rechecks current viewer access.",none-or-exempt,present,1,not-detected,read-only
+/api/media/[id]/signed-url,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,4,not-detected,read-only
+/api/media/direct-upload-complete,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable+local-prefilter,present,3,present,media
+/api/media/direct-upload-intent,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,2,not-detected,media
+/api/media/health,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,present,2,not-detected,read-only
+/api/media,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,2,not-detected,media
+/api/membership/activate,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,1,present,membership
+/api/membership/lifecycle,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,read-only
+/api/membership/reconcile,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,membership
+/api/membership/status,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,read-only
+/api/messaging/calls/[callId]/signals,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,messaging
+/api/messaging/calls/[callId]/transition,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,messaging
+/api/messaging/calls/config,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,read-only
+/api/messaging/calls/intent,POST,true,classified-nonstandard,retired-endpoint,Retired calling intent endpoint returns a non-mutating gone/unavailable response; no call session or entitlement is created.,none-or-exempt,no-direct-fetch,0,not-detected,messaging
+/api/messaging/calls,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,messaging
+/api/messaging/conversations/[conversationId]/contacts,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,present,messaging
+/api/messaging/conversations/[conversationId]/ensure-member,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,present,messaging
+/api/messaging/conversations/[conversationId]/messages,"DELETE,GET,PATCH,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,present,messaging
+/api/messaging/conversations/[conversationId]/prefs,"GET,PATCH",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,messaging
+/api/messaging/conversations/[conversationId]/presence,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,messaging
+/api/messaging/conversations/[conversationId]/read,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,messaging
+/api/messaging/conversations/[conversationId]/search,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,read-only
+/api/messaging/conversations/group,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,present,messaging
+/api/messaging/conversations,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,messaging
+/api/messaging/group-invites/[inviteId],PATCH,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,present,messaging
+/api/messaging/group-invites,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,read-only
+/api/messaging/preferences,"GET,PATCH",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,messaging
+/api/messaging/premium,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,present,messaging
+/api/messaging/presence,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,messaging
+/api/notifications/preferences,"GET,PATCH",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable+local-prefilter,no-direct-fetch,0,not-detected,notifications
+/api/notifications/push/config,GET,false,classified-nonstandard,public-client-configuration,"Returns only public Web Push capability/configuration, including the public VAPID key; no private push secret is exposed.",none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/notifications/push/subscriptions,"DELETE,GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable+local-prefilter,no-direct-fetch,0,not-detected,notifications
+/api/notifications,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,notifications
+/api/operator/claim-readiness-report,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/operator/operational/disputes,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,present,marketplace
+/api/operator/operational/membership-expire,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,membership
+/api/operator/operational/membership-renew,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,membership
+/api/operator/operational/payout-corrections,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,present,walletPiEarnings
+/api/operator/operational/refunds,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,present,payments
+/api/operator/pi-listing-readiness,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/payments/a2u/complete,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,3,present,payments
+/api/payments/a2u/create,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,3,present,payments
+/api/payments/a2u/orchestration,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,payments
+/api/payments/approve,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,present,payments
+/api/payments/complete,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,1,present,payments
+/api/payments/fulfill,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,1,present,payments
+/api/payments/health,GET,false,classified-nonstandard,public-redacted-health,"Read-only payment infrastructure status; does not create, complete or settle a payment.",none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/payments/incomplete,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,present,payments
+/api/payments/intents/[intentId]/cancel,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,present,payments
+/api/payments/intents/[intentId]/recover,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,payments
+/api/payments/intents/[intentId],GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/payments/intents/[intentId]/timeline,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/payments/intents,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,present,payments
+/api/payments/orders,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,present,payments
+/api/payments/reconciliation,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,read-only
+/api/payments/recovery/status,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/payments/utility-status,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/pi/platform-capabilities,GET,false,classified-nonstandard,public-platform-capabilities,Read-only Pi platform capability metadata; no credentials or user identity are returned.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/pi/staking,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/profile/achievements,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,present,rewards
+/api/profile/me,"GET,PATCH",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable+local-prefilter,no-direct-fetch,0,not-detected,identity
+/api/public/compliance-posture,GET,false,classified-nonstandard,public-compliance-read,Read-only compliance posture summary; no private user data or mutation.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/public/portal-links,GET,false,classified-nonstandard,public-portal-configuration,Returns public Pi Developer Portal configuration URLs and guidance; no secret values.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/realtime/events,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,1,not-detected,read-only
+/api/referral/attribute,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,present,rewards
+/api/referral/code,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/referral/status,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/release/beta-readiness,GET,false,classified-nonstandard,public-redacted-readiness,Returns only coarse readiness status to anonymous callers; detailed report requires operator diagnostics authorization.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/release/final-audit,GET,false,classified-nonstandard,public-redacted-readiness,Returns only coarse release-audit status to anonymous callers; detailed report requires operator diagnostics authorization.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/release/readiness,GET,false,classified-nonstandard,public-release-policy,Read-only static release policy with public cache; does not reveal credentials or perform a release action.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/reports,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,1,not-detected,trustSafety
+/api/research/elections/assigned,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,read-only
+/api/research/elections/assignments/[assignmentId],PATCH,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,present,research
+/api/research/evidence/[evidenceId]/content,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,1,not-detected,read-only
+/api/research/projects/[id]/elections/[contestId]/candidates,"GET,PATCH,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,research
+/api/research/projects/[id]/elections/[contestId]/reconciliation,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,read-only
+/api/research/projects/[id]/elections/[contestId]/tallies,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,0,present,research
+/api/research/projects/[id]/elections/agents,"GET,PATCH,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,research
+/api/research/projects/[id]/elections,"GET,PATCH,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,research
+/api/research/projects/[id]/evidence,"GET,PATCH,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,0,not-detected,research
+/api/research/projects/[id]/exams,"GET,PATCH",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,research
+/api/research/projects/[id]/members/[memberId],PATCH,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,research
+/api/research/projects/[id]/members,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,research
+/api/research/projects/[id]/responses,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,read-only
+/api/research/projects/[id],PATCH,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,research
+/api/research/projects,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,0,not-detected,research
+/api/research/public/[slug]/evidence/complete,POST,true,classified-nonstandard,middleware-blocked,RUN372 middleware intercepts /api/research/** before handler execution and returns no-store 503; public research routes are suspended.,durable,no-direct-fetch,0,not-detected,research
+/api/research/public/[slug]/evidence/intent,POST,true,classified-nonstandard,middleware-blocked,RUN372 middleware intercepts /api/research/** before handler execution and returns no-store 503; public research routes are suspended.,durable,no-direct-fetch,0,not-detected,research
+/api/research/public/[slug]/exam,POST,true,classified-nonstandard,middleware-blocked,RUN372 middleware intercepts /api/research/** before handler execution and returns no-store 503; public research routes are suspended.,durable,present,0,not-detected,research
+/api/research/public/[slug],"GET,POST",true,classified-nonstandard,middleware-blocked,RUN372 middleware intercepts /api/research/** before handler execution and returns no-store 503; public research routes are suspended.,durable,present,0,present,research
+/api/security/account-signals,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/social/blocks,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,feed
+/api/social/challenges,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,0,not-detected,feed
+/api/social/creator,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,feed
+/api/social/economy/status,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/social/feed/preferences,"GET,PUT",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,feed
+/api/social/feed,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,read-only
+/api/social/follows,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,feed
+/api/social/mutes/list,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/social/mutes,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,feed
+/api/social/notifications,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable+local-prefilter,no-direct-fetch,0,not-detected,notifications
+/api/social/people/discover,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,read-only
+/api/social/polls,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,feed
+/api/social/posts/[id]/archive,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,3,not-detected,feed
+/api/social/posts/[id]/attention,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable+local-prefilter,no-direct-fetch,0,not-detected,feed
+/api/social/posts/[id]/comments/[commentId]/reactions,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable+local-prefilter,no-direct-fetch,0,not-detected,feed
+/api/social/posts/[id]/comments/[commentId],"DELETE,PATCH",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable+local-prefilter,no-direct-fetch,0,present,feed
+/api/social/posts/[id]/comments,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable+local-prefilter,present,1,present,feed
+/api/social/posts/[id]/curation/list,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,local-only,no-direct-fetch,0,not-detected,read-only
+/api/social/posts/[id]/curation,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable+local-prefilter,no-direct-fetch,0,not-detected,feed
+/api/social/posts/[id]/edit,"PATCH,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,2,not-detected,feed
+/api/social/posts/[id]/ghpv,GET,false,classified-nonstandard,public-safe-curation-read,"Read-only public GHPV status; response omits reviewer identities, weights, calibration, integrity and GHC authority.",none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/social/posts/[id]/ghpv/settle,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,feed
+/api/social/posts/[id]/insights,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/social/posts/[id]/reactions/list,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,local-only,no-direct-fetch,0,not-detected,read-only
+/api/social/posts/[id]/reactions,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable+local-prefilter,no-direct-fetch,0,not-detected,feed
+/api/social/posts/[id]/restore,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,feed
+/api/social/posts/[id]/reward,GET,false,classified-nonstandard,public-content-reward-read,Read-only public content reward view from server-written state; there are no client mutation handlers.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/social/posts/[id],"DELETE,GET",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,feed
+/api/social/posts/[id]/share,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable+local-prefilter,no-direct-fetch,0,not-detected,feed
+/api/social/posts/[id]/viewers,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,local-only,no-direct-fetch,0,not-detected,read-only
+/api/social/posts,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable+local-prefilter,present,4,present,feed
+/api/social/profile/[userId]/posts,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,local-only,no-direct-fetch,0,not-detected,read-only
+/api/social/profile/[userId],GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,local-only,no-direct-fetch,0,not-detected,read-only
+/api/social/reputation/intelligence,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,local-only,no-direct-fetch,0,not-detected,read-only
+/api/social/reputation,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable+local-prefilter,no-direct-fetch,0,present,feed
+/api/social/restricts,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,feed
+/api/social/saves,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable+local-prefilter,present,1,not-detected,feed
+/api/social/search,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,local-only,no-direct-fetch,0,not-detected,read-only
+/api/social/short-video,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/social/stories/[id]/reactions,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable+local-prefilter,no-direct-fetch,0,not-detected,feed
+/api/social/stories/[id]/view,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable+local-prefilter,no-direct-fetch,0,not-detected,feed
+/api/social/stories/[id]/viewers,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,local-only,no-direct-fetch,0,not-detected,read-only
+/api/social/stories,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable+local-prefilter,no-direct-fetch,0,present,feed
+/api/social/tips,POST,true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable+local-prefilter,present,4,present,feed
+/api/system/announcements,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,present,1,not-detected,notifications
+/api/system/status,GET,false,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,none-or-exempt,present,1,not-detected,read-only
+/api/validation-key,GET,false,classified-nonstandard,domain-validation-challenge,"Serves the explicitly configured domain-ownership challenge value required for Pi domain verification; value is not a session, API or payment credential.",none-or-exempt,no-direct-fetch,0,not-detected,read-only
+/api/verification/request,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,present,identity
+/api/verification/review,"GET,POST",true,present,session-or-operator-auth,Standard authenticated/session route; see source handler.,durable,no-direct-fetch,0,not-detected,identity
+/api/webhooks/paystack,POST,true,classified-nonstandard,provider-signed-webhook,Provider callback validates its signature and durable event/idempotency binding; retries are intentionally not throttled so provider delivery can recover.,none-or-exempt,present,1,not-detected,payments

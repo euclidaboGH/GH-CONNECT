@@ -1,0 +1,227 @@
+[
+  {
+    "route": "/api/analytics/events",
+    "class": "public-telemetry-ingest",
+    "reason": "Anonymous telemetry intake; bounded payload, explicit event allowlist and per-IP process-local abuse throttle. No account or financial authority."
+  },
+  {
+    "route": "/api/analytics/vitals",
+    "class": "public-performance-telemetry",
+    "reason": "Anonymous, sampled Web Vitals intake; bounded, privacy-minimized payload and per-IP process-local throttle; collector disabled by default."
+  },
+  {
+    "route": "/api/auth/logout",
+    "class": "cookie-session-revocation",
+    "reason": "Idempotent logout reads only the HttpOnly session cookie, validates/revokes that token, and clears the cookie; durable IP throttle."
+  },
+  {
+    "route": "/api/auth/pi",
+    "class": "pi-auth-bootstrap",
+    "reason": "Pre-session bootstrap requires a bounded Pi access token, verifies it with Pi Platform /v2/me, then resolves/creates the durable mapped identity; durable per-IP rate limit."
+  },
+  {
+    "route": "/api/auth/session",
+    "class": "cookie-session-introspection",
+    "reason": "Reads only the HttpOnly session cookie and returns non-secret authentication status; never returns raw session or Pi tokens."
+  },
+  {
+    "route": "/api/business/monetization",
+    "class": "public-policy-read",
+    "reason": "Read-only business offer policy with public cache headers; no private account data or mutation."
+  },
+  {
+    "route": "/api/communities/create-fee",
+    "class": "public-fee-quote",
+    "reason": "Read-only server-authoritative fee quote; does not create a community or debit funds."
+  },
+  {
+    "route": "/api/economy/catalog",
+    "class": "public-economy-catalog",
+    "reason": "Read-only public catalog; spend execution remains authenticated and server-authoritative on separate endpoints."
+  },
+  {
+    "route": "/api/economy/earnings/withdrawals/process",
+    "class": "delegated-session-worker",
+    "reason": "Disabled by default; server injects executor key and delegates to execute worker, which independently enforces session, request ownership, consent, Testnet, lease and idempotency."
+  },
+  {
+    "route": "/api/economy/health",
+    "class": "public-health-read",
+    "reason": "Infrastructure-only health status; does not expose user balances, credentials or payout secrets."
+  },
+  {
+    "route": "/api/economy/pi-acquisition-policy",
+    "class": "public-policy-read",
+    "reason": "Read-only public Pi acquisition policy; no purchase or wallet mutation."
+  },
+  {
+    "route": "/api/economy/policy",
+    "class": "public-policy-read",
+    "reason": "Read-only public economy policy; no private user state or mutation."
+  },
+  {
+    "route": "/api/economy/supply",
+    "class": "public-aggregate-economy-read",
+    "reason": "Returns aggregate population and explicitly labelled process-local telemetry; it does not claim telemetry is a global ledger total."
+  },
+  {
+    "route": "/api/field/report",
+    "class": "middleware-blocked",
+    "reason": "RUN372 middleware intercepts /api/field/** before handler execution and returns no-store 503; service source is retained but unavailable."
+  },
+  {
+    "route": "/api/field/reports/[id]/evidence/complete",
+    "class": "middleware-blocked",
+    "reason": "RUN372 middleware intercepts /api/field/** before handler execution and returns no-store 503; service source is retained but unavailable."
+  },
+  {
+    "route": "/api/field/reports/[id]/evidence/intent",
+    "class": "middleware-blocked",
+    "reason": "RUN372 middleware intercepts /api/field/** before handler execution and returns no-store 503; service source is retained but unavailable."
+  },
+  {
+    "route": "/api/field/session",
+    "class": "middleware-blocked",
+    "reason": "RUN372 middleware intercepts /api/field/** before handler execution and returns no-store 503; service source is retained but unavailable."
+  },
+  {
+    "route": "/api/field/surveys",
+    "class": "middleware-blocked",
+    "reason": "RUN372 middleware intercepts /api/field/** before handler execution and returns no-store 503; service source is retained but unavailable."
+  },
+  {
+    "route": "/api/field/unlock",
+    "class": "middleware-blocked",
+    "reason": "RUN372 middleware intercepts /api/field/** before handler execution and returns no-store 503; service source is retained but unavailable."
+  },
+  {
+    "route": "/api/health/live",
+    "class": "public-liveness-probe",
+    "reason": "Minimal liveness response with no private diagnostics or mutation."
+  },
+  {
+    "route": "/api/health/media",
+    "class": "delegated-health-handler",
+    "reason": "Re-exports the media health handler; the target handler applies its own authentication and response policy."
+  },
+  {
+    "route": "/api/health",
+    "class": "public-redacted-health",
+    "reason": "Health diagnostics redact detailed operational fields unless the shared operator diagnostics verifier authorizes them."
+  },
+  {
+    "route": "/api/health/withdrawals",
+    "class": "public-redacted-health",
+    "reason": "Read-only infrastructure status; detailed payout gate diagnostics are restricted by the shared operator diagnostics verifier."
+  },
+  {
+    "route": "/api/internal/evidence/scan-queue",
+    "class": "scanner-bearer-secret",
+    "reason": "Requires a configured 32-byte scanner secret and constant-time bearer comparison before returning signed, short-lived evidence links."
+  },
+  {
+    "route": "/api/internal/evidence/scan-result",
+    "class": "scanner-hmac-callback",
+    "reason": "Internal scanner callback authenticates the signed callback payload and binds the result to the stored evidence digest; not a browser endpoint."
+  },
+  {
+    "route": "/api/marketplace/listing-fee",
+    "class": "public-fee-quote",
+    "reason": "Read-only server-authoritative listing fee quote; does not create a listing or charge a seller."
+  },
+  {
+    "route": "/api/marketplace/payouts/[requestId]/reconcile",
+    "class": "operator-key-protected",
+    "reason": "Requires the shared operator-key verifier, minimum key length and durable rate limit; verifies Pi provider recipient, amount, direction, network and transaction before recording reconciliation."
+  },
+  {
+    "route": "/api/media/[id]/content",
+    "class": "viewer-authorized-media-proxy",
+    "reason": "Media ID alone is insufficient; proxy forwards only the caller's auth context to the configured trusted app origin, and the signed-url handler rechecks current viewer access."
+  },
+  {
+    "route": "/api/messaging/calls/intent",
+    "class": "retired-endpoint",
+    "reason": "Retired calling intent endpoint returns a non-mutating gone/unavailable response; no call session or entitlement is created."
+  },
+  {
+    "route": "/api/notifications/push/config",
+    "class": "public-client-configuration",
+    "reason": "Returns only public Web Push capability/configuration, including the public VAPID key; no private push secret is exposed."
+  },
+  {
+    "route": "/api/payments/health",
+    "class": "public-redacted-health",
+    "reason": "Read-only payment infrastructure status; does not create, complete or settle a payment."
+  },
+  {
+    "route": "/api/pi/platform-capabilities",
+    "class": "public-platform-capabilities",
+    "reason": "Read-only Pi platform capability metadata; no credentials or user identity are returned."
+  },
+  {
+    "route": "/api/public/compliance-posture",
+    "class": "public-compliance-read",
+    "reason": "Read-only compliance posture summary; no private user data or mutation."
+  },
+  {
+    "route": "/api/public/portal-links",
+    "class": "public-portal-configuration",
+    "reason": "Returns public Pi Developer Portal configuration URLs and guidance; no secret values."
+  },
+  {
+    "route": "/api/release/beta-readiness",
+    "class": "public-redacted-readiness",
+    "reason": "Returns only coarse readiness status to anonymous callers; detailed report requires operator diagnostics authorization."
+  },
+  {
+    "route": "/api/release/final-audit",
+    "class": "public-redacted-readiness",
+    "reason": "Returns only coarse release-audit status to anonymous callers; detailed report requires operator diagnostics authorization."
+  },
+  {
+    "route": "/api/release/readiness",
+    "class": "public-release-policy",
+    "reason": "Read-only static release policy with public cache; does not reveal credentials or perform a release action."
+  },
+  {
+    "route": "/api/research/public/[slug]/evidence/complete",
+    "class": "middleware-blocked",
+    "reason": "RUN372 middleware intercepts /api/research/** before handler execution and returns no-store 503; public research routes are suspended."
+  },
+  {
+    "route": "/api/research/public/[slug]/evidence/intent",
+    "class": "middleware-blocked",
+    "reason": "RUN372 middleware intercepts /api/research/** before handler execution and returns no-store 503; public research routes are suspended."
+  },
+  {
+    "route": "/api/research/public/[slug]/exam",
+    "class": "middleware-blocked",
+    "reason": "RUN372 middleware intercepts /api/research/** before handler execution and returns no-store 503; public research routes are suspended."
+  },
+  {
+    "route": "/api/research/public/[slug]",
+    "class": "middleware-blocked",
+    "reason": "RUN372 middleware intercepts /api/research/** before handler execution and returns no-store 503; public research routes are suspended."
+  },
+  {
+    "route": "/api/social/posts/[id]/ghpv",
+    "class": "public-safe-curation-read",
+    "reason": "Read-only public GHPV status; response omits reviewer identities, weights, calibration, integrity and GHC authority."
+  },
+  {
+    "route": "/api/social/posts/[id]/reward",
+    "class": "public-content-reward-read",
+    "reason": "Read-only public content reward view from server-written state; there are no client mutation handlers."
+  },
+  {
+    "route": "/api/validation-key",
+    "class": "domain-validation-challenge",
+    "reason": "Serves the explicitly configured domain-ownership challenge value required for Pi domain verification; value is not a session, API or payment credential."
+  },
+  {
+    "route": "/api/webhooks/paystack",
+    "class": "provider-signed-webhook",
+    "reason": "Provider callback validates its signature and durable event/idempotency binding; retries are intentionally not throttled so provider delivery can recover."
+  }
+]

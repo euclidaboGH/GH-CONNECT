@@ -8,6 +8,7 @@ import {
 } from "@/lib/server/marketplace/operational-payout-corrections"
 
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -21,6 +22,9 @@ export async function POST(request: Request) {
   if (!assertOperatorKey(request.headers.get("x-ghc-operator-key"))) {
     return reply({ ok: false, error: "OPERATOR_UNAUTHORIZED" }, 401)
   }
+  const limit = await checkDurableRateLimit("operator-payout-corrections", 5, 60_000, { onUnavailable: "deny" })
+  if (!limit.ok) return reply({ ok: false, error: durableRateLimitCode(limit), retryAfterSec: limit.retryAfterSec }, durableRateLimitStatus(limit))
+
   const parsedBody = await readBoundedJson(request, 32 * 1024)
   if (!parsedBody.ok) return reply({ ok: false, error: parsedBody.error }, parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400)
   const body = parsedBody.value

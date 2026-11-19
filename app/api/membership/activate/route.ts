@@ -59,7 +59,7 @@ async function rpcPurchaseMembership(input: {
           p_reason: input.reason,
           p_row: input.row,
         }),
-      }
+      signal: AbortSignal.timeout(10_000)}
     )
     const data = await res.json().catch(() => null)
     if (!res.ok || !data?.ok) {

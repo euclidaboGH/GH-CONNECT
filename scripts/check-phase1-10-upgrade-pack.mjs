@@ -30,7 +30,7 @@ const ci = read('.github/workflows/ci.yml')
 
 // Phase 1 — source-of-truth and issue traceability.
 add(1, 'P1-A', 'Package, app release and consolidated audit agree on current package version', release.includes(`APP_RELEASE_VERSION = \"${pkg.version}\"`) && currentWorklog.includes(`gh-connect@${pkg.version}`) && sourceTruth.includes(`gh-connect@${pkg.version}`))
-add(1, 'P1-B', 'Consolidated register preserves external blockers and production no-go', /Production remains NOT APPROVED/.test(sourceTruth) && /Testnet/.test(currentWorklog) && /Mainnet remains empty/.test(currentWorklog))
+add(1, 'P1-B', 'Consolidated register preserves external blockers, separate Testnet/Mainnet holds and production no-go', /Production remains NOT APPROVED/.test(sourceTruth) && /Testnet/.test(currentWorklog) && /Mainnet/.test(currentWorklog) && /Mainnet action occurred|Mainnet remains untouched|Mainnet.*NOT APPROVED/i.test(currentWorklog))
 // Phase 2 — migration integrity and deployment safety.
 add(2, 'P2-A', 'Canonical migration versions match the on-disk inventory and are unique 14-digit identifiers', migrationFiles.length > 0 && migrationVersions.every((v) => /^\d{14}$/.test(v)) && new Set(migrationVersions).size === migrationFiles.length)
 add(2, 'P2-B', 'Balance-observability SQL remains a proposal, outside canonical migrations', exists('supabase/proposals/20261109_phase6_earnings_balance_integrity_observability_proposal.sql') && !exists('supabase/migrations/20261109_phase6_earnings_balance_integrity_observability_proposal.sql') && !/supabase db push/.test(workflow))

@@ -41,17 +41,17 @@ export async function POST(req: Request) {
         p_actor_user_id: auth.userId,
         p_from_user_id: fromUserId,
       }),
-    })
+    signal: AbortSignal.timeout(10_000)})
     if (!res.ok) {
       const nd = nonDurableWriteResponse("Connection decline")
       return NextResponse.json(nd.body, { status: nd.status })
     }
     const row = await res.json().catch(() => null)
     return NextResponse.json({ ok: true, durable: true, request: row })
-  } catch (e) {
+  } catch {
     return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : "decline_failed" },
-      { status: 500 }
+      { ok: false, error: "CONNECTION_DECLINE_UNAVAILABLE", retryable: true },
+      { status: 503, headers: { "Cache-Control": "no-store" } }
     )
   }
 }

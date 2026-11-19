@@ -1,12 +1,16 @@
 # GreenHaven
 
-**Current source version:** `0.338.103` (RUN376–RUN377 economy, curation, withdrawal, pipeline and dependency-audit hardening derivative of 0.338.102)
+**Current source version:** `0.338.105` (RUN378–RUN380 API route/reliability hardening; Phase 4–6 acceptance/readiness plus a guarded Phase 5 runtime browser harness based on 0.338.103)
 
 Production status: **NOT APPROVED** — supported Node 24.15.0 dependency-backed typecheck/lint/build, browser/device, live database/provider and operator acceptance remain outstanding.
 
 This repository is the canonical GreenHaven source tree. See `docs/SOURCE_OF_TRUTH.md` and `docs/CURRENT_BUILD_CONTEXT.md` before implementation or release work.
 
-## Latest maintenance — 0.338.103 / RUN376–RUN377 economy, curation, withdrawal, pipeline and dependency-audit hardening
+## Latest maintenance — 0.338.105 / RUN378–RUN380 API reliability, Phase 4–6 and runtime acceptance
+
+RUN378 inventories all 280 API route files, assigns domain ownership to all 186 mutating route files, explicitly classifies all 45 routes without the ordinary session-auth marker, and records durable rate-limit coverage and exceptions. RUN379 adds deadlines to the 18 route modules with unbounded direct Supabase fetches, stable retryable errors, fail-closed report intake, and durable cross-instance limits across high-risk economy, curation, withdrawal, media, social, notification, session and operator actions. Phase 4 adds a guarded two-account Testnet acceptance suite for Feed, Discover, Profiles, Messages, Communities, Marketplace, Wallet, Rewards, Membership, Notifications and Media. Phase 5 and separate Testnet/Mainnet Phase 6 reports record verified source contracts and remaining live/runtime gates. No SQL proposal was applied and no database, ledger, payment, payout, Pi transfer, GitHub push or deployment was performed. Production remains NOT APPROVED. See `docs/RUN378-PHASE3-API-ROUTE-REVIEW-2026-11-19.md`, `docs/RUN379-PHASE3-API-RELIABILITY-HARDENING-2026-11-19.md`, `docs/PHASE4-PRODUCT-ACCEPTANCE-2026-11-19.md`, `docs/PHASE5-PERFORMANCE-SECURITY-2026-11-19.md`, and the separate `docs/PHASE6-TESTNET-READINESS-2026-11-19.md` / `docs/PHASE6-MAINNET-READINESS-2026-11-19.md` reports.
+
+## Previous maintenance — 0.338.103 / RUN376–RUN377 economy, curation, withdrawal, pipeline and dependency-audit hardening
 
 RUN376 corrects final GHPV reviewer influence caps and duplicate-reviewer quorum handling, fails closed on unavailable calibration/population state, introduces a shared atomic global-emission proposal for daily claims and activity emissions behind a disabled-by-default operator gate, hardens GHC-to-Pi withdrawal requests with request-bound PIN proof and platform-verified wallet matching, and makes balance-funded curation redistribution replay-safe behind a separate disabled-by-default proposal. Neither proposal has been applied to Supabase. GHPV automated settlement is also disabled until its daily JCS calibration cap is durably serialized in the database. Withdrawal execution remains manual and disabled by default. Generic reward evaluation remains daily-claim-only; votes and curation never mint GHC. See `docs/RUN376-ECONOMY-CURATION-WITHDRAWAL-HARDENING-2026-11-19.md` and `docs/RUN377-DEPENDENCY-AUDIT-AND-CI-REMEDIATION-2026-11-19.md`.
 

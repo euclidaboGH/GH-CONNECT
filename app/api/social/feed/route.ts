@@ -5,6 +5,7 @@
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import { socialDbConfigured, socialRpc, socialRest } from "@/lib/server/social/rpc"
 import { nonDurableReadResponse } from "@/lib/server/production-guard"
 import { filterVisibleSocialPosts } from "@/lib/server/social/post-visibility"
@@ -123,6 +124,8 @@ export async function GET(request: Request) {
   if (!auth) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
+  const readLimit = await checkDurableRateLimit(`social-feed-read:${auth.userId}`, 60, 60_000, { onUnavailable: "deny" })
+  if (!readLimit.ok) return NextResponse.json({ ok: false, error: durableRateLimitCode(readLimit), retryAfterSec: readLimit.retryAfterSec }, { status: durableRateLimitStatus(readLimit), headers: { "Cache-Control": "no-store", "Retry-After": String(readLimit.retryAfterSec) } })
 
   if (!socialDbConfigured()) {
     const nd = nonDurableReadResponse("Social feed", { posts: [], message: "SOCIAL_DB_UNAVAILABLE" })

@@ -22,6 +22,7 @@ import {
 import { emitSocialNotification } from "@/lib/server/social/notifications"
 
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -77,6 +78,8 @@ export async function POST(request: Request) {
       { status: 429 }
     )
   }
+  const durableLimit = await checkDurableRateLimit(`reputation:${auth.userId}`, 20, 60_000, { onUnavailable: "deny" })
+  if (!durableLimit.ok) return NextResponse.json({ ok: false, error: durableRateLimitCode(durableLimit), retryAfterSec: durableLimit.retryAfterSec }, { status: durableRateLimitStatus(durableLimit), headers: { "Cache-Control": "no-store", "Retry-After": String(durableLimit.retryAfterSec) } })
 
   const parsedBody = await readBoundedJson(request, 16 * 1024)
   if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400 })

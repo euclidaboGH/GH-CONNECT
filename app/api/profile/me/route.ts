@@ -14,6 +14,7 @@ import {
   isProfileStoreDurable,
 } from "@/lib/server/identity/profile-store"
 import { readBoundedText } from "@/lib/server/http/read-bounded-text"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -68,6 +69,8 @@ export async function PATCH(request: Request) {
     if (!limit.ok) {
       return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(limit.retryAfterSec) } })
     }
+    const durableLimit = await checkDurableRateLimit(`profile-write:${auth.userId}`, 30, 60_000, { onUnavailable: "deny" })
+    if (!durableLimit.ok) return NextResponse.json({ ok: false, error: durableRateLimitCode(durableLimit), retryAfterSec: durableLimit.retryAfterSec }, { status: durableRateLimitStatus(durableLimit), headers: { "Cache-Control": "no-store", "Retry-After": String(durableLimit.retryAfterSec) } })
     const contentLength = Number(request.headers.get("content-length") || 0)
     if (Number.isFinite(contentLength) && contentLength > 65_536) {
       return NextResponse.json({ ok: false, error: "REQUEST_TOO_LARGE" }, { status: 413, headers: { "Cache-Control": "no-store" } })

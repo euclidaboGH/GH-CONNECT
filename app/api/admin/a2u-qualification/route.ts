@@ -6,6 +6,7 @@ import { operatorKeyAuthorized, SHARED_WORKER_KEY_MIN_BYTES } from "@/lib/server
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import type { PiBackendPayment } from "pi-backend"
 import { getWalletAuthorization } from "@/lib/server/identity/wallet-authorization"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -32,6 +33,8 @@ export async function GET(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return reply({ ok: false, error: "AUTH_REQUIRED" }, 401)
   if (!authorized(request)) return reply({ ok: false, error: "FORBIDDEN" }, 403)
+  const limit = await checkDurableRateLimit("a2u-qualification-read:operator", 30, 60_000, { onUnavailable: "deny" })
+  if (!limit.ok) return reply({ ok: false, error: durableRateLimitCode(limit), retryAfterSec: limit.retryAfterSec }, durableRateLimitStatus(limit))
   if (!testnetQualificationEnabled()) return reply({ ok: false, error: "TESTNET_A2U_QUALIFICATION_GATE_CLOSED" }, 503)
   try {
     const result = await rpc<Record<string, unknown>>("gh_pi_a2u_qualification_summary", {})
@@ -44,6 +47,8 @@ export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return reply({ ok: false, error: "AUTH_REQUIRED" }, 401)
   if (!authorized(request)) return reply({ ok: false, error: "FORBIDDEN" }, 403)
+  const limit = await checkDurableRateLimit("a2u-qualification-write:operator", 8, 60_000, { onUnavailable: "deny" })
+  if (!limit.ok) return reply({ ok: false, error: durableRateLimitCode(limit), retryAfterSec: limit.retryAfterSec }, durableRateLimitStatus(limit))
   if (!testnetQualificationEnabled()) return reply({ ok: false, error: "TESTNET_A2U_QUALIFICATION_GATE_CLOSED" }, 503)
   const parsed = await readBoundedJson(request, 16 * 1024)
   if (!parsed.ok) return reply({ ok: false, error: parsed.error }, parsed.error === "REQUEST_TOO_LARGE" ? 413 : 400)

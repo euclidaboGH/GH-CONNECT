@@ -16,6 +16,7 @@ import { checkRateLimit, pruneRateLimitBuckets } from "@/lib/server/economy/rate
 import { STEP_UP_TTL_MS } from "@/lib/server/identity/step-up-store"
 
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -45,6 +46,8 @@ export async function POST(request: Request) {
         { status: 429, headers: { "Cache-Control": "no-store" } }
       )
     }
+    const durableLimit = await checkDurableRateLimit(`webauthn-auth-verify:${auth.userId}`, 20, 60_000, { onUnavailable: "deny" })
+    if (!durableLimit.ok) return NextResponse.json({ ok: false, error: durableRateLimitCode(durableLimit), retryAfterSec: durableLimit.retryAfterSec }, { status: durableRateLimitStatus(durableLimit), headers: { "Cache-Control": "no-store", "Retry-After": String(durableLimit.retryAfterSec) } })
 
     const parsedBody = await readBoundedJson(request, 64 * 1024)
   if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400 })

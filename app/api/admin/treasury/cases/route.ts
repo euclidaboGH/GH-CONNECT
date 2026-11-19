@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { operatorDiagnosticsAuthorized } from "@/lib/server/security/operator-key"
 import { listTreasuryCases, upsertTreasuryCase } from "@/lib/server/revenue/treasury-operations"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -12,11 +13,15 @@ function authorized(request: Request) {
 }
 export async function GET(request: Request) {
   if (!authorized(request)) return reply({ ok: false, error: "FORBIDDEN" }, 403)
+  const limit = await checkDurableRateLimit("treasury-cases-read:operator", 60, 60_000, { onUnavailable: "deny" })
+  if (!limit.ok) return reply({ ok: false, error: durableRateLimitCode(limit), retryAfterSec: limit.retryAfterSec }, durableRateLimitStatus(limit))
   const result = await listTreasuryCases(100)
   return result?.ok ? reply(result) : reply({ ok: false, error: "TREASURY_CASES_UNAVAILABLE" }, 503)
 }
 export async function POST(request: Request) {
   if (!authorized(request)) return reply({ ok: false, error: "FORBIDDEN" }, 403)
+  const limit = await checkDurableRateLimit("treasury-cases-write:operator", 20, 60_000, { onUnavailable: "deny" })
+  if (!limit.ok) return reply({ ok: false, error: durableRateLimitCode(limit), retryAfterSec: limit.retryAfterSec }, durableRateLimitStatus(limit))
   const parsedBody = await readBoundedJson(request, 32 * 1024)
   if (!parsedBody.ok) return reply({ ok: false, error: parsedBody.error }, parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400)
   const body = parsedBody.value

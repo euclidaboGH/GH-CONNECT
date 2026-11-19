@@ -9,7 +9,7 @@ function walk(dir){let out=[];for(const name of readdirSync(dir)){const p=join(d
 const mutating=[];const failures=[]
 for(const file of walk(join(root,'app/api'))){
  const source=readFileSync(file,'utf8')
- const methods=[...source.matchAll(/export\s+(?:async\s+)?function\s+(GET|POST|PUT|PATCH|DELETE)/g)].map(m=>m[1])
+ const methods=[...source.matchAll(/export\s+(?:async\s+)?function\s+(GET|POST|PUT|PATCH|DELETE)/g),...source.matchAll(/export\s+const\s+(GET|POST|PUT|PATCH|DELETE)\s*=/g)].map(m=>m[1])
  const writes=methods.filter(m=>m!=='GET')
  if(!writes.length)continue
  const route='/'+relative(join(root,'app'),file).replaceAll('\\','/')

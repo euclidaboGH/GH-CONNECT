@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import {
   listUnifiedNotifications,
   markUnifiedNotificationsRead,
@@ -20,6 +20,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export async function GET(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: privateNoStore })
+  const readLimit = await checkDurableRateLimit(`unified-notifications-read:${auth.userId}`, 60, 60_000, { onUnavailable: "deny" })
+  if (!readLimit.ok) return NextResponse.json({ ok: false, error: durableRateLimitCode(readLimit), retryAfterSec: readLimit.retryAfterSec }, { status: durableRateLimitStatus(readLimit), headers: { ...privateNoStore, "Retry-After": String(readLimit.retryAfterSec) } })
   const url = new URL(request.url)
   if (url.searchParams.get("countOnly") === "1") {
     const result = await unifiedUnreadCount(auth.userId)
@@ -38,8 +40,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const auth = await resolveAuthenticatedUser(request.headers)
   if (!auth) return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: privateNoStore })
-  const rl = checkRateLimit(`unified-notifications:${auth.userId}`, 60, 60_000)
-  if (!rl.ok) return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { ...privateNoStore, "Retry-After": String(rl.retryAfterSec) } })
+  const rl = await checkDurableRateLimit(`unified-notifications-write:${auth.userId}`, 60, 60_000, { onUnavailable: "deny" })
+  if (!rl.ok) return NextResponse.json({ ok: false, error: durableRateLimitCode(rl), retryAfterSec: rl.retryAfterSec }, { status: durableRateLimitStatus(rl), headers: { ...privateNoStore, "Retry-After": String(rl.retryAfterSec) } })
   const parsedBody = await readBoundedJson(request, 16 * 1024)
   if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400, headers: privateNoStore })
   if (!isRecord(parsedBody.value)) return NextResponse.json({ ok: false, error: "INVALID_ACTION" }, { status: 400, headers: privateNoStore })

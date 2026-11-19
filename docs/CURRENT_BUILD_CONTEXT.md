@@ -1,9 +1,20 @@
-# CURRENT BUILD CONTEXT — 0.338.100 (2026-11-19)
+# CURRENT BUILD CONTEXT — 0.338.105 (2026-11-19)
 
-- **User-designated source baseline:** `GREENHAVEN-0_338_99-RUN370-PI-AUTH-REJECTION-DIAGNOSTICS-2026-11-19.zip`.
-- **Current derivative:** `gh-connect@0.338.100`, RUN339 optional ecosystem provider isolation, based directly on the supplied RUN370 archive; source-only, not pushed or deployed.
-- **Latest work:** canonical release-gated optional provider execution, failure containment, removal of ecosystem roadmap prefetch from app startup, and best-effort realtime startup/recovery. Existing Events/Charity gates and released core services are preserved.
-- **Verification:** new optional-provider runtime regression 4/4; existing ecosystem registry test passes. Full supported Node 24.15.x dependency-backed typecheck/lint/build and browser/device acceptance remain outstanding. Production remains NOT APPROVED.
+- **Baseline:** reopened `GREENHAVEN-0_338_103-RUN376-RUN377-PHASE3-ECONOMY-CURATION-WITHDRAWAL-2026-11-19.zip`.
+- **Current derivative:** `gh-connect@0.338.105`, RUN378–RUN380 Phase 3 API route/reliability hardening plus Phase 4 product acceptance, Phase 5 responsive/loading/memory/concurrency browser harness, and Phase 6 readiness reports.
+- **Phase 3:** 280 route files; 186/186 mutation-owner assignments; 45/45 explicit non-session access classifications; 176/186 durable mutation rate-limit controls; 90/90 direct fetch call sites with abort deadlines. RUN378 10/10; RUN379 21/21; RUN380 12/12. All 379 registered static commands passed across three bounded batches; the monolithic verification exceeded the execution window.
+- **Phase 4:** guarded Testnet browser/API suite added for eleven product surfaces. It requires real Testnet cookies, refuses Production and has not been run against live sessions.
+- **Phase 5:** source-level CWV, feed/profile, caching, media, accessibility, RUM and security contracts pass in targeted groups. A guarded Phase 5 Playwright harness now records viewport overflow, timing, LCP/heap when supported and eight-way feed concurrency; it has not been run. No measured mobile/browser/load/heap/database result is claimed.
+- **Phase 6:** separate Testnet and Mainnet readiness reports both block release pending supported-runtime CI, dependency audit remediation, Testnet acceptance and operator/database evidence.
+- **Runtime limitation:** available Node is 22.16.0; project requires Node 24.15.0; `node_modules` is absent. Full `tsc`, lint and Next production build are not claimed.
+- **Financial boundaries:** RUN376 SQL proposals remain review-only/unapplied; emission, curation redistribution, automated GHPV settlement and GHC-to-Pi withdrawal gates remain disabled/manual as documented. No ledger mutation, payment, payout or Pi transfer occurred.
+- **Deployment:** no GitHub push, Vercel deployment, Supabase mutation, migration application or Mainnet action. Production remains NOT APPROVED.
+
+---
+
+## Historical build context — 0.338.100
+
+RUN339 optional-provider isolation, failure containment, startup prefetch reduction and best-effort realtime recovery. This older derivative is superseded by the 0.338.105 source authority above.
 
 ## Historical build context — 0.338.99
 

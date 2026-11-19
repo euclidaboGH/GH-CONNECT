@@ -20,6 +20,7 @@ import {
   getProcessGhcStore,
 } from "@/lib/server/economy/store"
 import { recordTelemetryEvent } from "@/lib/server/economy/telemetry"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -43,6 +44,8 @@ export async function POST(request: Request) {
   if (!rl.ok) {
     return jsonErr("RATE_LIMITED", `Too many utility purchases; retry in ${rl.retryAfterSec}s`, 429)
   }
+  const durableLimit = await checkDurableRateLimit(`utility-purchase:${auth.userId}`, 30, 60_000, { onUnavailable: "deny" })
+  if (!durableLimit.ok) return jsonErr(durableRateLimitCode(durableLimit), "Utility purchase protection is temporarily unavailable or rate-limited", durableRateLimitStatus(durableLimit))
 
   const parsedBody = await readBoundedJson(request, 8192)
   if (!parsedBody.ok) {

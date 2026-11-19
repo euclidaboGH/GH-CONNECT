@@ -37,7 +37,7 @@ export async function POST(request: Request) {
       headers: { "Content-Type": "application/json", apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}` },
       body: JSON.stringify({ p_user_id: auth.userId, p_request_type: requestType, p_idempotency_key: idempotencyKey }),
       cache: "no-store",
-    })
+    signal: AbortSignal.timeout(10_000)})
     const result = await response.json().catch(() => null) as Record<string, unknown> | null
     if (!response.ok || !result || result.ok !== true) return reply({ ok: false, error: result?.error || "LIFECYCLE_REQUEST_UNAVAILABLE" }, response.status === 400 ? 400 : 503)
     return reply({ ok: true, requestId: result.requestId, requestType: result.requestType, status: result.status, duplicate: Boolean(result.duplicate), deletionExecuted: false, message: requestType === "deletion" ? "Deletion request recorded. Account deletion is not performed automatically; outstanding balances, disputes, and legal retention must be reviewed before completion." : "Export request recorded. The downloadable export workflow must complete before an export is marked ready." }, 202)

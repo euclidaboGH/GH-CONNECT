@@ -62,7 +62,7 @@ export async function POST(request: Request, ctx: Ctx) {
           p_archived: archived,
         }),
         cache: "no-store",
-      }
+      signal: AbortSignal.timeout(10_000)}
     )
     const rpcData = (await rpcRes.json().catch(() => null)) as {
       ok?: boolean
@@ -103,7 +103,7 @@ export async function POST(request: Request, ctx: Ctx) {
           Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
         },
         cache: "no-store",
-      }
+      signal: AbortSignal.timeout(10_000)}
     )
     const rows = (await getRes.json().catch(() => [])) as Array<{
       author_id?: string
@@ -131,7 +131,7 @@ export async function POST(request: Request, ctx: Ctx) {
           updated_at: new Date().toISOString(),
         }),
         cache: "no-store",
-      }
+      signal: AbortSignal.timeout(10_000)}
     )
     if (!patchRes.ok) {
       // Column may not exist until migration 56
@@ -154,6 +154,6 @@ export async function POST(request: Request, ctx: Ctx) {
       "[posts/archive]",
       err instanceof Error ? err.message : "unknown"
     )
-    return NextResponse.json({ ok: false, error: "ARCHIVE_FAILED" }, { status: 500 })
+    return NextResponse.json({ ok: false, error: "ARCHIVE_UNAVAILABLE", retryable: true }, { status: 503, headers: { "Cache-Control": "no-store" } })
   }
 }

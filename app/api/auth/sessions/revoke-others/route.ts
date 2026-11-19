@@ -10,6 +10,7 @@ import { requireAccountSecurityContext } from "@/lib/server/identity/auth-integr
 import { requireRecentStepUp, revokeStepUpsForSession } from "@/lib/server/identity/step-up-store"
 import { listSessionsForUser } from "@/lib/server/identity/session-store"
 import { checkRateLimit, pruneRateLimitBuckets } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -33,6 +34,8 @@ export async function POST(request: Request) {
         { status: 429, headers: { "Cache-Control": "no-store" } }
       )
     }
+    const durableLimit = await checkDurableRateLimit(`session-revoke-others:${auth.userId}`, 5, 60_000, { onUnavailable: "deny" })
+    if (!durableLimit.ok) return NextResponse.json({ ok: false, error: durableRateLimitCode(durableLimit), retryAfterSec: durableLimit.retryAfterSec }, { status: durableRateLimitStatus(durableLimit), headers: { "Cache-Control": "no-store", "Retry-After": String(durableLimit.retryAfterSec) } })
 
     // Policy: revoke-all-others requires recent step-up
     const stepErr = await requireRecentStepUp(auth)

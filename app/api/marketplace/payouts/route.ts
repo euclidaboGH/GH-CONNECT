@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     const response = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/gh_seller_payout_request`, {
       method: "POST", headers: { "Content-Type": "application/json", apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}` },
       body: JSON.stringify({ p_seller_id: auth.userId, p_currency: currency, p_amount: amount, p_idempotency_key: idempotencyKey }), cache: "no-store",
-    })
+    signal: AbortSignal.timeout(10_000)})
     const result = await response.json().catch(() => null) as Record<string, unknown> | null
     if (!response.ok || !result || result.ok !== true) {
       const error = String(result?.error || "PAYOUT_REQUEST_UNAVAILABLE")
@@ -61,7 +61,7 @@ export async function GET(request: Request) {
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return reply({ ok: false, error: "PAYOUT_SERVICE_UNAVAILABLE" }, 503)
   try {
     const query = new URLSearchParams({ seller_id: `eq.${auth.userId}`, select: "id,currency,amount,status,created_at,updated_at,paid_at", order: "created_at.desc", limit: "100" })
-    const response = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_seller_payout_requests?${query}`, { headers: { apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}`, Accept: "application/json" }, cache: "no-store" })
+    const response = await fetch(`${env.supabaseUrl.replace(/\/$/, "")}/rest/v1/gh_seller_payout_requests?${query}`, { headers: { apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}`, Accept: "application/json" }, cache: "no-store" , signal: AbortSignal.timeout(10_000)})
     if (!response.ok) return reply({ ok: false, error: "PAYOUT_SERVICE_UNAVAILABLE" }, 503)
     const requests = await response.json()
     if (!Array.isArray(requests)) return reply({ ok: false, error: "PAYOUT_RESPONSE_INVALID" }, 503)

@@ -71,7 +71,7 @@ async function settleVerifiedCreatorTip(intent: {
         p_txid: providerTxid, p_verified_amount: Number(payment.amount), p_provider_completed: true,
       }),
       cache: "no-store",
-    })
+    signal: AbortSignal.timeout(10_000)})
     const result = await response.json().catch(() => null) as { ok?: boolean; error?: string; status?: string; creatorPaid?: boolean; settlementId?: string; idempotent?: boolean } | null
     if (!response.ok || result?.ok !== true) {
       return { applicable: true as const, ok: false as const, error: result?.error || "TIP_SETTLEMENT_FAILED" }

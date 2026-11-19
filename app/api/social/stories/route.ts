@@ -10,6 +10,7 @@ import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/pr
 import { hydratePublicProfileIdentity } from "@/lib/server/identity/public-profile-hydration"
 import { getServerProfile } from "@/lib/server/identity/profile-store"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -131,6 +132,8 @@ export async function POST(request: Request) {
   if (!rl.ok) {
     return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(rl.retryAfterSec) } })
   }
+  const durableLimit = await checkDurableRateLimit(`stories-create:${auth.userId}`, 10, 60_000, { onUnavailable: "deny" })
+  if (!durableLimit.ok) return NextResponse.json({ ok: false, error: durableRateLimitCode(durableLimit), retryAfterSec: durableLimit.retryAfterSec }, { status: durableRateLimitStatus(durableLimit), headers: { "Cache-Control": "no-store", "Retry-After": String(durableLimit.retryAfterSec) } })
   // Enforce a hard streaming limit even when Content-Length is absent or false.
   // Story media is URL-based or a deliberately small compressed inline image.
   const parsedBody = await readBoundedJson(request, 1024 * 1024)

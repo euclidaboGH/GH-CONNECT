@@ -82,7 +82,7 @@ export async function POST(req: Request) {
         p_note: body.note || null,
         p_source: body.source || "discover",
       }),
-    })
+    signal: AbortSignal.timeout(10_000)})
 
     if (!res.ok) {
       const text = await res.text().catch(() => "")
@@ -110,10 +110,10 @@ export async function POST(req: Request) {
       metadata: { kind: "connection_request", intents, source: body.source || "discover" },
     })
     return NextResponse.json({ ok: true, durable: true, request: row, intents })
-  } catch (e) {
+  } catch {
     return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : "request_failed" },
-      { status: 500 }
+      { ok: false, error: "CONNECTION_REQUEST_UNAVAILABLE", retryable: true },
+      { status: 503, headers: { "Cache-Control": "no-store" } }
     )
   }
 }
@@ -153,8 +153,8 @@ export async function GET(req: Request) {
       `${base}/rest/v1/ghc_connection_requests` +
       `?from_user_id=eq.${encodeURIComponent(uid)}&${statusFilter}&select=*&order=created_at.desc&limit=50`
     const [inRes, outRes] = await Promise.all([
-      fetch(inUrl, { headers, cache: "no-store" }),
-      fetch(outUrl, { headers, cache: "no-store" }),
+      fetch(inUrl, { headers, cache: "no-store" , signal: AbortSignal.timeout(10_000)}),
+      fetch(outUrl, { headers, cache: "no-store" , signal: AbortSignal.timeout(10_000)}),
     ])
     if (!inRes.ok || !outRes.ok) {
       return NextResponse.json({
@@ -190,10 +190,10 @@ export async function GET(req: Request) {
       incoming,
       outgoing,
     })
-  } catch (e) {
+  } catch {
     return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : "list_failed" },
-      { status: 500 }
+      { ok: false, error: "CONNECTION_REQUEST_LIST_UNAVAILABLE", retryable: true },
+      { status: 503, headers: { "Cache-Control": "no-store" } }
     )
   }
 }

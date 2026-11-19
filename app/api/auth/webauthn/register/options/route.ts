@@ -13,6 +13,7 @@ import {
   listCredentialsForUser,
 } from "@/lib/server/identity/webauthn-store"
 import { checkRateLimit, pruneRateLimitBuckets } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -56,6 +57,8 @@ export async function POST(request: Request) {
         { status: 429, headers: { "Cache-Control": "no-store" } }
       )
     }
+    const durableLimit = await checkDurableRateLimit(`webauthn-register-options:${auth.userId}`, 10, 60_000, { onUnavailable: "deny" })
+    if (!durableLimit.ok) return NextResponse.json({ ok: false, error: durableRateLimitCode(durableLimit), retryAfterSec: durableLimit.retryAfterSec }, { status: durableRateLimitStatus(durableLimit), headers: { "Cache-Control": "no-store", "Retry-After": String(durableLimit.retryAfterSec) } })
 
     const cfg = getWebAuthnRpConfig()
     // Dynamic import — package may not be installed in some environments

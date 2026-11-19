@@ -10,6 +10,7 @@ import { createPaymentIntent, assertDurableWrite } from "@/lib/server/payments/i
 import { checkRateLimit, pruneRateLimitBuckets } from "@/lib/server/economy/rate-limit"
 import { ASSET_POLICY } from "@/lib/asset-separation"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -38,6 +39,8 @@ export async function POST(request: Request) {
       { status: 429 }
     )
   }
+  const durableMinuteLimit = await checkDurableRateLimit(`pack-intent:${auth.userId}`, 20, 60_000, { onUnavailable: "deny" })
+  if (!durableMinuteLimit.ok) return NextResponse.json({ ok: false, error: durableRateLimitCode(durableMinuteLimit), retryAfterSec: durableMinuteLimit.retryAfterSec }, { status: durableRateLimitStatus(durableMinuteLimit), headers: { "Cache-Control": "no-store", "Retry-After": String(durableMinuteLimit.retryAfterSec) } })
   const dayKey = lagosDayKey()
   const dayRl = checkRateLimit(
     `pack_intent_day:${auth.userId}:${dayKey}`,
@@ -54,6 +57,8 @@ export async function POST(request: Request) {
       { status: 429 }
     )
   }
+  const durableDailyLimit = await checkDurableRateLimit(`pack-intent-day:${auth.userId}:${dayKey}`, packPurchaseLimits().maxPurchasesPerDay, 24 * 60 * 60 * 1000, { onUnavailable: "deny" })
+  if (!durableDailyLimit.ok) return NextResponse.json({ ok: false, error: durableDailyLimit.unavailable ? "RATE_LIMIT_UNAVAILABLE" : "DAILY_PACK_CAP", retryAfterSec: durableDailyLimit.retryAfterSec }, { status: durableRateLimitStatus(durableDailyLimit), headers: { "Cache-Control": "no-store", "Retry-After": String(durableDailyLimit.retryAfterSec) } })
 
   const parsedBody = await readBoundedJson(request, 4 * 1024)
   if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400, headers: { "Cache-Control": "no-store" } })

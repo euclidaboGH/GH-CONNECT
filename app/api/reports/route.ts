@@ -1,10 +1,10 @@
 /**
  * POST /api/reports — minimal durable report intake (session actor).
- * Uses ghc_community_reports when present; otherwise acknowledges local-only.
+ * Report acceptance is only acknowledged after the durable moderation row is stored.
  */
 import { NextResponse } from "next/server"
 import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
-import { checkRateLimit } from "@/lib/server/economy/rate-limit"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 import { readGhcServerEnv } from "@/lib/server/economy/env"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 
@@ -16,9 +16,9 @@ export async function POST(request: Request) {
   if (!auth) {
     return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
   }
-  const rl = checkRateLimit(`report:${auth.userId}`, 20, 60_000)
+  const rl = await checkDurableRateLimit(`report:${auth.userId}`, 20, 60_000, { onUnavailable: "deny" })
   if (!rl.ok) {
-    return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429 })
+    return NextResponse.json({ ok: false, error: durableRateLimitCode(rl), retryAfterSec: rl.retryAfterSec }, { status: durableRateLimitStatus(rl), headers: { "Cache-Control": "no-store", "Retry-After": String(rl.retryAfterSec) } })
   }
   const parsedBody = await readBoundedJson(request, 8 * 1024)
   if (!parsedBody.ok) {
@@ -41,11 +41,10 @@ export async function POST(request: Request) {
 
   const env = readGhcServerEnv()
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
-    return NextResponse.json({
-      ok: true,
-      durable: false,
-      message: "Report recorded locally until moderation store is available",
-    })
+    return NextResponse.json(
+      { ok: false, error: "REPORT_SUBMISSION_UNAVAILABLE", retryable: true },
+      { status: 503, headers: { "Cache-Control": "no-store" } },
+    )
   }
 
   try {
@@ -68,21 +67,19 @@ export async function POST(request: Request) {
           Prefer: "return=minimal",
         },
         body: JSON.stringify(row),
-      }
+      signal: AbortSignal.timeout(10_000)}
     )
     if (!res.ok) {
-      return NextResponse.json({
-        ok: true,
-        durable: false,
-        message: "Report accepted; durable table unavailable",
-      })
+      return NextResponse.json(
+        { ok: false, error: "REPORT_SUBMISSION_UNAVAILABLE", retryable: true },
+        { status: 503, headers: { "Cache-Control": "no-store" } },
+      )
     }
     return NextResponse.json({ ok: true, durable: true })
   } catch {
-    return NextResponse.json({
-      ok: true,
-      durable: false,
-      message: "Report accepted offline",
-    })
+    return NextResponse.json(
+      { ok: false, error: "REPORT_SUBMISSION_UNAVAILABLE", retryable: true },
+      { status: 503, headers: { "Cache-Control": "no-store" } },
+    )
   }
 }

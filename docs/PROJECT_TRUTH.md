@@ -1,4 +1,25 @@
-# Current project truth — 0.338.103 RUN376–RUN377 (2026-11-19)
+# Current project truth — 0.338.105 RUN378–RUN380 + Phase 5 runtime harness (2026-11-19)
+
+- Current local derivative: `0.338.105`, based on the reopened `0.338.103` RUN376–RUN377 archive; source-only, not pushed or deployed.
+- Phase 3 route inventory: 280 route files, 368 method exports, 186/186 mutating routes assigned one domain owner, 45/45 routes without the ordinary session-auth marker explicitly classified, and 176/186 mutating routes using durable rate limits. Two local-only limits are telemetry ingestion; eight exceptions are documented.
+- RUN378 API route/access audit: 10/10. RUN379 timeout/error/rate-limit hardening: 21/21. RUN380 separate Testnet/Mainnet readiness: 12/12. All 379 registered static commands passed across three bounded batches; a single `npm run verify:static` exceeded the execution window. All 280 API route files and the Phase 4/5 Playwright specs pass syntax parsing; dependency-backed typecheck has not been run.
+- 18 route modules gained 10-second abort deadlines; all 90 direct route fetch call sites across 55 files were checked for AbortSignal deadlines. Report intake now fails closed instead of acknowledging an undurable report; upstream failures return stable retryable 503 errors.
+- GHPV final anti-whale and duplicate-reviewer controls remain 43/43 source checks and 5/5 runtime tests. Automated settlement remains gated pending durable daily calibration-cap state. Daily claims/activity emission and curation redistribution remain gated behind unapplied SQL proposals; withdrawals remain disabled/manual/Testnet-only. Votes and curation never mint GHC.
+- Phase 4 Testnet Playwright acceptance covers Feed, Discover, Profiles, Messages, Communities, Marketplace, Wallet, Rewards, Membership, Notifications and Media, but no real Testnet sessions or browser/device run were available. Phase 5 source-level performance/security checks passed in targeted groups; a gated browser harness now measures responsive overflow, navigation timing, LCP/heap when available and eight-way feed concurrency, but it has not yet run. Live RUM, device screenshots, heap/load profiles and database query plans remain unmeasured.
+- Phase 6 Testnet and Mainnet readiness reports are separate and both blocked. The prior npm audit remains at 22 findings (1 critical, 13 high, 6 moderate, 2 low). Node 24.15.0 dependency-backed typecheck/lint/build, dependency remediation, new CI, Pi Sandbox authorization, Testnet SQL rehearsal and multi-account acceptance remain outstanding.
+- No live Supabase schema/ACL/migration change, ledger mutation, payment, payout, Pi transfer, GitHub push, Vercel deployment or Mainnet action occurred. Production remains NOT APPROVED.
+
+**Current source version:** `0.338.105`  
+**Package identity:** `gh-connect@0.338.105`  
+**Baseline archive:** `GREENHAVEN-0_338_103-RUN376-RUN377-PHASE3-ECONOMY-CURATION-WITHDRAWAL-2026-11-19.zip`  
+**Current derivative:** RUN378–RUN380 + Phase 5 runtime browser harness; source-only, not pushed or deployed.  
+**Current status:** **NOT APPROVED** for Testnet release certification or Production.
+
+---
+
+## Historical project truth — 0.338.103 RUN376–RUN377
+
+### Historical project truth details — 0.338.103 RUN376–RUN377 (2026-11-19)
 
 - Latest local source derivative: `0.338.103` RUN376, based on the verified local 0.338.102 RUN373–RUN375 derivative of the user-designated 0.338.101 archive.
 - GHPV excludes duplicate reviewer identities, applies a true final-share anti-whale cap, validates settlement snapshots and stops when durable calibration state cannot be read. The daily JCS cap is not durable in the current schema; automated settlement remains gated pending a per-reviewer-serialized SQL fix.

@@ -10,6 +10,7 @@ import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { recordAdVerificationAttempt } from "@/lib/server/ads/verify-store"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -27,6 +28,8 @@ export async function POST(request: Request) {
       { status: 429 }
     )
   }
+  const durableLimit = await checkDurableRateLimit(`ads-verify:${auth.userId}`, 20, 60_000, { onUnavailable: "deny" })
+  if (!durableLimit.ok) return NextResponse.json({ ok: false, error: durableRateLimitCode(durableLimit), retryAfterSec: durableLimit.retryAfterSec }, { status: durableRateLimitStatus(durableLimit), headers: { "Cache-Control": "no-store", "Retry-After": String(durableLimit.retryAfterSec) } })
 
   const parsedBody = await readBoundedJson(request, 4 * 1024)
   if (!parsedBody.ok) {

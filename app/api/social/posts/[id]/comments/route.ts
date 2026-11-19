@@ -15,6 +15,7 @@ import { canViewSocialPost } from "@/lib/server/social/post-visibility"
 import { validateOwnedMediaAttachments } from "@/lib/server/media/owned-attachment-validation"
 import { loadCommentReactionState } from "@/lib/server/social/comment-reactions"
 import { hydratePublicProfileIdentity } from "@/lib/server/identity/public-profile-hydration"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -97,6 +98,8 @@ export async function POST(
   if (!rl.ok) {
     return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429 })
   }
+  const durableLimit = await checkDurableRateLimit(`comment:${auth.userId}`, 40, 60_000, { onUnavailable: "deny" })
+  if (!durableLimit.ok) return NextResponse.json({ ok: false, error: durableRateLimitCode(durableLimit), retryAfterSec: durableLimit.retryAfterSec }, { status: durableRateLimitStatus(durableLimit), headers: { "Cache-Control": "no-store", "Retry-After": String(durableLimit.retryAfterSec) } })
   const { id } = await ctx.params
   const postId = String(id || "").trim()
   if (!postId) {
@@ -251,7 +254,7 @@ export async function POST(
       u.searchParams.set("or", `(${handles.map(h => `username.ilike.${h}`).join(",")})`)
       u.searchParams.set("select", "gh_user_id,username")
       u.searchParams.set("limit", String(handles.length))
-      const r = await fetch(u.toString(), { headers: { apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}` }, cache: "no-store" })
+      const r = await fetch(u.toString(), { headers: { apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}` }, cache: "no-store" , signal: AbortSignal.timeout(10_000)})
       const rows = await r.json().catch(() => []) as Array<{ gh_user_id?: string; username?: string }>
       await Promise.all(rows.map(async row => {
         const uid = String(row.gh_user_id || "")

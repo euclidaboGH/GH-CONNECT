@@ -14,6 +14,7 @@ import { nonDurableWriteResponse, nonDurableReadResponse } from "@/lib/server/pr
 import { getServerProfile } from "@/lib/server/identity/profile-store"
 import { hydratePublicProfileIdentity } from "@/lib/server/identity/public-profile-hydration"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -93,6 +94,8 @@ export async function POST(request: Request) {
       { status: 429 }
     )
   }
+  const durableLimit = await checkDurableRateLimit(`social-post-create:${auth.userId}`, 20, 60_000, { onUnavailable: "deny" })
+  if (!durableLimit.ok) return NextResponse.json({ ok: false, error: durableRateLimitCode(durableLimit), retryAfterSec: durableLimit.retryAfterSec }, { status: durableRateLimitStatus(durableLimit), headers: { "Cache-Control": "no-store", "Retry-After": String(durableLimit.retryAfterSec) } })
 
   const parsedBody = await readBoundedJson(request, 12 * 1024 * 1024)
   if (!parsedBody.ok) return NextResponse.json({ ok: false, error: parsedBody.error }, { status: parsedBody.error === "REQUEST_TOO_LARGE" ? 413 : 400, headers: { "Cache-Control": "no-store" } })
@@ -317,7 +320,7 @@ export async function POST(request: Request) {
           headers: { "Content-Type": "application/json", apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}` },
           body: JSON.stringify({ p_actor_id: auth.userId, p_post_id: id, p_media_ids: durableMediaIds }),
           cache: "no-store",
-        })
+        signal: AbortSignal.timeout(10_000)})
         const result = await response.json().catch(() => null) as { ok?: boolean } | null
         attached = response.ok && result?.ok === true
       } catch { attached = false }
@@ -329,7 +332,7 @@ export async function POST(request: Request) {
           headers: { "Content-Type": "application/json", apikey: env.supabaseServiceRoleKey, Authorization: `Bearer ${env.supabaseServiceRoleKey}`, Prefer: "return=minimal" },
           body: JSON.stringify({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() }),
           cache: "no-store",
-        }).catch(() => undefined)
+        signal: AbortSignal.timeout(10_000)}).catch(() => undefined)
       }
       return NextResponse.json({ ok: false, error: "MEDIA_ATTACH_FAILED", message: "The post was not published because media authorization could not be persisted." }, { status: 503 })
     }
@@ -350,7 +353,7 @@ export async function POST(request: Request) {
               Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
             },
             cache: "no-store",
-          }
+          signal: AbortSignal.timeout(10_000)}
         )
         const found = (await check.json().catch(() => [])) as unknown[]
         if (Array.isArray(found) && found.length > 0) {
@@ -365,7 +368,7 @@ export async function POST(request: Request) {
               },
               body: JSON.stringify({ quote_of_post_id: quoteOf }),
               cache: "no-store",
-            }
+            signal: AbortSignal.timeout(10_000)}
           )
         }
       }

@@ -19,7 +19,7 @@ async function readCompleteExportSource(base: string, serviceKey: string, source
     const response = await fetch(`${base}/rest/v1/${source.path}`, {
       headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, Accept: "application/json", Range: `${offset}-${offset + pageSize - 1}`, "Range-Unit": "items", Prefer: "count=exact" },
       cache: "no-store",
-    })
+    signal: AbortSignal.timeout(10_000)})
     if (!response.ok) throw new Error("SOURCE_UNAVAILABLE")
     const page = await response.json()
     if (!Array.isArray(page)) throw new Error("SOURCE_INVALID")

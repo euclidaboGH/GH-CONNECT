@@ -67,7 +67,7 @@ async function rpcCreditPackPurchase(input: {
           p_product_id: input.productId,
           p_intent_id: input.intentId,
         }),
-      }
+      signal: AbortSignal.timeout(10_000)}
     )
     const data = (await res.json().catch(() => null)) as Record<string, unknown> | null
     if (!res.ok) {

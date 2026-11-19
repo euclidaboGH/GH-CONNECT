@@ -7,6 +7,7 @@ import {
   normalizePushDeviceId, normalizePushEndpoint, notificationPushRpc, validatePushSubscription,
 } from "@/lib/server/notifications/push-architecture"
 import { encryptPushSecret } from "@/lib/server/notifications/push-secrets"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -17,6 +18,8 @@ export async function GET(request: Request) {
   if (!auth) return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: noStore })
   const rl = checkRateLimit(`notification-push-status:${auth.userId}`, 30, 60_000)
   if (!rl.ok) return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: noStore })
+  const durableLimit = await checkDurableRateLimit(`notification-push-revoke:${auth.userId}`, 20, 60_000, { onUnavailable: "deny" })
+  if (!durableLimit.ok) return NextResponse.json({ ok: false, error: durableRateLimitCode(durableLimit), retryAfterSec: durableLimit.retryAfterSec }, { status: durableRateLimitStatus(durableLimit), headers: { ...noStore, "Retry-After": String(durableLimit.retryAfterSec) } })
   const result = await notificationPushRpc("gh_notification_push_subscription_list", { p_user_id: auth.userId })
   if (!result.ok) return NextResponse.json({ ok: false, error: result.error || "PUSH_STORE_UNAVAILABLE", activeDevices: [] }, { status: 503, headers: noStore })
   return NextResponse.json({ ok: true, durable: true, activeDevices: Array.isArray(result.data?.subscriptions) ? result.data.subscriptions : [], remoteDeliveryEnabled: false }, { headers: noStore })
@@ -27,6 +30,8 @@ export async function POST(request: Request) {
   if (!auth) return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: noStore })
   const rl = checkRateLimit(`notification-push-register:${auth.userId}`, 10, 60_000)
   if (!rl.ok) return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: { ...noStore, "Retry-After": String(rl.retryAfterSec) } })
+  const durableLimit = await checkDurableRateLimit(`notification-push-register:${auth.userId}`, 10, 60_000, { onUnavailable: "deny" })
+  if (!durableLimit.ok) return NextResponse.json({ ok: false, error: durableRateLimitCode(durableLimit), retryAfterSec: durableLimit.retryAfterSec }, { status: durableRateLimitStatus(durableLimit), headers: { ...noStore, "Retry-After": String(durableLimit.retryAfterSec) } })
   const config = getWebPushConfiguration()
   if (!config.senderImplemented) return NextResponse.json({ ok: false, error: "REMOTE_PUSH_NOT_ENABLED" }, { status: 503, headers: noStore })
   if (!config.databaseConfigured) return NextResponse.json({ ok: false, error: "PUSH_DATABASE_UNAVAILABLE" }, { status: 503, headers: noStore })

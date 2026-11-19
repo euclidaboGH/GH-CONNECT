@@ -3,6 +3,7 @@ import { resolveAuthenticatedUser } from "@/lib/server/economy/auth"
 import { checkRateLimit } from "@/lib/server/economy/rate-limit"
 import { readBoundedJson } from "@/lib/server/http/read-bounded-json"
 import { getServerProfile, upsertServerProfile, isProfileStoreDurable } from "@/lib/server/identity/profile-store"
+import { checkDurableRateLimit, durableRateLimitCode, durableRateLimitStatus } from "@/lib/server/security/control-plane"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -29,6 +30,8 @@ export async function GET(request: Request) {
     if (!auth) return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401, headers: noStore })
     const rl = checkRateLimit(`notification-preferences-read:${auth.userId}`, 60, 60_000)
     if (!rl.ok) return NextResponse.json({ ok: false, error: "RATE_LIMITED" }, { status: 429, headers: noStore })
+    const durableLimit = await checkDurableRateLimit(`notification-preferences-write:${auth.userId}`, 30, 60_000, { onUnavailable: "deny" })
+    if (!durableLimit.ok) return NextResponse.json({ ok: false, error: durableRateLimitCode(durableLimit), retryAfterSec: durableLimit.retryAfterSec }, { status: durableRateLimitStatus(durableLimit), headers: { ...noStore, "Retry-After": String(durableLimit.retryAfterSec) } })
     const profile = await getServerProfile(auth.userId)
     const raw = profile?.profilePayload?.notificationPreferences
     const preferences = validPreferences(raw) ? raw : {}
