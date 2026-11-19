@@ -1,13 +1,18 @@
 # GreenHaven
 
-**Current source version:** `0.338.108` (release-gate manifest repair; based on 0.338.106)
+
+## Testnet Preview configuration
+
+For the dedicated Testnet feature-enable profile, see [`TESTNET-VERCEL-ENVIRONMENT.md`](./TESTNET-VERCEL-ENVIRONMENT.md) and the safe overlay template [`docs/TESTNET-PREVIEW-ENVIRONMENT.template`](./docs/TESTNET-PREVIEW-ENVIRONMENT.template). Apply the overlay to Vercel **Preview only**; do not apply it to Production or Mainnet.
+
+**Current source version:** `0.338.109` (release-gate manifest repair; based on 0.338.106)
 
 Production status: **NOT APPROVED** — supported Node 24.15.0 dependency-backed typecheck/lint/build, browser/device, live database/provider and operator acceptance remain outstanding.
 
 This repository is the canonical GreenHaven source tree. See `docs/SOURCE_OF_TRUTH.md` and `docs/CURRENT_BUILD_CONTEXT.md` before implementation or release work.
 
 
-## Latest maintenance — 0.338.108 / release-gate manifest repair
+## Latest maintenance — 0.338.109 / release-gate manifest repair
 
 Repairs release-gate wiring by explicitly ordering release hygiene, project truth, Phase 10 closure, Phase 10 platform acceptance and Phase 24 migration review at the start of both prebuild and static verification. Hardens the closure checker to parse each suite and report manifest errors separately. Restores the safe `.env.example` file in the distributable source archive. No financial authority, database schema, migration state, payment, payout or deployment behavior was changed. The five required gates pass; the complete 408-check prebuild, supported Node 24.15.0 dependency-backed typecheck/lint/build and live browser acceptance remain outstanding. Production remains NOT APPROVED.
 

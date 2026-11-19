@@ -1,2 +1,2 @@
-export const APP_RELEASE_VERSION = "0.338.108"
+export const APP_RELEASE_VERSION = "0.338.109"
 export const APP_RELEASE_SUMMARY = "Vercel source packaging repair and Pi SDK CSP audit after configuration, package metadata and component security review; preserve .env.example while excluding local secrets, allow configured Pi SDKLite CDN/backend origins, and add regression gates. Membership session integrity retained. No Pi identity, payment, wallet, or database authority changes."

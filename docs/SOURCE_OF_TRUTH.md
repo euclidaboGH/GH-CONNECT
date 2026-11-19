@@ -1,3 +1,16 @@
+# GreenHaven source authority — 0.338.109 full-project audit (2026-11-19)
+
+**Current source version:** `0.338.109`
+**Package identity:** `gh-connect@0.338.109`  
+**Baseline:** 0.338.108 Testnet Safe Upgrades candidate.  
+**Current derivative:** full-project source audit, package-script integrity guard, duplicate pretypecheck command removal and synchronized release metadata; source-only, not pushed or deployed.
+
+The full audit is recorded in `docs/FULL_PROJECT_AUDIT_2026-11-19.md`. The static suite passes, including 231-migration integrity, API route/access and timeout controls, RLS/SECURITY DEFINER source checks, production-safety scanning and 1,209 npm command entries. Node 24.15.0 dependency-backed checks, fresh dependency vulnerability remediation, PostgreSQL rehearsal, live Testnet reconciliation and authenticated browser acceptance remain outstanding. No database, ledger, payment, payout, GitHub or Vercel state was changed. Testnet certification and Production remain **NOT APPROVED**.
+
+---
+
+## Previous source authority — 0.338.108
+
 # GreenHaven source authority — 0.338.108 release-gate manifest repair (2026-11-19)
 
 **Current source version:** `0.338.108`

@@ -228,3 +228,5 @@ file,create_table,alter_table,create_function,create_procedure,create_view,creat
 "20261116182000_gh_research_intelligence_platform_foundation.sql","18","1","1","0","0","0","19","0","0","0","1","0","0","0","0","3","3","2","2","3","1","0","REVIEW_DYNAMIC_SQL;REVIEW_DATA_MUTATION"
 "20261116190000_gh_media_evidence_engine.sql","1","2","0","0","0","0","3","0","0","0","1","0","0","0","0","0","0","2","2","1","1","0","NONE_STATIC_SIGNAL"
 "20261117010001_gh_evidence_scoped_upload_chain_of_custody.sql","2","5","2","0","0","0","7","0","2","2","2","0","2","0","0","2","0","3","5","3","1","0","REVIEW_DESTRUCTIVE_DDL;REVIEW_DATA_MUTATION;REVIEW_TRIGGER_ORDER_AND_SIDE_EFFECTS;REVIEW_EXTENSION_PREREQUISITE"
+"20261118033839_revoke_client_select_on_server_only_tables.sql","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","1","1","1","0","NONE_STATIC_SIGNAL"
+"20261118194252_testnet_a2u_network_fence.sql","0","6","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","1","0","0","NONE_STATIC_SIGNAL"
