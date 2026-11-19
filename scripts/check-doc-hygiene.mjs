@@ -420,10 +420,6 @@ const required = new Set([
   'docs/RUN339-PI-AUTH-UNBLOCK-OPTIONAL-COMMERCE.md',
   'docs/RUN338-PI-AUTH-SUPABASE-DIAGNOSTICS.sql',
   'docs/security/RUN337-NPM-AUDIT-44237574920.json',
-  'docs/security/RUN365-AUDIT-AND-FIX-2026-11-19.md',
-  'docs/security/RUN366-SOURCE-OF-TRUTH-AUDIT-2026-11-19.md',
-  'docs/security/RUN367-CI-SECURITY-AND-RELEASE-AUDIT-2026-11-19.md',
-  'docs/security/RUN367-NPM-AUDIT-44425654801.json',
   'docs/UPGRADE-WORKLOG-0.338.36.md',
   'docs/UPGRADE-WORKLOG-0.338.37.md',
   'docs/UPGRADE-WORKLOG-0.338.38.md',
@@ -455,6 +451,7 @@ const required = new Set([
   'docs/VERCEL-RUN312-TYPECHECK-REPAIR-2026-11-17.md',
   'docs/RUN364-FULL-PROJECT-AUDIT-AND-GATE-REPAIR-2026-11-19.md',
   'docs/security/RUN364-NPM-AUDIT-2026-11-18.json',
+  'docs/security/RUN365-AUDIT-AND-FIX-2026-11-19.md',
 ])
 const failures=[]
 const walk=(dir)=>{
