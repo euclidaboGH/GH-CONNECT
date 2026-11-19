@@ -34,6 +34,6 @@ These source/runtime contract tests are not a substitute for the authenticated b
 
 ## Additional execution status — 2026-11-19
 
-The source suite is now paired with an explicit Phase 5 browser suite, but the Phase 4 live acceptance result remains **PENDING**, not passed. No real Testnet session cookies, Pi Browser/device session, or two-account fixture were supplied in this workspace. The latest Vercel Testnet-branch Preview was observed as `READY`, but it was built from commit `787ab56ef4f2b6ad4d054c4357c0fab43c684bc7`, not this 0.338.105 candidate. Therefore its READY state does not certify this candidate or any of the eleven product journeys.
+The source suite is now paired with an explicit Phase 5 browser suite, but the Phase 4 live acceptance result remains **PENDING**, not passed. No real Testnet session cookies, Pi Browser/device session, or two-account fixture were supplied in this workspace. The latest Vercel Testnet-branch Preview was observed as `READY`, but it was built from commit `787ab56ef4f2b6ad4d054c4357c0fab43c684bc7`, not the 0.338.105 source candidate or its 0.338.106 configuration-only derivative. Therefore its READY state does not certify the current candidate or any of the eleven product journeys.
 
 Required final execution: use two genuine Testnet users and run the documented command against the exact deployment built from the reviewed candidate commit. Retain redacted Playwright reports and verify each surface's actual data and user action—not just its API status.

@@ -32,4 +32,4 @@ No deployment or live database mutation is authorized by this report.
 
 ## Live deployment observation — 2026-11-19 12:53 UTC
 
-Vercel currently reports the latest `testnet` Preview deployment as `READY` (`dpl_Czqmaaoftb9pCqcsBptWUjmTAbrv`, commit `787ab56ef4f2b6ad4d054c4357c0fab43c684bc7`, region `dub1`). This is a platform build state only. It is not the 0.338.105 candidate assembled in this pass, and no Testnet login, product journey, database operation or payment was verified against it. The 0.338.105 candidate has not been pushed or deployed. Testnet remains **NOT CERTIFIED**.
+Vercel currently reports the latest `testnet` Preview deployment as `READY` (`dpl_Czqmaaoftb9pCqcsBptWUjmTAbrv`, commit `787ab56ef4f2b6ad4d054c4357c0fab43c684bc7`, region `dub1`). This is a platform build state only. It is not the 0.338.105 candidate assembled in the preceding pass or the 0.338.106 configuration-only derivative reviewed afterward, and no Testnet login, product journey, database operation or payment was verified against it. The 0.338.106 candidate has not been pushed or deployed. Testnet remains **NOT CERTIFIED**.

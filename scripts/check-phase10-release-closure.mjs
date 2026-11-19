@@ -16,6 +16,7 @@ const nvmrc = read('.nvmrc').trim()
 const release = read('lib/app-release.ts')
 const truth = read('docs/PROJECT_TRUTH.md')
 const prebuild = pkg.scripts?.prebuild ?? ''
+const prebuildRunsManifest = /node scripts\/run-prebuild-checks\.mjs/.test(prebuild)
 const prebuildChecks = pkg.scripts?.['prebuild:checks'] ?? ''
 const verify = pkg.scripts?.['verify:static'] ?? ''
 const commandOptions = { root: process.cwd(), existsSync: (path) => existsSync(path) }
@@ -58,11 +59,11 @@ check('release gate accepts scalar, flow-list, and block-list CI dependencies', 
   declaresStaticDependency('    needs: [static]\n'),
   declaresStaticDependency('    needs:\n      - static\n'),
 ].every(Boolean))
-check('release hygiene runs in prebuild and static verification', prebuild === 'node scripts/run-prebuild-checks.mjs' && prebuildHas('scripts/check-release-hygiene.mjs') && verifyHas('scripts/check-release-hygiene.mjs'))
-check('project truth runs in prebuild and static verification', prebuild === 'node scripts/run-prebuild-checks.mjs' && prebuildHas('scripts/check-project-truth.mjs') && verifyHas('scripts/check-project-truth.mjs'))
-check('phase 10 closure contract runs in prebuild and static verification', prebuild === 'node scripts/run-prebuild-checks.mjs' && prebuildHas('scripts/check-phase10-release-closure.mjs') && verifyHas('scripts/check-phase10-release-closure.mjs'))
-check('phase 10 platform acceptance remains in prebuild and static verification', prebuild === 'node scripts/run-prebuild-checks.mjs' && prebuildHas('scripts/check-phase10-platform-acceptance.mjs') && verifyHas('scripts/check-phase10-platform-acceptance.mjs'))
-check('migration classification/review gate remains in both suites', prebuild === 'node scripts/run-prebuild-checks.mjs' && prebuildHas('scripts/check-phase24-release-review.mjs') && verifyHas('scripts/check-phase24-release-review.mjs'))
+check('release hygiene runs in prebuild and static verification', prebuildRunsManifest && prebuildHas('scripts/check-release-hygiene.mjs') && verifyHas('scripts/check-release-hygiene.mjs'))
+check('project truth runs in prebuild and static verification', prebuildRunsManifest && prebuildHas('scripts/check-project-truth.mjs') && verifyHas('scripts/check-project-truth.mjs'))
+check('phase 10 closure contract runs in prebuild and static verification', prebuildRunsManifest && prebuildHas('scripts/check-phase10-release-closure.mjs') && verifyHas('scripts/check-phase10-release-closure.mjs'))
+check('phase 10 platform acceptance remains in prebuild and static verification', prebuildRunsManifest && prebuildHas('scripts/check-phase10-platform-acceptance.mjs') && verifyHas('scripts/check-phase10-platform-acceptance.mjs'))
+check('migration classification/review gate remains in both suites', prebuildRunsManifest && prebuildHas('scripts/check-phase24-release-review.mjs') && verifyHas('scripts/check-phase24-release-review.mjs'))
 check('no database push is wired into CI', !/supabase\s+db\s+push/i.test(ci))
 check('production remains explicitly not approved', /NOT APPROVED/i.test(truth))
 check('release report is present in canonical or preserved historical documentation', hasProjectDoc('docs/PHASE-10-RELEASE-ENGINEERING-ACCEPTANCE-2026-11-09.md'))

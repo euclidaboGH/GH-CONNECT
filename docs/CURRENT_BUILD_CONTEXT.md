@@ -1,7 +1,7 @@
-# CURRENT BUILD CONTEXT — 0.338.105 (2026-11-19)
+# CURRENT BUILD CONTEXT — 0.338.106 (2026-11-19)
 
 - **Baseline:** reopened `GREENHAVEN-0_338_103-RUN376-RUN377-PHASE3-ECONOMY-CURATION-WITHDRAWAL-2026-11-19.zip`.
-- **Current derivative:** `gh-connect@0.338.105`, RUN378–RUN380 Phase 3 API route/reliability hardening plus Phase 4 product acceptance, Phase 5 responsive/loading/memory/concurrency browser harness, and Phase 6 readiness reports.
+- **Current derivative:** `gh-connect@0.338.106`, 0.338.105 RUN378–RUN380 Phase 3 API route/reliability hardening plus Phase 4 product acceptance, Phase 5 responsive/loading/memory/concurrency browser harness, Phase 6 readiness reports, and this configuration/package/component review.
 - **Phase 3:** 280 route files; 186/186 mutation-owner assignments; 45/45 explicit non-session access classifications; 176/186 durable mutation rate-limit controls; 90/90 direct fetch call sites with abort deadlines. RUN378 10/10; RUN379 21/21; RUN380 12/12. All 379 registered static commands passed across three bounded batches; the monolithic verification exceeded the execution window.
 - **Phase 4:** guarded Testnet browser/API suite added for eleven product surfaces. It requires real Testnet cookies, refuses Production and has not been run against live sessions.
 - **Phase 5:** source-level CWV, feed/profile, caching, media, accessibility, RUM and security contracts pass in targeted groups. A guarded Phase 5 Playwright harness now records viewport overflow, timing, LCP/heap when supported and eight-way feed concurrency; it has not been run. No measured mobile/browser/load/heap/database result is claimed.
@@ -12,9 +12,13 @@
 
 ---
 
+## Historical build context — 0.338.105
+
+The preceding source candidate is retained as the 0.338.106 parent. Its Phase 4–6 readiness and runtime acceptance limitations remain unchanged.
+
 ## Historical build context — 0.338.100
 
-RUN339 optional-provider isolation, failure containment, startup prefetch reduction and best-effort realtime recovery. This older derivative is superseded by the 0.338.105 source authority above.
+RUN339 optional-provider isolation, failure containment, startup prefetch reduction and best-effort realtime recovery. This older derivative is superseded by the 0.338.106 source authority above.
 
 ## Historical build context — 0.338.99
 

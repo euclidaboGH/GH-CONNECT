@@ -1,2 +1,2 @@
-export const APP_RELEASE_VERSION = "0.338.105"
-export const APP_RELEASE_SUMMARY = "Phase 3 API route, timeout, error, session integrity and abuse-control hardening; Phase 4 product acceptance preparation; Phase 5 performance/security review and opt-in mobile/loading/memory/concurrency browser measurements; separate Testnet and Mainnet release readiness reports."
+export const APP_RELEASE_VERSION = "0.338.106"
+export const APP_RELEASE_SUMMARY = "Configuration, package metadata and component security review; corrected release metadata and expanded environment template; no financial or database behavior changes."

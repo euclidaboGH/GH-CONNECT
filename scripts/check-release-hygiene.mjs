@@ -14,6 +14,7 @@ const checks = []
 const check = (name, ok, detail = '') => checks.push({ name, ok: Boolean(ok), detail })
 
 check('package and lockfile versions agree', pkg.version === lock.version && pkg.version === lock.packages?.['']?.version, `${pkg.version} / ${lock.version}`)
+check('script commands are stored only under package.json scripts', !Object.prototype.hasOwnProperty.call(pkg, 'verify:static') && typeof pkg.scripts?.['verify:static'] === 'string', 'verify:static must not be a stray top-level package field')
 check('release notice uses package version', release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`), `expected ${pkg.version}`)
 check('Node engine supports documented runtime', /\^24\.15\.0/.test(pkg.engines?.node ?? ''), pkg.engines?.node ?? 'missing')
 check('.nvmrc selects exact supported Node 24.15.0', readFileSync(join(root, '.nvmrc'), 'utf8').trim() === '24.15.0', readFileSync(join(root, '.nvmrc'), 'utf8').trim())
@@ -32,6 +33,10 @@ check('native dependency install scripts are approved only at reviewed lockfile 
 check('safe .env.example exists', existsSync(join(root, '.env.example')))
 if (existsSync(join(root, '.env.example'))) {
   const envExample = readFileSync(join(root, '.env.example'), 'utf8')
+  const envKeys = [...envExample.matchAll(/^([A-Z][A-Z0-9_]*)=/gm)].map((match) => match[1])
+  const duplicateEnvKeys = envKeys.filter((key, index) => envKeys.indexOf(key) !== index)
+  check('environment template has no duplicate variable declarations', duplicateEnvKeys.length === 0, duplicateEnvKeys.join(', '))
+  check('Testnet example separates Pi API mode from blockchain network', /^PI_ENV=production$/m.test(envExample) && /^PI_NETWORK=testnet$/m.test(envExample) && /^NEXT_PUBLIC_PI_SANDBOX=true$/m.test(envExample), 'PI_ENV=production is the Pi Platform API mode; PI_NETWORK and the SDK sandbox flag define Testnet')
   check('private credentials are not NEXT_PUBLIC in env template', !/^NEXT_PUBLIC_(?:PI_API_KEY|PI_SERVER_API_KEY|SUPABASE_SERVICE_ROLE_KEY|PI_WALLET_PRIVATE_SEED)=/m.test(envExample))
   const privateKeys = ['SUPABASE_SERVICE_ROLE_KEY', 'PI_SERVER_API_KEY', 'PI_WALLET_PRIVATE_SEED', 'PAYSTACK_SECRET_KEY', 'CRON_SECRET']
   const assignedPrivateValues = privateKeys.filter((key) => new RegExp(`^${key}[ \t]*=[ \t]*\\S+`, 'm').test(envExample))

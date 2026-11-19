@@ -1,10 +1,13 @@
 # GreenHaven — Current Project Bundle
 
-**Package:** `gh-connect@0.338.102`  
-**Working increment:** RUN373–RUN375 — Pi auth rejection guidance, API hardening and identity/session ACL proposal (RUN372 Field Research isolation retained)  
-**Baseline:** user-provided `GREENHAVEN-0_338_101-RUN372-FIELD-RESEARCH-DISCONNECTED-2026-11-19.zip`; RUN373–RUN375 are source-only derivatives.  
+**Current package:** `gh-connect@0.338.106`  
+**Current source archive:** `GREENHAVEN-0_338_106-CONFIG-COMPONENT-REVIEW-2026-11-19.zip`  
+**Parent source:** 0.338.105 RUN378–RUN380 Phase 3–6 acceptance/readiness candidate.  
+**Current increment:** configuration, package metadata, environment template and component security review; see `docs/UPGRADE-WORKLOG-0.338.106.md` and `docs/CONFIGURATION-COMPONENT-REVIEW-2026-11-19.md`.  
 **Date:** 2026-11-19  
-**Release status:** **NOT APPROVED** for production.
+**Release status:** **NOT APPROVED** for Testnet certification or Mainnet production.
+
+> Historical note: the remaining RUN373–RUN375 / RUN333 details below are preserved as prior implementation history. They do not describe the current package or supersede the 0.338.106 source-of-truth documents.
 
 ## RUN373–RUN374 — Authentication and API hardening
 

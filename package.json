@@ -1,6 +1,6 @@
 {
   "name": "gh-connect",
-  "version": "0.338.105",
+  "version": "0.338.106",
   "private": true,
   "description": "GreenHaven — social, matching, community, messaging, marketplace and GHC utility platform",
   "scripts": {
@@ -359,6 +359,5 @@
   "allowScripts": {
     "sodium-native@3.4.1": true,
     "unrs-resolver@1.12.2": true
-  },
-  "verify:static": " && node scripts/check-phase2-account-switch-engagement.mjs && node --disable-warning=ExperimentalWarning --experimental-strip-types scripts/test-phase2-account-switch-engagement.mjs && node scripts/check-phase3-creator-media-hardening.mjs && node scripts/check-phase4-community-post-pagination.mjs"
+  }
 }

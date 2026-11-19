@@ -12,6 +12,6 @@ const required = [
 ]
 for (const token of required) assert.ok(spec.includes(token), `Phase 5 browser harness missing ${token}`)
 assert.equal(pkg.scripts['test:e2e:phase5'], 'playwright test e2e/phase5-runtime-acceptance.spec.ts')
-assert.match(release, /0\.338\.105/)
-assert.match(release, /mobile\/loading\/memory\/concurrency browser measurements/)
+assert.ok(release.includes(`APP_RELEASE_VERSION = "${pkg.version}"`), 'release identity must match package.json')
+assert.match(release, /configuration, package metadata and component security review/i)
 console.log(`Phase 5 runtime acceptance guard: ${required.length + 3}/${required.length + 3} checks passed`)

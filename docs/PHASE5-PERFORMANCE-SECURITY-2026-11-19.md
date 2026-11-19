@@ -38,6 +38,6 @@ The browser suite has **not** been executed here: Playwright dependencies and re
 
 - Vercel project `gh-connect-5p3o` (`prj_ZgFsTnpcSGkJPFRAeuJJeSq2dvoZ`), team `GreenHaven's projects`.
 - Latest observed `testnet` Preview deployment: `READY`, deployment `dpl_Czqmaaoftb9pCqcsBptWUjmTAbrv`, region `dub1`, alias `gh-connect-5p3o.vercel.app`.
-- That deployment's Git commit is `787ab56ef4f2b6ad4d054c4357c0fab43c684bc7`; it is not the 0.338.105 source candidate produced by this work.
+- That deployment's Git commit is `787ab56ef4f2b6ad4d054c4357c0fab43c684bc7`; it is not the 0.338.105 source candidate or the 0.338.106 configuration-only derivative reviewed afterward.
 - Vercel's Preview runtime log query returned no matching warning/error/fatal records in the 30-minute window ending 12:53 UTC. This is not proof of no user-facing errors or no requests; the Hobby plan's log retention and event coverage limit the inference.
 - A grouped request-path query returned no rows. No page-level synthetic journey, real-user Core Web Vitals, DB query plan, heap profile or concurrent multi-instance load test was thereby established.

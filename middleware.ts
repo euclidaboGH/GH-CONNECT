@@ -31,8 +31,8 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"])
 const WEBHOOK_PATHS = new Set(["/api/webhooks/paystack"])
 
 function requestCorrelationId(request: NextRequest): string {
-  // Accept only canonical UUIDs from a trusted upstream; otherwise mint a fresh ID.
-  // This prevents arbitrary attacker-controlled strings from entering logs/headers.
+  // Treat the inbound header as untrusted. Accept only canonical UUID syntax;
+  // otherwise mint a fresh ID. This value is correlation metadata, never identity or access-control.
   const supplied = request.headers.get("x-request-id") || ""
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(supplied)
     ? supplied
