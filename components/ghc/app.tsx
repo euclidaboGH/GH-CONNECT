@@ -132,14 +132,22 @@ function TabScreenFallback({ label }: { label: string }) {
 
 /** Prefetch non-home tab chunks after first paint — faster tab switches without boot cost */
 function prefetchTabChunks() {
-  void import("./discovery-grid-screen")
-  void import("./message-screen")
-  void import("./profile-screen")
-  void import("./communities-screen")
-  void import("./match-screen")
-  void import("@/features/wallet")
-  void import("./greenhaven-ecosystem-screen")
-  void import("./create-hub-sheet")
+  // Warm only released, frequently used surfaces. Roadmap/optional modules are loaded
+  // on explicit navigation, never as a side effect of the authenticated app boot.
+  const releasedChunks = [
+    () => import("./discovery-grid-screen"),
+    () => import("./message-screen"),
+    () => import("./profile-screen"),
+    () => import("./communities-screen"),
+    () => import("./match-screen"),
+    () => import("@/features/wallet"),
+    () => import("./create-hub-sheet"),
+  ]
+  for (const load of releasedChunks) {
+    void load().catch(() => {
+      // A failed prefetch is non-fatal; the screen can retry when explicitly opened.
+    })
+  }
 }
 
 /**
@@ -328,8 +336,16 @@ export function GHConnectApp() {
   // One realtime bootstrap for the whole application. Remote events invalidate the
   // relevant screen instead of waiting for polling or requiring a manual refresh.
   useEffect(() => {
-    bootstrapRealtimeTransport()
-    void recoverRealtimeEvents()
+    // Realtime is a released core capability, but its transport is still best-effort:
+    // startup/recovery faults must not prevent the authenticated shell from rendering.
+    try {
+      bootstrapRealtimeTransport()
+    } catch {
+      // Core HTTP-backed screens remain available without realtime.
+    }
+    void recoverRealtimeEvents().catch(() => {
+      // Recovery is retried by the normal reconnect/refresh lifecycle.
+    })
 
     const sectionForEvent = (type: string): SectionRefreshId[] => {
       if (/^(POST_|LIKE_|COMMENT_|STORY_)/.test(type)) return ["feed"]
@@ -1093,9 +1109,9 @@ export function GHConnectApp() {
   useEffect(() => {
     afterFirstPaint(() => {
       const warm = () => {
-        void import("./discovery-grid-screen")
-        void import("./message-screen")
-        void import("./profile-screen")
+        void import("./discovery-grid-screen").catch(() => {})
+        void import("./message-screen").catch(() => {})
+        void import("./profile-screen").catch(() => {})
       }
       // Use Window typing explicitly — `in` narrowing can yield never on window.setTimeout
       const w: Window = window
@@ -1105,8 +1121,8 @@ export function GHConnectApp() {
         w.setTimeout(warm, 400)
       }
       w.setTimeout(() => {
-        void import("./settings")
-        void import("@/features/wallet")
+        void import("./settings").catch(() => {})
+        void import("@/features/wallet").catch(() => {})
       }, 2200)
     })
   }, [])

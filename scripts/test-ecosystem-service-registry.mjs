@@ -11,10 +11,13 @@ const active = ECOSYSTEM_SERVICES.filter((service) => service.status === 'ACTIVE
 const beta = ECOSYSTEM_SERVICES.filter((service) => service.status === 'BETA')
 const comingSoon = ECOSYSTEM_SERVICES.filter((service) => service.status === 'COMING_SOON')
 const unavailable = ECOSYSTEM_SERVICES.filter((service) => service.status === 'UNAVAILABLE')
-assert.equal(active.length, 12, 'the twelve released services remain active')
+assert.equal(active.length, 11, 'eleven released services remain active while Field Research is suspended')
 assert.equal(beta.length, 0, 'no service is silently promoted to beta')
 assert.equal(comingSoon.length, 30, 'all thirty planned services remain Coming Soon')
-assert.equal(unavailable.length, 0, 'no existing service is silently disabled')
+assert.equal(unavailable.length, 1, 'only Field Research is explicitly suspended')
+assert.equal(unavailable[0].id, 'field-research', 'Field Research is the only suspended service')
+assert.deepEqual(unavailable[0].destination, { kind: 'none' })
+assert.deepEqual(getEcosystemServiceAccess('field-research'), { allowed: false, serviceId: 'field-research', reason: 'SERVICE_UNAVAILABLE' })
 
 for (const service of comingSoon) {
   assert.equal(isInteractiveStatus(service.status), false, `${service.id} must remain non-interactive`)
@@ -33,4 +36,4 @@ for (const service of ECOSYSTEM_SERVICES) {
   assert.ok(service.title.trim().length > 0, `${service.id} has a display title`)
 }
 
-console.log('Ecosystem service registry: 42 services / 10 categories / 12 Active / 30 Coming Soon — all checks passed')
+console.log('Ecosystem service registry: 42 services / 10 categories / 11 Active / 30 Coming Soon / 1 Unavailable — all checks passed')

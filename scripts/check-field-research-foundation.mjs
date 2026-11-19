@@ -22,7 +22,7 @@ const checks = [
   ['field portal is browser accessible and professionally titled', /Field Research/.test(client) && /PUBLIC PORTAL/.test(client)],
   ['agent workspace has overview/report/survey navigation', /overview/.test(client) && /report/.test(client) && /surveys/.test(client)],
   ['field research appears in Ecosystem research category', /id: "research"/.test(registry) && /id: "field-research"/.test(registry)],
-  ['ecosystem opens public field research portal', /service\.id === "field-research"/.test(ecosystem) && /location\.assign\("\/field\/studio"\)/.test(ecosystem)],
+  ['suspended Field Research has no direct ecosystem navigation path', !/location\.assign\("\/field\/studio"\)/.test(ecosystem) && /id: "field-research"[\s\S]*?status: "UNAVAILABLE"[\s\S]*?destination: \{ kind: "none" \}/.test(registry)],
   ['durable configured storage fails closed instead of acknowledging memory fallback', /FIELD_REPORT_PERSIST_FAILED/.test(store) && /never acknowledge a process-local write/.test(store)],
   ['thirty-track programmes exist for all three requested product areas', (plan.match(/## Field Research — 30 upgrade tracks|## Challenge-on-Post — 30 upgrade tracks|## Polls-on-Post — 30 upgrade tracks/g) || []).length === 3],
   ['owner-facing visual Research Studio is implemented', /Create research/.test(studio) && /Add question/.test(studio) && /Publish form/.test(studio)],

@@ -45,6 +45,38 @@ export function middleware(request: NextRequest) {
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set("x-request-id", requestId)
 
+  // RUN372: Field Research is deliberately disconnected at the edge. Keep
+  // this before route execution so a failing research/field handler, provider,
+  // database query, or public form cannot affect the rest of the application.
+  // The source and migrations are retained for a controlled future re-enable.
+  const isResearchApi = path === "/api/research" || path.startsWith("/api/research/") ||
+    path === "/api/field" || path.startsWith("/api/field/")
+  if (isResearchApi) {
+    return NextResponse.json(
+      { ok: false, error: "FIELD_RESEARCH_TEMPORARILY_DISABLED", requestId },
+      {
+        status: 503,
+        headers: {
+          "Cache-Control": "no-store, max-age=0",
+          "Retry-After": "3600",
+          "X-Request-ID": requestId,
+          "X-Content-Type-Options": "nosniff",
+        },
+      }
+    )
+  }
+
+  // Disable both authenticated Field Research pages and anonymous research
+  // share links. Use a non-disclosing 404 for browser-facing routes.
+  const isResearchPage = path === "/field" || path.startsWith("/field/") ||
+    path === "/r" || path.startsWith("/r/")
+  if (isResearchPage) {
+    return new NextResponse(null, {
+      status: 404,
+      headers: { "Cache-Control": "no-store, max-age=0", "X-Request-ID": requestId },
+    })
+  }
+
   if (path === "/api/health/live" || path === "/api/health/live/") {
     const response = liveJson()
     response.headers.set("X-Request-ID", requestId)
@@ -103,5 +135,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/api/:path*"],
+  matcher: ["/api/:path*", "/field", "/field/:path*", "/r", "/r/:path*"],
 }

@@ -1,4 +1,12 @@
-# CURRENT BUILD CONTEXT — 0.338.99 (2026-11-17)
+# CURRENT BUILD CONTEXT — 0.338.100 (2026-11-19)
+
+- **User-designated source baseline:** `GREENHAVEN-0_338_99-RUN370-PI-AUTH-REJECTION-DIAGNOSTICS-2026-11-19.zip`.
+- **Current derivative:** `gh-connect@0.338.100`, RUN339 optional ecosystem provider isolation, based directly on the supplied RUN370 archive; source-only, not pushed or deployed.
+- **Latest work:** canonical release-gated optional provider execution, failure containment, removal of ecosystem roadmap prefetch from app startup, and best-effort realtime startup/recovery. Existing Events/Charity gates and released core services are preserved.
+- **Verification:** new optional-provider runtime regression 4/4; existing ecosystem registry test passes. Full supported Node 24.15.x dependency-backed typecheck/lint/build and browser/device acceptance remain outstanding. Production remains NOT APPROVED.
+
+## Historical build context — 0.338.99
+
 
 - **User-designated source baseline:** `GREENHAVEN-0.338.93-RUN312-NOTIFICATION-RPC-FIX-2026-11-17.zip`; current local remediation derivative: `gh-connect@0.338.99`, a source-only derivative of the 0.338.93 candidate, itself derived from the supplied authoritative 0.338.92 baseline.
 - **Package:** `gh-connect@0.338.99`; package, lockfile and in-app release identity are synchronized.

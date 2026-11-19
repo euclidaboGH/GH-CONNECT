@@ -34,7 +34,7 @@ add('focus and reduced-motion behavior remain supported', /focus-visible/.test(c
 add('Coming Soon briefs disclose all thirty service-specific tracks', /getServiceUpgradePlan\(service\)\.map/.test(ecosystem) && /30 upgrade tracks in preparation/.test(ecosystem))
 add('Coming Soon work is visibly in development and remains unavailable', /In development/.test(ecosystem) && /Availability stays off/.test(ecosystem) && /explicitly released/.test(ecosystem))
 add('all 30 Coming Soon services retain no live destination', statusMatches.filter((s) => s === 'COMING_SOON').length === 30 && /destination: \{ kind: "none" \}/.test(registry))
-add('active service statuses and canonical registry count are unchanged', statusMatches.length === 42 && statusMatches.filter((s) => s === 'ACTIVE').length === 12)
+add('canonical registry retains 42 services with 11 Active and one deliberately Unavailable service', statusMatches.length === 42 && statusMatches.filter((s) => s === 'ACTIVE').length === 11 && statusMatches.filter((s) => s === 'UNAVAILABLE').length === 1)
 for (const c of checks) console.log(`${c.ok ? 'PASS' : 'FAIL'} Run #305: ${c.name}`)
 const failed = checks.filter((c) => !c.ok)
 console.log(`\nRun #305 Quiet Premium interface: ${checks.length - failed.length}/${checks.length} passed; ${failed.length} failed.`)

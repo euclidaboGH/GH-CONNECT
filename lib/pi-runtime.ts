@@ -37,7 +37,7 @@ export type PiRuntimeSnapshot = {
 /** Emit stable, token-free Pi auth diagnostics for field troubleshooting. */
 export function reportPiAuthDiagnostic(
   code: string,
-  details: { stage?: string; status?: number; sandbox?: boolean; hasPi?: boolean; hasAccessToken?: boolean; errorName?: string; errorShape?: string; reasonClass?: string; reason?: string; inIframe?: boolean; userActivationActive?: boolean } = {},
+  details: { stage?: string; status?: number; sandbox?: boolean; hasPi?: boolean; hasAccessToken?: boolean; errorName?: string; errorShape?: string; reasonClass?: string; reason?: string; sdkErrorCode?: string; sdkErrorStatus?: number; sdkErrorFields?: string; inIframe?: boolean; userActivationActive?: boolean } = {},
 ): void {
   const safeCode = /^[A-Z0-9_]{3,64}$/.test(code) ? code : "PI_AUTH_DIAGNOSTIC_INVALID"
   const safeDetails = {
@@ -51,6 +51,9 @@ export function reportPiAuthDiagnostic(
     reasonClass: details.reasonClass && /^[A-Z0-9_]{3,32}$/.test(details.reasonClass) ? details.reasonClass : undefined,
     // Bounded (<=80 chars), printable-ASCII, token-redacted reason text only; never a raw error object.
     reason: typeof details.reason === "string" ? details.reason.slice(0, 80) : undefined,
+    sdkErrorCode: details.sdkErrorCode && /^[A-Z][A-Z0-9_:-]{1,47}$/.test(details.sdkErrorCode) ? details.sdkErrorCode : undefined,
+    sdkErrorStatus: Number.isInteger(details.sdkErrorStatus) && details.sdkErrorStatus! >= 100 && details.sdkErrorStatus! <= 599 ? details.sdkErrorStatus : undefined,
+    sdkErrorFields: typeof details.sdkErrorFields === "string" ? details.sdkErrorFields.slice(0, 120) : undefined,
     inIframe: typeof details.inIframe === "boolean" ? details.inIframe : undefined,
     userActivationActive: typeof details.userActivationActive === "boolean" ? details.userActivationActive : undefined,
   }
@@ -87,10 +90,18 @@ export function isPiSandboxFrame(): boolean {
   let framed = false
   try { framed = window.self !== window.top } catch { framed = true }
   const referrerHost = getReferrerHost()
-  // Pi's Developer Sandbox wraps the registered app on this host. The referrer
-  // is corroborating evidence; framing remains required so a copied referrer
-  // cannot make a top-level Vercel page appear authorised.
-  return framed && (referrerHost === "sandbox.minepi.com" || referrerHost.endsWith(".sandbox.minepi.com"))
+  // Pi's Developer Sandbox can embed the registered app through either its
+  // sandbox host or the Pi app CDN wrapper. The reported Pi Browser frame uses
+  // app-cdn.minepi.com; excluding it sends sign-in through the legacy parent
+  // credential probe, which awaits postMessage and loses the original tap's
+  // transient user activation before Pi.authenticate is invoked.
+  // Framing and Testnet mode are still mandatory; a copied referrer alone is
+  // never enough to classify a top-level page as a trusted Sandbox frame.
+  const trustedSandboxReferrer =
+    referrerHost === "sandbox.minepi.com" ||
+    referrerHost.endsWith(".sandbox.minepi.com") ||
+    referrerHost === "app-cdn.minepi.com"
+  return framed && trustedSandboxReferrer
 }
 
 function isWindowFramed(): boolean {
@@ -106,14 +117,22 @@ function isUserActivationActive(): boolean | undefined {
 
 /** Short, printable, token-redacted reason text from whatever the Pi SDK rejected with. */
 export function sanitizePiAuthReason(err: unknown): string | undefined {
-  let raw = ""
-  if (typeof err === "string") raw = err
-  else if (err instanceof Error) raw = err.message
+  let candidates: unknown[] = []
+  if (typeof err === "string") candidates = [err]
   else if (err && typeof err === "object") {
     const o = err as Record<string, unknown>
-    const found = [o.message, o.error, o.reason, o.code].find((v) => typeof v === "string")
-    raw = typeof found === "string" ? found : ""
+    // Prefer machine-readable rejection details over a generic Error.message.
+    candidates = [o.code, o.errorCode, o.reason, o.error, o.message]
+    for (const nestedKey of ["data", "response", "cause"]) {
+      const nested = o[nestedKey]
+      if (nested && typeof nested === "object") {
+        const n = nested as Record<string, unknown>
+        candidates.push(n.code, n.errorCode, n.reason, n.error, n.message)
+      }
+    }
   }
+  const raw = candidates.find((v) => typeof v === "string" && v.trim())
+  if (typeof raw !== "string") return undefined
   const cleaned = raw
     .replace(/[^\x20-\x7E]/g, " ")
     .replace(/[A-Za-z0-9_\-.+/=]{24,}/g, "[redacted]")
@@ -121,6 +140,34 @@ export function sanitizePiAuthReason(err: unknown): string | undefined {
     .trim()
     .slice(0, 80)
   return cleaned || undefined
+}
+
+/** Extract only safe, bounded SDK rejection metadata; never serialize error objects. */
+export function getPiAuthErrorMetadata(err: unknown): {
+  code?: string
+  status?: number
+  fields?: string
+} {
+  if (!err || typeof err !== "object") return {}
+  const root = err as Record<string, unknown>
+  const allowed = new Set(["name", "message", "code", "errorCode", "reason", "error", "status", "statusCode", "data", "response", "cause"])
+  const seen = new Set<string>()
+  const collect = (value: unknown, depth: number) => {
+    if (!value || typeof value !== "object" || depth > 1) return
+    const record = value as Record<string, unknown>
+    for (const key of Object.keys(record)) if (allowed.has(key)) seen.add(key)
+    if (depth === 0) for (const key of ["data", "response", "cause"]) collect(record[key], depth + 1)
+  }
+  collect(root, 0)
+  const candidates = [root.code, root.errorCode, (root.data as Record<string, unknown> | undefined)?.code, (root.response as Record<string, unknown> | undefined)?.code]
+  const rawCode = candidates.find((v) => typeof v === "string" && /^[A-Z][A-Z0-9_:-]{1,47}$/.test(v))
+  const statusCandidates = [root.status, root.statusCode, (root.response as Record<string, unknown> | undefined)?.status]
+  const status = statusCandidates.find((v) => Number.isInteger(v) && Number(v) >= 100 && Number(v) <= 599)
+  return {
+    code: typeof rawCode === "string" ? rawCode : undefined,
+    status: typeof status === "number" ? status : undefined,
+    fields: [...seen].sort().join(",").slice(0, 120) || undefined,
+  }
 }
 
 export function classifyPiAuthReason(reason: string | undefined): string {
@@ -385,6 +432,7 @@ export async function piAuthenticateOfficial(
     ])
   } catch (err) {
     const reason = sanitizePiAuthReason(err)
+    const metadata = getPiAuthErrorMetadata(err)
     reportPiAuthDiagnostic("PI_AUTH_PROMPT_REJECTED", {
       stage: "pi_authenticate",
       sandbox: getPiSandbox(),
@@ -392,6 +440,9 @@ export async function piAuthenticateOfficial(
       errorShape: err instanceof Error ? "error" : typeof err === "string" ? "string" : err && typeof err === "object" ? "object" : "other",
       reasonClass: classifyPiAuthReason(reason),
       reason,
+      sdkErrorCode: metadata.code,
+      sdkErrorStatus: metadata.status,
+      sdkErrorFields: metadata.fields,
       inIframe: isWindowFramed(),
     })
     // The Pi bridge often rejects with a plain string/object. Wrap it so callers

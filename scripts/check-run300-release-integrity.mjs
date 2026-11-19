@@ -12,7 +12,7 @@ const ci = existsSync(ciPath) ? read(ciPath) : ''
 const closure = read('scripts/check-phase10-release-closure.mjs')
 const phasePack = read('scripts/check-phase1-10-upgrade-pack.mjs')
 const truth = read('docs/PROJECT_TRUTH.md')
-const audit = readProjectDoc('docs/PHASE-1-CONSOLIDATED-AUDIT-AND-IMPLEMENTATION-REGISTER-2026-11-09.md')
+const audit = read('docs/UPGRADE-WORKLOG-0.338.101.md')
 const manifest = read('VERIFIED_MANIFEST.txt')
 const release = read('lib/app-release.ts')
 const ignore = read('.vercelignore').split(/\r?\n/).map((x) => x.trim())
@@ -42,7 +42,7 @@ add('in-app release identity matches package version', release.includes(`APP_REL
 add('README identifies the current package version', read('README.md').includes(`Current source version:** \`${pkg.version}\``))
 add('project truth identifies the current package version', truth.includes(`Current source version:** \`${pkg.version}\``))
 add('verified manifest identifies the current package version', manifest.includes(`project_version=${pkg.version}`))
-add('Phase 1 audit identifies the current package identity', audit.includes(`gh-connect@${pkg.version}`))
+add('current upgrade worklog identifies the current package identity', audit.includes(`gh-connect@${pkg.version}`))
 add('phase-10 closure uses case-insensitive no-go assertion', /NOT APPROVED/i.test(closure))
 
 // 8–14: CI must remain static, least-privilege and migration-safe.

@@ -1,4 +1,23 @@
-# Current project truth — 0.338.99 RUN364 (2026-11-19)
+# Current project truth — 0.338.101 RUN372 (2026-11-19)
+
+- Latest local source derivative: `GREENHAVEN-0_338_101-RUN372-FIELD-RESEARCH-DISCONNECTED-2026-11-19.zip`, based on the user-designated RUN371 archive.
+- Field Research / Research Studio is deliberately disconnected: registry status `UNAVAILABLE`, no service destination, `/field/**` and `/r/**` return 404 at middleware, and `/api/research/**` plus `/api/field/**` return 503 before route handlers execute.
+- Research source, SQL migrations, migration classifications and historical records are retained. No database, storage, user-submission or migration state was changed.
+- The public-route policy no longer treats research share links or the field desk as public routes; crawler policy disallows `/field` and `/r`.
+- Targeted verification: RUN372 isolation 8/8; RUN342 auth-scope isolation 6/6; public-route boundary 12/12; ecosystem registry 42 services / 10 categories / 11 Active / 30 Coming Soon / 1 Unavailable; ecosystem coverage 15/15.
+- Full static suite, Node 24 dependency-backed typecheck/lint/build, and live browser/Testnet acceptance remain separate gates. Retained Research/Field source is still present in the repository and may still be parsed by general build tooling.
+- No GitHub push, Vercel deployment, Supabase mutation, migration application or Mainnet action occurred. Production remains NOT APPROVED.
+
+**Current source version:** `0.338.101`  
+**Package identity:** `gh-connect@0.338.101`  
+**Latest user-provided source archive:** `GREENHAVEN-0_338_100-RUN371-PI-CDN-SANDBOX-AUTH-FIX-2026-11-19.zip`  
+**Current local derivative:** RUN372 Field Research hard disconnection; not pushed or deployed.  
+**Current status:** **NOT APPROVED** for production.
+
+---
+
+## Historical RUN364 and earlier records
+
 
 
 ## RUN364 full-project audit and gate repair (2026-11-19)

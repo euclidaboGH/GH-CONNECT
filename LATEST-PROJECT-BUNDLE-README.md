@@ -1,10 +1,14 @@
 # GreenHaven — Current Project Bundle
 
-**Package:** `gh-connect@0.338.99`  
-**Working increment:** RUN337 — GitHub audit / environment-template repair (RUN336 retained; RUN333 Testnet baseline retained)  
+**Package:** `gh-connect@0.338.101`  
+**Working increment:** RUN372 — Field Research hard disconnection (RUN371 Pi CDN Sandbox auth fix retained)  
 **Baseline:** user-provided RUN331 archive; RUN332 audit remediation is the immediate parent.  
-**Date:** 2026-11-18  
+**Date:** 2026-11-19  
 **Release status:** **NOT APPROVED** for production.
+
+## RUN372 — Field Research hard disconnection
+
+Field Research / Research Studio is temporarily unavailable. The canonical service registry marks it `UNAVAILABLE` with no destination. Edge middleware blocks `/field/**` and `/r/**` with a non-disclosing 404, and blocks `/api/research/**` plus `/api/field/**` with a no-store 503 before route handlers execute. Research is removed from the public-route allowlist and crawler indexing. Its source code, SQL migrations and migration classifications are retained unchanged for a future controlled re-enable. RUN372 targeted checks: 8/8 isolation, 6/6 RUN342 scope, 12/12 public-route boundary, 15/15 ecosystem coverage. The full static suite and Node 24 build/typecheck remain separate gates. No DB write, migration, GitHub push or Vercel deployment occurred.
 
 ## Delivery identity
 
@@ -82,3 +86,14 @@ Never run a bulk migration push while any migration source/history discrepancy o
 RUN338 adds token-free Pi SDK/authentication stage codes, backend `/api/auth/pi` stage telemetry, and a post-login HttpOnly cookie round-trip check through `/api/auth/session`. The client now refuses to mark the server session ready until the durable cookie-backed session and Pi identity mapping are confirmed. The read-only Testnet SQL diagnostic script is `docs/RUN338-PI-AUTH-SUPABASE-DIAGNOSTICS.sql`; the read-only database findings and exact limits are documented in `docs/RUN338-PI-AUTH-DIAGNOSTICS-AND-SUPABASE-REVIEW.md`.
 
 RUN338 does **not** claim dependency remediation complete. npm registry access timed out, so package versions and the lockfile were left unchanged rather than fabricating lock metadata. The 29-finding audit remains a blocker; in particular, `pi-backend` → `stellar-sdk` is used by A2U and withdrawal flows and requires compatible Testnet verification before any override. No Supabase write, migration, grant change, GitHub push, Vercel deployment, or Mainnet operation occurred.
+
+
+## RUN339 — optional ecosystem provider isolation
+
+RUN339 introduces a guarded optional-provider execution boundary that consults the existing canonical ecosystem service-release helper before invoking a provider callback. The callback is the only place where a provider's dynamic import/initialization should occur; Coming Soon, unavailable and unknown services are rejected before that callback runs. Provider exceptions are returned as a typed `PROVIDER_FAILURE` result and are not propagated into core services.
+
+The authenticated app's startup prefetch now warms only released, frequently used surfaces; the ecosystem roadmap screen is loaded only on explicit navigation. Prefetch failures are swallowed as non-fatal. Realtime transport startup and event recovery are best-effort, preserving HTTP-backed core screen availability if realtime initialization or recovery fails.
+
+Regression coverage: unreleased provider callback is never invoked; released provider success is returned; provider exception is contained; unknown service callback is never invoked. Existing ecosystem registry, server release helper, Events and Charity release checks are preserved. This does not claim every unreleased provider adapter has been migrated to the new wrapper: any future provider integration must use `runOptionalEcosystemProvider` and must keep provider imports inside its guarded callback.
+
+No database migrations, Supabase writes, GitHub push, Vercel deployment, or Mainnet operations were performed. Production approval status remains unchanged.

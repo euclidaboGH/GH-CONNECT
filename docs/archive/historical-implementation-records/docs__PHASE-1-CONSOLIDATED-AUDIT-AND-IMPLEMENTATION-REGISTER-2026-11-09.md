@@ -1,3 +1,5 @@
+Current package identity for source derivative RUN372: `gh-connect@0.338.101`. This line synchronizes the executable release-integrity contract only; the audit findings below retain their original historical scope and do not imply new deployment or production acceptance. Production remains NOT APPROVED.
+
 # GreenHaven / GH-CONNECT — Phase 1 Consolidated Audit and Implementation Register
 
 **Audit date:** 2026-11-09  
@@ -240,3 +242,8 @@ Phase 8 corrected an application-vs-database commission precision mismatch: app-
 ## Run #296 registration integrity update (2026-11-12)
 
 The active source package is now `gh-connect@0.338.85`. Run #296 prevents incomplete onboarding through explicit field selection, durable step-by-step profile saves, authenticated durable avatar uploads and a server-side completion gate. See `RUN296-ONBOARDING-REGISTRATION-DELIVERY.md`.
+
+
+## Current package identity — RUN339 (2026-11-19)
+
+The current source derivative package identity is `gh-connect@0.338.100`, based on the user-supplied RUN370 archive. This line is a current identity pointer; the historical audit findings and dates above remain unchanged.

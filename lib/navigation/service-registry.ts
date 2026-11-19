@@ -264,10 +264,10 @@ export const ECOSYSTEM_SERVICES: readonly EcosystemService[] = [
     category: "research",
     icon: "ClipboardList",
     description: "Create surveys, collect field reports and review research responses",
-    status: "ACTIVE",
-    destination: { kind: "focus", serviceId: "field-research" },
+    status: "UNAVAILABLE",
+    destination: { kind: "none" },
     keywords: ["field research", "surveys", "forms", "elections", "polling", "examinations", "data collection", "research"],
-    featured: true,
+    roadmapNote: "Temporarily disconnected while the service is isolated and reviewed.",
   },
 
   // Transport

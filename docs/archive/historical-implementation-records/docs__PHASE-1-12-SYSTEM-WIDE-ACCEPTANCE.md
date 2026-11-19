@@ -1,3 +1,6 @@
+Current source baseline for this consolidated report: `0.338.101`
+- Current audit status (v0.338.101): RUN372 Field Research hard disconnection; edge blocks `/field/**`, `/r/**`, `/api/research/**` and `/api/field/**`; targeted isolation checks pass 8/8; full Node 24.15.0 build and browser/device acceptance remain outstanding. Production NOT APPROVED.
+
 Current source baseline for this consolidated report: `0.338.99`
 - Current audit status (v0.338.99): Run 317 browser-safe crypto boundary 9/9; push contract runtime 19/19; Run #299 build-contract 20/20; Run #301 release gate remains explicit; production typecheck/lint passed on the previous 0.338.98 GitHub run, but Next.js build failed on `node:crypto`; 0.338.99 requires a fresh Node 24.15.0 CI build. Production NOT APPROVED.
 - The historical phase snapshots below are preserved for audit context and are not evidence of current deployment or production acceptance.
@@ -318,3 +321,9 @@ The current source baseline includes a shared accessible active-filter summary a
 ## Current 0.338.9 experience and navigation follow-up (2026-11-09)
 
 The shared application header is slimmer; hidden duplicate header controls are inert; Marketplace and Community content use improved responsive spacing; active-tab scroll reset resolves the actual scroll owner; and global keyboard shortcuts avoid editable controls, modal workflows and IME composition. The dedicated UI/navigation audit passes 31/31. The independent Marketplace/Community security contract passes 42/42. These source checks do not replace Node 24.15.0 typecheck/build or browser/device, database and provider acceptance. No financial authority or production state changed.
+
+
+## Current source baseline metadata — RUN339
+
+Current source baseline for this consolidated report: `0.338.100`
+Current audit status (v0.338.100): RUN339 optional ecosystem provider isolation source-only candidate; production remains NOT APPROVED. Full Node.js 24.15.0 dependency-backed typecheck, lint, production build and browser/device acceptance remain required.

@@ -1,3 +1,11 @@
+Release: `0.338.101`
+**Current source baseline:** `0.338.101`
+**Current status:** **NOT APPROVED** for production.
+
+RUN372 Field Research hard disconnection is source-only. Research and field page/API prefixes are blocked before handler execution; the service is marked unavailable in the canonical registry. Source and migrations remain preserved, with no database changes. Targeted route/service regression checks pass. Node 24.15.0 typecheck/lint/build, live browser/Testnet and operator acceptance remain outstanding.
+
+---
+
 Release: `0.338.99`
 **Current source baseline:** `0.338.99`
 **Current status:** **NOT APPROVED** for production.
@@ -358,3 +366,10 @@ The in-memory transaction coordinator now executes registered operations, requir
 
 ## 0.338.96 Run 314 — 30 screen-level UI upgrades
 Thirty targeted responsive presentation rules and component hooks were added across the active product surfaces. This pass does not claim visual acceptance: Android, Pi Browser, tablet and desktop screenshot/interaction checks remain outstanding. Financial and entitlement authority is unchanged.
+
+
+## Current release baseline metadata — RUN339
+
+Release: `0.338.100`
+**Current source baseline:** `0.338.100`
+Production release remains **NOT APPROVED for production**. RUN339 is a source-only derivative of the user-provided RUN370 archive. Full Node.js 24.15.0 dependency-backed typecheck, lint, Next.js production build and browser/device acceptance remain outstanding.

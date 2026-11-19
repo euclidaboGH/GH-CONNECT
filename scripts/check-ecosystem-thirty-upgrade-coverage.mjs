@@ -29,7 +29,7 @@ check('10 all thirty tracks are disclosed in Coming Soon details', /getServiceUp
 check('11 plans are explicitly not completion claims', /not claims that a feature is shipped/.test(plans) && /not represented as completed/.test(screen))
 check('12 finance and entitlement authority remains server-side', /No client-authoritative balances, rewards, payments, bookings, or entitlements/.test(plans))
 check('13 migration review and explicit launch authorization remain required', /explicit launch authorization/.test(docs) && /clean-database/.test(docs))
-check('14 service statuses remain 12 Active and 30 Coming Soon', statuses.filter(s => s === 'ACTIVE').length === 12 && statuses.filter(s => s === 'COMING_SOON').length === 30)
+check('14 service statuses are 11 Active, 30 Coming Soon and only Field Research Unavailable', statuses.filter(s => s === 'ACTIVE').length === 11 && statuses.filter(s => s === 'COMING_SOON').length === 30 && statuses.filter(s => s === 'UNAVAILABLE').length === 1 && /id: "field-research"[\s\S]*?status: "UNAVAILABLE"[\s\S]*?destination: \{ kind: "none" \}/.test(registry))
 check('15 plans do not rewrite service statuses', !/status\s*:\s*"ACTIVE"|status\s*:\s*"BETA"|status\s*:\s*"COMING_SOON"/.test(plans))
 console.log(`\nEcosystem thirty-track coverage: ${checks.filter(Boolean).length}/${checks.length} checks passed; ${serviceIds.length} services × 30 tracks = ${serviceIds.length * 30} scoped objectives.`)
 if (checks.some((ok) => !ok)) process.exit(1)

@@ -1,12 +1,15 @@
-# GreenHaven source authority — 0.338.99 RUN364 full-project audit and gate repair (2026-11-19)
+# GreenHaven source authority — 0.338.101 RUN372 Field Research hard disconnection (2026-11-19)
 
-**Current source version:** `0.338.99`
-**Current user-provided archive:** `GREENHAVEN-0.338.99-RUN331-PHASE1-6-GAP-REGISTER-PHASE7-COMMUNITIES.zip`  
-**SHA-256 of RUN331 archive:** `851ac3a540b76572b1325c6e06a35de069649f37db5cb11d24aca124d239fafa`  
-**Current local working derivative:** RUN364 full-project audit and gate repair, based on the RUN363 source archive; source-only, not pushed or deployed.  
-**Package identity:** `gh-connect@0.338.99` (user-facing brand: GREENHAVEN).
+**Current source version:** `0.338.101`
+**Current user-provided archive:** `GREENHAVEN-0_338_100-RUN371-PI-CDN-SANDBOX-AUTH-FIX-2026-11-19.zip`  
+**Current local working derivative:** RUN372 Field Research hard disconnection; source-only, not pushed or deployed.  
+**Package identity:** `gh-connect@0.338.101` (user-facing brand: GREENHAVEN).
 
-RUN331 is the latest user-provided starting archive for RUN332. The earlier RUN324 archive and RUN325–RUN330 derivatives remain historical lineage only. Preserve all existing CI, identity, wallet, payment and migration boundaries. Do not treat the RUN332 candidate as the live GitHub branch or Vercel deployment.
+RUN372 suspends Field Research without deleting its source or changing database state. The canonical service is `UNAVAILABLE` with no destination; `/field/**` and `/r/**` are blocked with a non-disclosing 404 at middleware, while `/api/research/**` and `/api/field/**` return a no-store 503 before route handlers execute. Research routes are removed from the public-route allowlist and crawler indexing. Migration classifications and history are unchanged. Targeted checks pass: isolation 8/8, RUN342 auth-scope 6/6, public-route boundary 12/12, ecosystem registry and 30-track coverage 15/15. The source remains in the repository and may still be parsed by general build tooling; full Node 24 typecheck/lint/build and live browser acceptance remain outstanding. No Supabase mutation, migration, GitHub push, Vercel deployment or Mainnet operation occurred. Production remains NOT APPROVED.
+
+The following RUN339 and earlier notes are historical records; they do not override RUN372's current suspension state.
+
+---
 
 ## RUN364 full-project audit and gate repair
 
@@ -217,3 +220,8 @@ RUN352 continues from the user-designated RUN344 full project plus the RUN351 pa
 The live Testnet payout ledger reconciles across 18 payout requests (five paid, thirteen released) with zero request-level ledger-pattern mismatches; GHC balances are non-negative. One fulfilled marketplace listing-fee intent references a listing no longer present, and three historical fulfilled membership intents are not directly linked to the current entitlement row although those users retain current entitlements; both require historical/provider evidence and were not repaired automatically. Testnet migration history has 46 rows: 15 exact source matches, 11 same-slug/different-version candidates unverified and 20 history rows without source files. The Mainnet project currently has zero public base tables and zero migration-history rows. No Testnet or Mainnet database changes, migrations, financial operations, deployments or credential changes were performed.
 
 RUN352 adds a non-canonical review proposal to revoke redundant client SELECT grants from six server-only financial tables; it was not applied. TypeScript/ESLint/production build and Pi Browser/device acceptance remain blocked by absent `node_modules` and unavailable Node 24.15.x in this runtime. This archive is a source-only audit/remediation candidate, **not production approved**. See `docs/RUN352-COMPREHENSIVE-INTEGRITY-AUDIT-2026-11-18.md` and the three RUN352 CSV inventories. Mainnet remains untouched and requires separate explicit approval.
+
+
+## RUN339 optional ecosystem provider isolation
+
+RUN339 reuses the existing canonical ecosystem service-release helper to gate optional provider execution. Provider callbacks (and therefore dynamic imports/initialization) are not invoked for Coming Soon, unavailable or unknown services. Provider exceptions are contained as typed failures. App startup prefetch is limited to released core surfaces; the ecosystem roadmap screen loads only on explicit navigation. Realtime bootstrap/recovery is best-effort so HTTP-backed core services remain usable if realtime is unavailable. Dedicated Events and Charity release checks remain intact. See `docs/RUN339-OPTIONAL-ECOSYSTEM-PROVIDER-ISOLATION-2026-11-19.md`.

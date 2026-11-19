@@ -162,7 +162,6 @@ export function navigateTo(raw: string, options: NavigateOptions = {}): boolean 
  * - matches → Matches
  * - marketplace → Marketplace browse
  * - orders → Marketplace orders bucket
- * - field-research → /field/studio
  * - wallet | ghc | pi-payments → Wallet (with asset-rail focus)
  * - rewards → Rewards
  * - membership → Settings membership
@@ -171,17 +170,6 @@ export function openService(serviceId: string): boolean {
   const service = getServiceById(serviceId)
   if (!service) return false
   if (!isInteractiveStatus(service.status)) return false
-
-  // Field Research: real product surface is the authenticated studio route.
-  if (service.id === "field-research") {
-    if (typeof window === "undefined") return false
-    try {
-      window.location.assign("/field/studio")
-      return true
-    } catch {
-      return false
-    }
-  }
 
   // Connections: Matches tab + open the connection-requests inbox after the tab mounts.
   if (service.id === "connections") {

@@ -12,8 +12,8 @@ const checks = []
 const test = (name, ok) => { checks.push(Boolean(ok)); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}`) }
 test('baseline Pi sign-in requests identity scope only', /piAuthenticateOfficial\(\["username"\]\)/.test(auth) && !/piAuthenticateOfficial\(\["username",\s*"payments"\]\)/.test(auth))
 test('wallet permission is requested only inside explicit wallet-consent flow', /piAuthenticateOfficial\(\["wallet_address"\]\)/.test(wallet))
-test('public research share links bypass Pi auth shell', policy.includes('^\\/r\\/[^/]+\\/?$') && wrapper.includes('isPublicRoutePath(pathname)'))
-test('public field desk bypasses Pi auth shell without exposing studio/admin paths', /return path === "\/field" \|\| path === "\/field\/"/.test(policy) && /!isPublicRoutePath/.test(policy) === false)
+test('research share links are no longer public routes', !policy.includes('^\\/r\\/[^/]+\\/?$') && wrapper.includes('isPublicRoutePath(pathname)'))
+test('field desk is no longer allowlisted as a public route', !/return path === "\/field"/.test(policy))
 test('coming-soon services are non-interactive and have no destination', /COMING_SOON/.test(registry) && /destination: \{ kind: "none" \}/.test(registry) && /isInteractiveStatus\(service\.status\)/.test(release))
 const publicShell = wrapper.split('function PublicRouteShell')[1]?.split('function AuthenticatedRouteShell')[0] || ''
 test('Pi auth SDK initialization is not mounted in public shell', !publicShell.includes('<PiAuthProvider>') && !publicShell.includes('<IdentityProvider>') && wrapper.includes('<PiAuthProvider>'))

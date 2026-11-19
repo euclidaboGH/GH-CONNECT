@@ -1,12 +1,16 @@
 # GreenHaven
 
-**Current source version:** `0.338.99` (Run 318 Pi authentication reliability derivative)
+**Current source version:** `0.338.101` (RUN372 Field Research hard disconnection derivative of user-supplied RUN371)
 
 Production status: **NOT APPROVED** — supported Node 24.15.0 dependency-backed typecheck/lint/build, browser/device, live database/provider and operator acceptance remain outstanding.
 
 This repository is the canonical GreenHaven source tree. See `docs/SOURCE_OF_TRUTH.md` and `docs/CURRENT_BUILD_CONTEXT.md` before implementation or release work.
 
-## Latest maintenance — 0.338.99 / Run 318 Pi authentication reliability repair
+## Latest maintenance — 0.338.101 / RUN372 Field Research hard disconnection
+
+Field Research / Research Studio is temporarily disconnected. The ecosystem registry marks the service unavailable with no destination; `/field/**` and `/r/**` are blocked at middleware, and `/api/research/**` plus `/api/field/**` return 503 before route handlers execute. Source code, SQL migrations and migration history are retained unchanged for a controlled future re-enable. See `docs/RUN372-FIELD-RESEARCH-HARD-DISCONNECTION-2026-11-19.md`.
+
+## Previous maintenance — 0.338.99 / Run 318 Pi authentication reliability repair
 
 Run 318 separates rejected Pi credentials from Pi Platform outages, prevents overlapping client authentication attempts, respects server retry guidance and restores the dedicated 503 recovery path. See `RUN318-PI-AUTHENTICATION-RELIABILITY-DELIVERY.md`.
 
